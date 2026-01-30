@@ -51,7 +51,7 @@ export const deleteSession = async (sessionId: string): Promise<void> => {
 };
 
 export const updateSession = async (sessionId: string, title: string): Promise<Session> => {
-    const response = await api.put<Session>(`/sessions/${sessionId}`, { title });
+    const response = await api.patch<Session>(`/sessions/${sessionId}`, { title });
     return response.data;
 };
 

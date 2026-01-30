@@ -38,17 +38,19 @@ describe('useChat', () => {
 
     it('should handle sending message', async () => {
         const mockResponse = {
-            message: { id: '1', role: 'user', content: 'Hello', session_id: 'session-1' },
-            response: { id: '2', role: 'assistant', content: 'Hi there', session_id: 'session-1' }
+            session_id: 'session-1',
+            message: { id: '2', role: 'assistant', content: 'Hi there', session_id: 'session-1' },
+            thinking_content: undefined
         };
+        const userMsg = { id: '1', role: 'user', content: 'Hello', session_id: 'session-1' };
         
         let sessionMessages: any[] = [];
         
         (api.getSession as any).mockImplementation(async () => ({ messages: sessionMessages }));
         
         (api.sendMessage as any).mockImplementation(async () => {
-             // Simulate backend update
-             sessionMessages = [mockResponse.message, mockResponse.response];
+             // Simulate backend update (User msg + Assistant msg)
+             sessionMessages = [userMsg, mockResponse.message];
              return mockResponse;
         });
 

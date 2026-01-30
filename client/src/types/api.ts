@@ -20,7 +20,7 @@ export interface Session {
 export interface Message {
     id: string;
     session_id: string;
-    role: 'user' | 'assistant' | 'system';
+    role: 'user' | 'assistant' | 'system' | 'model';
     content: string;
     created_at?: string; // or timestamp
     timestamp?: string; // support both for now or standardize
@@ -52,6 +52,7 @@ export interface SendMessageRequest {
 }
 
 export interface SendMessageResponse {
-    message: Message;
-    response: Message; // The assistant response
+    session_id: string;
+    message: Message; // The assistant response
+    thinking_content?: string;
 }
