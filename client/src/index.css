@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+@theme {
+  --color-cyber-yellow-50: #FFFBEB;
+  --color-cyber-yellow-100: #FFF3C4;
+  --color-cyber-yellow-200: #FCE588;
+  --color-cyber-yellow-300: #FADB5F;
+  --color-cyber-yellow-400: #FFD400;
+  --color-cyber-yellow-500: #F0B429;
+  --color-cyber-yellow-600: #CB8A04;
+  --color-cyber-yellow-700: #A16207;
+  --color-cyber-yellow-800: #854D0E;
+  --color-cyber-yellow-900: #713F12;
+  --color-cyber-yellow: #FFD400;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
