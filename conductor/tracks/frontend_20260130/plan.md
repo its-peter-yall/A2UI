@@ -4,7 +4,7 @@
 - [x] Task: Create `client/src/types` directory and `api.ts` (interfaces for Session, Message, User). [bc5986d]
 - [x] Task: Create `client/src/lib/api.ts` with Axios instance and typed fetch functions (`getSessions`, `createSession`, `sendMessage`). [bc5986d]
 - [x] Task: Configure TanStack Query `QueryClient` in `client/src/main.tsx` or separate provider. [bc5986d]
-- [ ] Task: Conductor - User Manual Verification 'API Client Infrastructure' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'API Client Infrastructure' (Protocol in workflow.md) [checkpoint: 1a765de]
 
 ## Phase 2: Component Porting (Atomic)
 - [ ] Task: Create `client/src/components` directory.
