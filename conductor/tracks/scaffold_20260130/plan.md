@@ -3,7 +3,7 @@
 ## Phase 1: Client Initialization (Atomic)
 - [x] Task: Run `npm create vite@latest client -- --template react-ts` in `AgUI/` (4c53d3c)
 - [x] Task: Install core dependencies: `npm install -D tailwindcss postcss autoprefixer` and `npm install lucide-react @tanstack/react-query react-router-dom clsx tailwind-merge` (1d7089b)
-- [ ] Task: Initialize Tailwind: Run `npx tailwindcss init -p`
+- [x] Task: Initialize Tailwind: Run `npx tailwindcss init -p` (0351e5e)
 - [ ] Task: Configure `vite.config.ts` to set up `@` alias for path resolution
 - [ ] Task: Remove default Vite boilerplate (assets, app.css, trivial App.tsx content)
 - [ ] Task: Conductor - User Manual Verification 'Client Initialization' (Protocol in workflow.md)
