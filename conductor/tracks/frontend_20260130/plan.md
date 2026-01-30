@@ -23,6 +23,6 @@
 
 ## Phase 4: Polish & Integration (Atomic)
 - [x] Task: Set up `client/src/App.tsx` routing (Route to ChatPage). [Current]
-- [ ] Task: Apply final CSS polish to match AURA-CHAT (scrollbars, glassmorphism).
-- [ ] Task: Verify responsive mobile layout (Sidebar toggle).
+- [x] Task: Apply final CSS polish to match AURA-CHAT (scrollbars, glassmorphism). [Current]
+- [~] Task: Verify responsive mobile layout (Sidebar toggle).
 - [ ] Task: Conductor - User Manual Verification 'Polish & Integration' (Protocol in workflow.md)
