@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+:root {
+  /* Colors */
+  --background: #000000;
+  --foreground: #f2f2f2;
+  --card: #0d0d0d;
+  --card-foreground: #f2f2f2;
+  --primary: #FFD400;
+  --primary-foreground: #000000;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #f2f2f2;
+  --muted: #262626;
+  --muted-foreground: #a6a6a6;
+  --accent: #FFD400;
+  --accent-foreground: #000000;
+  --destructive: #dc2626;
+  --destructive-foreground: #f2f2f2;
+  --border: #333333;
+  --input: #262626;
+  --ring: #FFD400;
+  --radius: 0.5rem;
+}
+
 @theme {
   --color-cyber-yellow-50: #FFFBEB;
   --color-cyber-yellow-100: #FFF3C4;
@@ -37,4 +59,125 @@
 
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+
+  @keyframes shine {
+    0% {
+      background-position: 200% center;
+    }
+    100% {
+      background-position: -200% center;
+    }
+  }
+}
+
+/* Base styles */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Component utility classes */
+.sidebar {
+  background-color: var(--card);
+  border-right: 1px solid var(--border);
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  color: var(--muted-foreground);
+}
+
+.sidebar-item:hover {
+  color: var(--foreground);
+  background-color: var(--muted);
+}
+
+.sidebar-item.active {
+  background-color: rgba(255, 212, 0, 0.1);
+  color: var(--primary);
+  border-left: 2px solid var(--primary);
+}
+
+/* Chat message bubbles */
+.message-user {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: 1rem;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.message-assistant {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  border-bottom-left-radius: 0.25rem;
+}
+
+/* Card glow effect */
+.card-glow {
+  transition: box-shadow 0.3s;
+}
+
+.card-glow:hover {
+  box-shadow: 0 0 20px rgba(255, 212, 0, 0.2);
+}
+
+/* Glow utility */
+.glow {
+  box-shadow: 0 0 10px rgba(255, 212, 0, 0.2);
+}
+
+.glow-lg {
+  box-shadow: 0 0 30px rgba(255, 212, 0, 0.2);
+}
+
+.animate-shine {
+  background: linear-gradient(90deg,
+      rgba(255, 212, 0, 1.0) 0%,
+      rgba(255, 212, 0, 0.1) 10%,
+      rgba(255, 212, 0, 0.1) 50%,
+      rgba(255, 212, 0, 0.1) 90%,
+      rgba(255, 212, 0, 1.0) 100%);
+  background-size: 200% auto;
+  color: rgba(255, 212, 0, 0.4);
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: shine 2s linear infinite;
+  display: inline-block;
+  font-weight: 800;
+  text-shadow: transparent 0 0 10px;
+}
+
+.typewriter-text {
+  display: inline-block;
+  min-width: 1ch;
+  min-height: 1.5em;
+  vertical-align: text-bottom;
 }
