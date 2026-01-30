@@ -1,0 +1,8 @@
+{
+  "track_id": "frontend_20260130",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-01-30T19:50:00Z",
+  "updated_at": "2026-01-30T19:50:00Z",
+  "description": "Port UI components, implement API client, and wire up the Chat interface."
+}
