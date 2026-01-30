@@ -10,7 +10,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from server.utils.vertex_client import init_vertex
+from server.utils.vertex_client import init_vertex, get_vertex_status
 import logging
 
 # Configure logging
@@ -58,3 +58,14 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {"message": "AgUI Backend is running"}
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint exposing Vertex AI connection status."""
+    return {
+        "status": "ok",
+        "services": {
+            "vertex_ai": "connected" if get_vertex_status() else "disconnected"
+        },
+    }
