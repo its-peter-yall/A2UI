@@ -14,11 +14,11 @@
 - [x] Task: Conductor - User Manual Verification 'Component Porting' (Protocol in workflow.md) [checkpoint: 2469f8b]
 
 ## Phase 3: Main Chat View (Atomic)
-- [ ] Task: Create `client/src/features/chat` directory.
-- [ ] Task: Implement `useChat` hook (encapsulating Query/Mutation logic).
-- [ ] Task: Implement `ChatPage.tsx` layout (Sidebar + MessageList + Input).
-- [ ] Task: Wire up `InputArea` to `useChat` mutation.
-- [ ] Task: Implement "Thinking" state visualization (fake or real based on backend data).
+- [x] Task: Create `client/src/features/chat` directory. [a05c786]
+- [x] Task: Implement `useChat` hook (encapsulating Query/Mutation logic). [Current]
+- [x] Task: Implement `ChatPage.tsx` layout (Sidebar + MessageList + Input). [Current]
+- [x] Task: Wire up `InputArea` to `useChat` mutation. [Current]
+- [~] Task: Implement "Thinking" state visualization (fake or real based on backend data).
 - [ ] Task: Conductor - User Manual Verification 'Main Chat View' (Protocol in workflow.md)
 
 ## Phase 4: Polish & Integration (Atomic)
