@@ -8,11 +8,11 @@
 - [x] Task: Remove default Vite boilerplate (assets, app.css, trivial App.tsx content) (f363fa8)
 - [x] Task: Conductor - User Manual Verification 'Client Initialization' (Protocol in workflow.md) (d235d85)
 
-## Phase 2: Client Styling & Assets (Atomic)
+## Phase 2: Client Styling & Assets (Atomic) [checkpoint: 898ac32]
 - [x] Task: Copy `tailwind.config.js` logic from AURA-CHAT (colors, animations) (b438be1)
-- [ ] Task: Copy `index.css` variables (Cyber Yellow, dark mode base) from AURA-CHAT
-- [ ] Task: Create `lib/utils.ts` for the `cn` (class name merger) utility
-- [ ] Task: Conductor - User Manual Verification 'Client Styling & Assets' (Protocol in workflow.md)
+- [x] Task: Copy `index.css` variables (Cyber Yellow, dark mode base) from AURA-CHAT (ced72e9)
+- [x] Task: Create `lib/utils.ts` for the `cn` (class name merger) utility (dc17dd1)
+- [x] Task: Conductor - User Manual Verification 'Client Styling & Assets' (Protocol in workflow.md) (898ac32)
 
 ## Phase 3: Server Initialization (Atomic)
 - [ ] Task: Create `AgUI/server` directory and `requirements.txt` with `fastapi`, `uvicorn`, `google-cloud-aiplatform`, `python-dotenv`, `pydantic`
