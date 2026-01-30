@@ -18,7 +18,7 @@
 - [x] Task: Implement `useChat` hook (encapsulating Query/Mutation logic). [Current]
 - [x] Task: Implement `ChatPage.tsx` layout (Sidebar + MessageList + Input). [Current]
 - [x] Task: Wire up `InputArea` to `useChat` mutation. [Current]
-- [~] Task: Implement "Thinking" state visualization (fake or real based on backend data).
+- [x] Task: Implement "Thinking" state visualization (fake or real based on backend data). [Existing MessageBubble logic]
 - [ ] Task: Conductor - User Manual Verification 'Main Chat View' (Protocol in workflow.md)
 
 ## Phase 4: Polish & Integration (Atomic)
