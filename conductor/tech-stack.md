@@ -7,8 +7,10 @@
 - **State Management:**
     - **Server State:** TanStack Query (React Query) v5
     - **Local State:** React Context API or Zustand (lightweight)
+- **HTTP Client:** Axios
 - **Icons:** Lucide React
 - **Markdown:** React Markdown
+- **Testing:** Vitest (Unit/Integration)
 
 ## Backend (Server)
 - **Framework:** FastAPI (Python 3.10+)
