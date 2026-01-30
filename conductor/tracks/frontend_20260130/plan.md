@@ -11,7 +11,7 @@
 - [x] Task: Port `MessageBubble.tsx` (simplified: remove citations, keep markdown/syntax highlighting). [b726d33]
 - [x] Task: Port `SessionSidebar.tsx` (simplified: remove 'New from Module' logic, keep basic CRUD). [b1cc350]
 - [x] Task: Create simple `SessionNameModal.tsx` for renaming/creating. [b1cc350]
-- [ ] Task: Conductor - User Manual Verification 'Component Porting' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Component Porting' (Protocol in workflow.md) [checkpoint: 2469f8b]
 
 ## Phase 3: Main Chat View (Atomic)
 - [ ] Task: Create `client/src/features/chat` directory.
