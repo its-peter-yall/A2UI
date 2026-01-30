@@ -19,7 +19,7 @@
 - [x] Task: Implement `ChatPage.tsx` layout (Sidebar + MessageList + Input). [Current]
 - [x] Task: Wire up `InputArea` to `useChat` mutation. [Current]
 - [x] Task: Implement "Thinking" state visualization (fake or real based on backend data). [Existing MessageBubble logic]
-- [ ] Task: Conductor - User Manual Verification 'Main Chat View' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Main Chat View' (Protocol in workflow.md) [checkpoint: e69fba2]
 
 ## Phase 4: Polish & Integration (Atomic)
 - [ ] Task: Set up `client/src/App.tsx` routing (Route to ChatPage).
