@@ -14,13 +14,13 @@
 - [x] Task: Create `lib/utils.ts` for the `cn` (class name merger) utility (dc17dd1)
 - [x] Task: Conductor - User Manual Verification 'Client Styling & Assets' (Protocol in workflow.md) (898ac32)
 
-## Phase 3: Server Initialization (Atomic)
+## Phase 3: Server Initialization (Atomic) [checkpoint: f5c693c]
 - [x] Task: Create `AgUI/server` directory and `requirements.txt` with `fastapi`, `uvicorn`, `google-cloud-aiplatform`, `python-dotenv`, `pydantic` (060ead9)
 - [x] Task: Create and initialize Python virtual environment `.venv` in `server/` (060ead9)
-- [ ] Task: Create `server/main.py` with basic FastAPI app instance and CORS middleware
-- [ ] Task: Create `server/config.py` for environment variable loading (`GOOGLE_APPLICATION_CREDENTIALS`, `PROJECT_ID`)
-- [ ] Task: Create `server/.env.example` file
-- [ ] Task: Conductor - User Manual Verification 'Server Initialization' (Protocol in workflow.md)
+- [x] Task: Create `server/main.py` with basic FastAPI app instance and CORS middleware (5f3d07b)
+- [x] Task: Create `server/config.py` for environment variable loading (`GOOGLE_APPLICATION_CREDENTIALS`, `PROJECT_ID`) (5d66755)
+- [x] Task: Create `server/.env.example` file (9e91673)
+- [x] Task: Conductor - User Manual Verification 'Server Initialization' (Protocol in workflow.md) (f5c693c)
 
 ## Phase 4: Vertex AI SDK Setup (Atomic)
 - [ ] Task: Create `server/utils/vertex_client.py`
