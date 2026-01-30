@@ -1,12 +1,12 @@
 # Plan: Project Scaffolding & Configuration
 
-## Phase 1: Client Initialization (Atomic)
+## Phase 1: Client Initialization (Atomic) [checkpoint: d235d85]
 - [x] Task: Run `npm create vite@latest client -- --template react-ts` in `AgUI/` (4c53d3c)
 - [x] Task: Install core dependencies: `npm install -D tailwindcss postcss autoprefixer` and `npm install lucide-react @tanstack/react-query react-router-dom clsx tailwind-merge` (1d7089b)
 - [x] Task: Initialize Tailwind: Run `npx tailwindcss init -p` (0351e5e)
 - [x] Task: Configure `vite.config.ts` to set up `@` alias for path resolution (bbe55d4)
 - [x] Task: Remove default Vite boilerplate (assets, app.css, trivial App.tsx content) (f363fa8)
-- [ ] Task: Conductor - User Manual Verification 'Client Initialization' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Client Initialization' (Protocol in workflow.md) (d235d85)
 
 ## Phase 2: Client Styling & Assets (Atomic)
 - [ ] Task: Copy `tailwind.config.js` logic from AURA-CHAT (colors, animations)
