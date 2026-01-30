@@ -22,9 +22,9 @@
 - [x] Task: Create `server/.env.example` file (9e91673)
 - [x] Task: Conductor - User Manual Verification 'Server Initialization' (Protocol in workflow.md) (f5c693c)
 
-## Phase 4: Vertex AI SDK Setup (Atomic)
-- [ ] Task: Create `server/utils/vertex_client.py`
-- [ ] Task: Implement `init_vertex()` function calling `aiplatform.init()`
-- [ ] Task: Add a startup event handler in `main.py` to initialize Vertex AI on server start
-- [ ] Task: Add a `GET /health` endpoint that checks the Vertex AI client status
-- [ ] Task: Conductor - User Manual Verification 'Vertex AI SDK Setup' (Protocol in workflow.md)
+## Phase 4: Vertex AI SDK Setup (Atomic) [checkpoint: 6060e9f]
+- [x] Task: Create `server/utils/vertex_client.py` (28986b0)
+- [x] Task: Implement `init_vertex()` function calling `aiplatform.init()` (28986b0)
+- [x] Task: Add a startup event handler in `main.py` to initialize Vertex AI on server start (1e503f5)
+- [x] Task: Add a `GET /health` endpoint that checks the Vertex AI client status (a73ad57)
+- [x] Task: Conductor - User Manual Verification 'Vertex AI SDK Setup' (Protocol in workflow.md) (6060e9f)
