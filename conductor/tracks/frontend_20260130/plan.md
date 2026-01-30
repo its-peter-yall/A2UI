@@ -22,7 +22,7 @@
 - [x] Task: Conductor - User Manual Verification 'Main Chat View' (Protocol in workflow.md) [checkpoint: e69fba2]
 
 ## Phase 4: Polish & Integration (Atomic)
-- [ ] Task: Set up `client/src/App.tsx` routing (Route to ChatPage).
+- [x] Task: Set up `client/src/App.tsx` routing (Route to ChatPage). [Current]
 - [ ] Task: Apply final CSS polish to match AURA-CHAT (scrollbars, glassmorphism).
 - [ ] Task: Verify responsive mobile layout (Sidebar toggle).
 - [ ] Task: Conductor - User Manual Verification 'Polish & Integration' (Protocol in workflow.md)
