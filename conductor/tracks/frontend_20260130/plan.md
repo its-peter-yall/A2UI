@@ -7,10 +7,10 @@
 - [x] Task: Conductor - User Manual Verification 'API Client Infrastructure' (Protocol in workflow.md) [checkpoint: 1a765de]
 
 ## Phase 2: Component Porting (Atomic)
-- [ ] Task: Create `client/src/components` directory.
-- [ ] Task: Port `MessageBubble.tsx` (simplified: remove citations, keep markdown/syntax highlighting).
-- [ ] Task: Port `SessionSidebar.tsx` (simplified: remove 'New from Module' logic, keep basic CRUD).
-- [ ] Task: Create simple `SessionNameModal.tsx` for renaming/creating.
+- [x] Task: Create `client/src/components` directory. [eafaf73]
+- [x] Task: Port `MessageBubble.tsx` (simplified: remove citations, keep markdown/syntax highlighting). [b726d33]
+- [x] Task: Port `SessionSidebar.tsx` (simplified: remove 'New from Module' logic, keep basic CRUD). [b1cc350]
+- [x] Task: Create simple `SessionNameModal.tsx` for renaming/creating. [b1cc350]
 - [ ] Task: Conductor - User Manual Verification 'Component Porting' (Protocol in workflow.md)
 
 ## Phase 3: Main Chat View (Atomic)
