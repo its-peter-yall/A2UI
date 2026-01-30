@@ -15,8 +15,8 @@
 - [x] Task: Conductor - User Manual Verification 'Client Styling & Assets' (Protocol in workflow.md) (898ac32)
 
 ## Phase 3: Server Initialization (Atomic)
-- [ ] Task: Create `AgUI/server` directory and `requirements.txt` with `fastapi`, `uvicorn`, `google-cloud-aiplatform`, `python-dotenv`, `pydantic`
-- [ ] Task: Create and initialize Python virtual environment `.venv` in `server/`
+- [x] Task: Create `AgUI/server` directory and `requirements.txt` with `fastapi`, `uvicorn`, `google-cloud-aiplatform`, `python-dotenv`, `pydantic` (060ead9)
+- [x] Task: Create and initialize Python virtual environment `.venv` in `server/` (060ead9)
 - [ ] Task: Create `server/main.py` with basic FastAPI app instance and CORS middleware
 - [ ] Task: Create `server/config.py` for environment variable loading (`GOOGLE_APPLICATION_CREDENTIALS`, `PROJECT_ID`)
 - [ ] Task: Create `server/.env.example` file
