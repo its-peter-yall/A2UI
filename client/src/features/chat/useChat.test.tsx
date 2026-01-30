@@ -15,13 +15,24 @@ vi.mock('@/lib/api', async () => {
     };
 });
 
-const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryProvider>{children}</QueryProvider>
-);
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const createWrapper = () => {
+    const queryClient = new QueryClient({
+        defaultOptions: {
+            queries: {
+                retry: false, // Disable retries for tests
+            },
+        },
+    });
+    return ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+};
 
 describe('useChat', () => {
     it('should initialize with empty messages', () => {
-        const { result } = renderHook(() => useChat('session-1'), { wrapper });
+        const { result } = renderHook(() => useChat('session-1'), { wrapper: createWrapper() });
         expect(result.current.messages).toEqual([]);
     });
 
@@ -41,7 +52,7 @@ describe('useChat', () => {
              return mockResponse;
         });
 
-        const { result } = renderHook(() => useChat('session-1'), { wrapper });
+        const { result } = renderHook(() => useChat('session-1'), { wrapper: createWrapper() });
 
         // Initial check
         expect(result.current.messages).toEqual([]);

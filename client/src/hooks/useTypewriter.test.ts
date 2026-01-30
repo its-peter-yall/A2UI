@@ -9,12 +9,19 @@ describe('useTypewriter', () => {
         expect(result.current).toBe('');
     });
 
-    it('should type out text over time', () => {
+    it('should type out text over time', async () => {
         vi.useFakeTimers();
         const { result } = renderHook(() => useTypewriter('Hi', true, 30));
 
+        // Advance time enough for 'H'
         act(() => {
-            vi.advanceTimersByTime(300);
+            vi.advanceTimersByTime(50);
+        });
+        expect(result.current).toContain('H');
+
+        // Advance time for rest
+        act(() => {
+            vi.advanceTimersByTime(1000);
         });
         expect(result.current).toBe('Hi');
 

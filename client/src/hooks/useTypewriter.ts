@@ -11,11 +11,13 @@ export function useTypewriter(text: string, isActive: boolean = true, speed: num
             return;
         }
 
+        setDisplayText(''); // Reset on new text
         let i = 0;
+        
         const timer = setInterval(() => {
             if (i < text.length) {
-                setDisplayText((prev) => prev + text.charAt(i));
                 i++;
+                setDisplayText(text.substring(0, i));
             } else {
                 clearInterval(timer);
             }
