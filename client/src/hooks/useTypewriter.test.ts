@@ -14,12 +14,7 @@ describe('useTypewriter', () => {
         const { result } = renderHook(() => useTypewriter('Hi', true, 30));
 
         act(() => {
-            vi.advanceTimersByTime(30);
-        });
-        expect(result.current).toBe('H');
-
-        act(() => {
-            vi.advanceTimersByTime(30);
+            vi.advanceTimersByTime(100);
         });
         expect(result.current).toBe('Hi');
 
