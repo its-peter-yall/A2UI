@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from server.utils.vertex_client import init_vertex, get_vertex_status
 from server.database.persistence import session_manager
 from server.database.learning_persistence import learning_manager
-from server.routers import sessions_router, chat_router
+from server.routers import sessions_router, chat_router, learning_router
 import logging
 
 # Configure logging
@@ -88,3 +88,4 @@ async def health():
 # Include routers
 app.include_router(sessions_router)
 app.include_router(chat_router)
+app.include_router(learning_router)
