@@ -11,7 +11,7 @@
 # @note: All tests are mock-based to avoid Vertex AI dependencies
 
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from server.agents.planner import PLANNER_SYSTEM_PROMPT, PlannerAgent, planner_agent
 from server.schemas.learning import CourseOutline, TopicNode
@@ -98,46 +98,66 @@ class TestPlannerAgent(unittest.TestCase):
 
 
 class TestPlannerAgentPlan(unittest.TestCase):
-    """Tests for PlannerAgent.plan() method using mocks."""
+    """Tests for PlannerAgent.plan() wiring to instructor_client."""
 
-    @patch.object(PlannerAgent, "generate", new_callable=AsyncMock)
-    def test_plan_calls_generate(self, mock_generate: AsyncMock) -> None:
-        """Verify plan() calls generate() with correct parameters."""
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_plan_calls_instructor_client(self, mock_create: AsyncMock) -> None:
+        """Verify plan() -> generate() -> instructor_client.create_structured wiring."""
         import asyncio
 
         mock_outline = _make_mock_outline()
-        mock_generate.return_value = mock_outline
+        mock_create.return_value = mock_outline
 
         agent = PlannerAgent()
         result = asyncio.run(agent.plan("Test query"))
 
-        # Verify generate was called
-        mock_generate.assert_called_once()
+        # Verify instructor_client.create_structured was called
+        mock_create.assert_called_once()
 
-        # Verify the call arguments
-        call_kwargs = mock_generate.call_args.kwargs
+        # Verify the call arguments include role and response_model
+        call_kwargs = mock_create.call_args.kwargs
+        self.assertEqual(call_kwargs["role"], "planner")
         self.assertEqual(call_kwargs["response_model"], CourseOutline)
-        self.assertIn("Test query", call_kwargs["user_message"])
+
+        # Verify messages contain the query
+        messages = call_kwargs["messages"]
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["role"], "user")
+        self.assertIn("Test query", messages[0]["content"])
+
+        # Verify system prompt was passed
+        self.assertIn("system_prompt", call_kwargs)
+        self.assertIn("KLI", call_kwargs["system_prompt"])
 
         # Verify result
         self.assertEqual(result.course_title, "Mock Course")
         self.assertEqual(len(result.topics), 5)
 
-    @patch.object(PlannerAgent, "generate", new_callable=AsyncMock)
-    def test_plan_passes_context(self, mock_generate: AsyncMock) -> None:
-        """Verify plan() passes context to generate()."""
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_plan_includes_context_in_system_prompt(
+        self, mock_create: AsyncMock
+    ) -> None:
+        """Verify context is injected into system prompt via _build_system_prompt."""
         import asyncio
 
         mock_outline = _make_mock_outline()
-        mock_generate.return_value = mock_outline
+        mock_create.return_value = mock_outline
 
         agent = PlannerAgent()
         context = {"prior_knowledge": "physics basics"}
         asyncio.run(agent.plan("Newtonian Laws", context=context))
 
-        # Verify context was passed
-        call_kwargs = mock_generate.call_args.kwargs
-        self.assertEqual(call_kwargs["context"], context)
+        # Verify system prompt includes context
+        call_kwargs = mock_create.call_args.kwargs
+        system_prompt = call_kwargs["system_prompt"]
+        self.assertIn("physics basics", system_prompt)
+        self.assertIn("Prior Knowledge", system_prompt)  # Title-cased context key
 
 
 class TestPlannerPromptQuality(unittest.TestCase):

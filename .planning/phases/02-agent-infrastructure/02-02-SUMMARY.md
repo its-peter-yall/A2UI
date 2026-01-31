@@ -3,6 +3,9 @@
 ## Objective
 Implement the Planner Agent that decomposes user queries into structured learning paths using the KLI (Knowledge-Learning-Instruction) framework.
 
+## Commit Hash
+da40a17f35b1f6f5001b0371f1dabe51d30f9555
+
 ## Tasks Completed
 
 ### Task 1: Implement Planner Agent ✓

@@ -40,7 +40,7 @@ def _make_topic(index: int) -> TopicNode:
         index=index,
         title=f"Topic {index}",
         summary_for_context=f"Summary {index}",
-        key_terms=[f"term-{index}"],
+        key_terms=[f"term-{index}a", f"term-{index}b"],
     )
 
 

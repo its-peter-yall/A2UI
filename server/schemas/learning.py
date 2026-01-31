@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
@@ -85,7 +85,10 @@ class TopicNode(BaseModel):
         min_length=1,
     )
     key_terms: List[str] = Field(
-        default_factory=list, description="Key terms to emphasize"
+        ...,
+        description="Key terms to emphasize (2-4 terms required)",
+        min_length=2,
+        max_length=4,
     )
 
 
@@ -96,7 +99,10 @@ class CourseOutline(BaseModel):
 
     course_title: str = Field(..., description="Title of the course", min_length=1)
     topics: List[TopicNode] = Field(
-        ..., description="Ordered list of topic nodes", min_length=5
+        ...,
+        description="Ordered list of topic nodes (5-7 topics required)",
+        min_length=5,
+        max_length=7,
     )
 
     @field_validator("topics")
@@ -104,6 +110,15 @@ class CourseOutline(BaseModel):
     def validate_topics(cls, topics: List[TopicNode]) -> List[TopicNode]:
         if len(topics) < 5:
             raise ValueError("CourseOutline requires at least 5 topics")
+        if len(topics) > 7:
+            raise ValueError("CourseOutline requires at most 7 topics")
+        # Validate contiguous indices (0, 1, 2, ...) match list order
+        for i, topic in enumerate(topics):
+            if topic.index != i:
+                raise ValueError(
+                    f"Topic at position {i} has index {topic.index}, expected {i}. "
+                    "Indices must be contiguous and match list order."
+                )
         return topics
 
 
@@ -161,9 +176,7 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
     """Response schema for learning sessions."""
 
     total_nodes: int = Field(default=0, description="Total nodes in the session")
-    completed_nodes: int = Field(
-        default=0, description="Number of completed nodes"
-    )
+    completed_nodes: int = Field(default=0, description="Number of completed nodes")
 
 
 class QuizSubmission(BaseModel):
@@ -189,5 +202,6 @@ class QuizResult(BaseModel):
         default=None, description="Explanation for the selected answer"
     )
     submitted_at: datetime = Field(
-        default_factory=datetime.utcnow, description="Submission timestamp"
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Submission timestamp",
     )
