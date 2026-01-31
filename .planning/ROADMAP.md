@@ -77,7 +77,7 @@ Implement Scatter-Gather pattern for parallel agent execution.
 ---
 
 ### Phase 03a: Schema Fixes for Sequential Flow
-**Status**: `pending`
+**Status**: `completed`
 **Directory**: `phases/03a-schema-fixes/`
 **Estimated Plans**: 2
 
@@ -107,7 +107,7 @@ Address design gaps identified in `issues.md` before implementing API endpoints.
 ---
 
 ### Phase 04: API Endpoints
-**Status**: `pending`
+**Status**: `completed`
 **Directory**: `phases/04-api-endpoints/`
 **Estimated Plans**: 2
 
@@ -133,7 +133,7 @@ Create REST endpoints for learning path operations.
 ---
 
 ### Phase 05: Frontend Components
-**Status**: `in_progress`
+**Status**: `completed`
 **Directory**: `phases/05-frontend-components/`
 **Estimated Plans**: 3
 
@@ -158,7 +158,7 @@ Build React components for learning path UI.
 ---
 
 ### Phase 06: Sequential Flow State Machine & Navigation
-**Status**: `pending`
+**Status**: `completed`
 **Directory**: `phases/06-state-flow/`
 **Estimated Plans**: 2
 
@@ -198,7 +198,7 @@ VIEWING_EXPLANATION → (proceed) → IN_QUIZ → (submit) → SHOWING_FEEDBACK
 ---
 
 ### Phase 07: Animations & Gamification
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/07-animations/`
 **Estimated Plans**: 2
 
@@ -252,11 +252,11 @@ End-to-end integration, testing, and polish.
 | 01 | Database Schema & Models | 2 | completed | - |
 | 02 | AI Agent Infrastructure | 3 | completed | 01 |
 | 03 | Async Orchestration Layer | 2 | completed | 02 |
-| 03a | Schema Fixes for Sequential Flow | 2 | pending | 03 |
-| 04 | API Endpoints | 2 | pending | 03a |
-| 05 | Frontend Components | 3 | in_progress | 04 |
-| 06 | Sequential Flow State Machine & Navigation | 2 | pending | 05 |
-| 07 | Animations & Gamification | 2 | pending | 06 |
+| 03a | Schema Fixes for Sequential Flow | 2 | completed | 03 |
+| 04 | API Endpoints | 2 | completed | 03a |
+| 05 | Frontend Components | 3 | completed | 04 |
+| 06 | Sequential Flow State Machine & Navigation | 2 | completed | 05 |
+| 07 | Animations & Gamification | 2 | in_progress | 06 |
 | 08 | Integration & Polish | 2 | pending | 07 |
 
 **Total Estimated Plans**: 20
