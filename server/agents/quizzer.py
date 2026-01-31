@@ -1,0 +1,298 @@
+# quizzer.py
+# Quizzer Agent for generating retrieval-based assessment questions
+
+# Implements the Quizzer Agent that creates diagnostic quiz questions targeting
+# common misconceptions. Follows retrieval-based learning principles where
+# active recall strengthens memory. Uses misconception-based distractor design.
+
+# @see: server/agents/base.py - BaseAgent abstract class
+# @see: server/schemas/learning.py - QuizCard, QuizOption models
+# @note: Uses low temperature (0.2) for strict JSON adherence
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from server.agents.base import BaseAgent
+from server.schemas.learning import QuizCard, TopicNode
+
+logger = logging.getLogger(__name__)
+
+
+QUIZZER_SYSTEM_PROMPT = """You are an expert assessment designer specializing in retrieval-based learning and diagnostic question construction.
+
+## Your Role
+You create quiz questions that:
+1. Strengthen memory through active recall (testing effect)
+2. Diagnose student understanding through carefully designed distractors
+3. Target common misconceptions to provide meaningful feedback
+
+## Retrieval-Based Learning Principles
+
+Research shows that testing improves retention more than re-reading. Your questions should:
+- Force active recall of key concepts
+- Challenge surface-level understanding
+- Connect to prior knowledge in the learning path
+
+## Distractor Generation Guidelines (CRITICAL)
+
+Distractors are WRONG answers that serve a diagnostic purpose. Each distractor MUST:
+
+1. **Target a Specific Misconception**: Every wrong answer should represent a common error students make:
+   - Confusing related concepts
+   - Applying rules incorrectly
+   - Missing key conditions or exceptions
+   - Over-generalizing or under-generalizing
+
+2. **Be Plausible**: Distractors should seem reasonable to someone who doesn't fully understand
+   - Use correct terminology in wrong contexts
+   - Present partially correct statements
+   - Reflect real student errors
+
+3. **Provide Diagnostic Value**: When a student selects a distractor, you should know WHAT they misunderstand
+   - Each distractor reveals a different gap in understanding
+   - Explanations should address the specific misconception
+
+## Chain-of-Thought Process for Quiz Generation
+
+Before generating the quiz, mentally follow these steps:
+1. Identify the core concept being tested
+2. List 3-4 common misconceptions about this concept
+3. Design one distractor for each misconception
+4. Craft the correct answer clearly and unambiguously
+5. Write explanations that teach, not just label right/wrong
+
+## Difficulty Calibration
+
+- **EASY**: Direct recall from content
+  - "What is X?" or "Which definition describes Y?"
+  - Tests recognition and basic recall
+  
+- **MEDIUM**: Application and understanding
+  - "What would happen if...?" or "Which example demonstrates...?"
+  - Requires applying concepts to new situations
+  
+- **HARD**: Analysis and synthesis
+  - "Why does X lead to Y?" or "How do A and B relate?"
+  - Requires connecting multiple concepts or reasoning through implications
+
+## Explanation Requirements (MANDATORY)
+
+EVERY option MUST have an explanation:
+
+- **Correct Answer Explanation**: 
+  - Explain WHY this is correct
+  - Reinforce the key concept
+  - Connect to the learning content
+
+- **Incorrect Answer Explanation**:
+  - Identify the misconception this represents
+  - Explain why it's wrong
+  - Provide the correct understanding
+  - Format: "This is incorrect because [reason]. The correct understanding is [correction]."
+
+## Strict Output Requirements
+
+Your output MUST follow this exact structure:
+
+1. **question_text**: Clear, unambiguous question text
+   - Should be answerable with the provided content
+   - Avoid "all of the above" or "none of the above"
+   
+2. **options**: EXACTLY 4 options with:
+   - **id**: "A", "B", "C", or "D" (unique IDs)
+   - **text**: The option text
+   - **is_correct**: true for exactly ONE option, false for others
+   - **explanation**: Required explanation (see above)
+   
+3. **difficulty**: One of "easy", "medium", or "hard"
+
+## Example Output Structure
+
+Question: "What distinguishes Newton's First Law from the Second Law?"
+
+Option A (CORRECT):
+- text: "The First Law describes motion without force; the Second Law quantifies force's effect"
+- is_correct: true
+- explanation: "Correct. The First Law (inertia) states objects maintain their state without external force. The Second Law (F=ma) quantifies how force changes that state."
+
+Option B (DISTRACTOR - Misconception: Confusing the laws):
+- text: "The First Law uses F=ma; the Second Law describes action-reaction"
+- is_correct: false
+- explanation: "Incorrect. This confuses all three laws. F=ma is the Second Law, and action-reaction is the Third Law. The First Law describes inertia."
+
+Option C (DISTRACTOR - Misconception: Order confusion):
+- text: "They describe the same concept in different mathematical forms"
+- is_correct: false  
+- explanation: "Incorrect. The laws describe fundamentally different phenomena: inertia (no force) vs. acceleration (with force). They are not equivalent."
+
+Option D (DISTRACTOR - Misconception: Partial understanding):
+- text: "The First Law only applies to objects at rest; the Second Law applies to moving objects"
+- is_correct: false
+- explanation: "Incorrect. The First Law applies to BOTH objects at rest AND objects in uniform motion. Both states are maintained without external force."
+
+Remember: Your quiz questions directly impact learning outcomes. Every distractor should teach something when explained."""
+
+
+class QuizzerAgent(BaseAgent):
+    """
+    Quizzer Agent for generating retrieval-based assessment questions.
+
+    Creates diagnostic quiz questions that target common misconceptions
+    and strengthen memory through active recall. Follows research-backed
+    principles of retrieval-based learning and effective assessment design.
+
+    The Quizzer is the final agent in the generation pipeline. It receives
+    a TopicNode and generated content, then produces a QuizCard with
+    misconception-based distractors and comprehensive explanations.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the QuizzerAgent with the 'quizzer' role."""
+        super().__init__(role="quizzer")
+        logger.debug("QuizzerAgent initialized")
+
+    @property
+    def system_prompt(self) -> str:
+        """
+        Return the system prompt for the Quizzer Agent.
+
+        The prompt defines the agent's role as an assessment designer,
+        explains retrieval-based learning principles, provides distractor
+        generation guidelines, and specifies strict output requirements.
+
+        Returns:
+            The QUIZZER_SYSTEM_PROMPT constant
+        """
+        return QUIZZER_SYSTEM_PROMPT
+
+    async def generate_quiz(
+        self,
+        topic: TopicNode,
+        content: str,
+        context: Optional[dict] = None,
+    ) -> QuizCard:
+        """
+        Generate a diagnostic quiz question for a topic and its content.
+
+        Creates a QuizCard with exactly 4 options (1 correct, 3 distractors).
+        Distractors target common misconceptions to provide diagnostic value.
+        All options include explanations for learning reinforcement.
+
+        Args:
+            topic: TopicNode containing title, summary, and key terms
+            content: Generated markdown content for the topic
+            context: Optional additional context for prompt augmentation
+
+        Returns:
+            QuizCard with question, options, difficulty, and explanations
+
+        Raises:
+            Exception: If generation fails after retries
+
+        Example:
+            >>> quiz = await quizzer_agent.generate_quiz(
+            ...     topic=TopicNode(
+            ...         index=0,
+            ...         title="Newton's First Law",
+            ...         summary_for_context="Explains inertia...",
+            ...         key_terms=["inertia", "equilibrium"]
+            ...     ),
+            ...     content="# Newton's First Law\\n\\nInertia is..."
+            ... )
+            >>> print(quiz.question_text)
+            "What is the key principle of Newton's First Law?"
+            >>> print(len(quiz.options))
+            4
+        """
+        # Build the user message with topic details and content
+        user_message = self._build_user_message(topic, content)
+
+        # Merge topic context with any provided context
+        full_context = self._build_topic_context(topic, context)
+
+        logger.info(
+            f"QuizzerAgent generating quiz for topic: '{topic.title}' (index {topic.index})"
+        )
+
+        quiz = await self.generate(
+            response_model=QuizCard,
+            user_message=user_message,
+            context=full_context,
+        )
+
+        logger.info(
+            f"QuizzerAgent created quiz: difficulty={quiz.difficulty.value}, "
+            f"options={len(quiz.options)}"
+        )
+
+        return quiz
+
+    def _build_user_message(self, topic: TopicNode, content: str) -> str:
+        """
+        Build the user message for quiz generation.
+
+        Combines topic metadata and content into a structured prompt
+        that guides the model to create an effective quiz question.
+
+        Args:
+            topic: TopicNode with title, summary, and key terms
+            content: Generated markdown content for the topic
+
+        Returns:
+            Formatted user message string
+        """
+        key_terms_str = ", ".join(topic.key_terms)
+
+        return f"""Generate a diagnostic quiz question for the following topic and content.
+
+## Topic Information
+- **Title**: {topic.title}
+- **Index in Learning Path**: {topic.index}
+- **Summary**: {topic.summary_for_context}
+- **Key Terms**: {key_terms_str}
+
+## Content to Test
+{content}
+
+## Requirements
+1. Create a question that tests understanding of the key concepts
+2. Generate EXACTLY 4 options (A, B, C, D)
+3. Ensure EXACTLY 1 option is correct
+4. Each distractor MUST target a specific misconception
+5. EVERY option MUST have an explanation
+6. Choose appropriate difficulty based on content complexity"""
+
+    def _build_topic_context(
+        self,
+        topic: TopicNode,
+        additional_context: Optional[dict] = None,
+    ) -> dict:
+        """
+        Build context dictionary for the quiz generation prompt.
+
+        Includes topic metadata that helps the model understand the
+        learning context and generate appropriate questions.
+
+        Args:
+            topic: TopicNode with relevant metadata
+            additional_context: Optional extra context to merge
+
+        Returns:
+            Context dictionary for prompt augmentation
+        """
+        context = {
+            "topic_index": topic.index,
+            "topic_title": topic.title,
+            "key_terms": topic.key_terms,
+        }
+
+        if additional_context:
+            context.update(additional_context)
+
+        return context
+
+
+# Singleton instance for use throughout the application
+quizzer_agent = QuizzerAgent()
