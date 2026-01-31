@@ -1,0 +1,403 @@
+# test_course_orchestrator.py
+# Async unit tests for CourseOrchestrator behavior
+
+# Longer description (2-4 lines):
+# - Validates scatter-gather orchestration flow with mocked agents and DB.
+# - Exercises partial failure handling and regeneration behavior.
+# - Uses IsolatedAsyncioTestCase and AsyncMock for awaited calls.
+
+# @see: server/services/course_orchestrator.py - Orchestrator implementation
+# @note: All tests are mock-based to avoid external dependencies
+
+import importlib
+import unittest
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
+
+from server.schemas.learning import CourseOutline, NodeStatus, TopicNode
+from server.services.course_orchestrator import CourseOrchestrator
+
+orchestrator_module = importlib.import_module("server.services.course_orchestrator")
+
+
+class _StatusValue:
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+
+class _FakeNodeStatus:
+    UNLOCKED = _StatusValue("UNLOCKED")
+    LOCKED = _StatusValue("LOCKED")
+    COMPLETED = _StatusValue("COMPLETED")
+    ERROR = _StatusValue("ERROR")
+    VIEWING_EXPLANATION = _StatusValue("VIEWING_EXPLANATION")
+
+
+def _make_topics(count: int = 3) -> list[TopicNode]:
+    return [
+        TopicNode(
+            index=i,
+            title=f"Topic {i}",
+            summary_for_context=f"Summary {i}",
+            key_terms=[f"term-{i}a", f"term-{i}b"],
+        )
+        for i in range(count)
+    ]
+
+
+def _make_outline(count: int = 5) -> CourseOutline:
+    return CourseOutline(course_title="Mock Course", topics=_make_topics(count))
+
+
+class TestCourseOrchestratorGenerateCourse(unittest.IsolatedAsyncioTestCase):
+    """Tests for generate_course orchestration flow."""
+
+    async def test_generate_course_scatter_gather_success(self) -> None:
+        orchestrator = CourseOrchestrator()
+        outline = _make_outline(5)
+        session_payload = {
+            "id": "session-1",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        node_payloads = [
+            {"id": "node-0", "status": NodeStatus.LOCKED.value},
+            {"id": "node-1", "status": NodeStatus.LOCKED.value},
+            {"id": "node-2", "status": NodeStatus.LOCKED.value},
+            {"id": "node-3", "status": NodeStatus.LOCKED.value},
+            {"id": "node-4", "status": NodeStatus.LOCKED.value},
+        ]
+        concept_results = [
+            {"node": node_payloads[0], "generation_ms": 5.0, "error_message": None},
+            {"node": node_payloads[1], "generation_ms": 7.0, "error_message": None},
+            {"node": node_payloads[2], "generation_ms": 9.0, "error_message": None},
+            {"node": node_payloads[3], "generation_ms": 11.0, "error_message": None},
+            {"node": node_payloads[4], "generation_ms": 13.0, "error_message": None},
+        ]
+
+        with (
+            patch.object(
+                orchestrator_module.planner_agent,
+                "plan",
+                new_callable=AsyncMock,
+            ) as mock_plan,
+            patch.object(
+                orchestrator_module.learning_manager,
+                "create_learning_session",
+                return_value=session_payload,
+            ) as mock_create_session,
+            patch.object(
+                CourseOrchestrator,
+                "_generate_concept_unit",
+                new_callable=AsyncMock,
+            ) as mock_generate,
+        ):
+            mock_plan.return_value = outline
+            mock_generate.side_effect = concept_results
+
+            result = await orchestrator.generate_course("Test query", user_id="user-1")
+
+        mock_plan.assert_awaited_once_with("Test query")
+        mock_create_session.assert_called_once_with(
+            query="Test query",
+            course_title=outline.course_title,
+            user_id="user-1",
+        )
+        self.assertEqual(mock_generate.await_count, 5)
+
+        first_call = mock_generate.await_args_list[0].kwargs
+        self.assertEqual(first_call["prev_summary"], "Start")
+        self.assertEqual(
+            first_call["next_summary"], outline.topics[1].summary_for_context
+        )
+
+        last_call = mock_generate.await_args_list[-1].kwargs
+        self.assertEqual(
+            last_call["prev_summary"], outline.topics[-2].summary_for_context
+        )
+        self.assertEqual(last_call["next_summary"], "End")
+
+        self.assertEqual(result["session"]["id"], "session-1")
+        self.assertEqual(len(result["nodes"]), 5)
+        self.assertEqual(result["metrics"]["cards_failed"], 0)
+
+
+class TestCourseOrchestratorGenerateConceptUnit(unittest.IsolatedAsyncioTestCase):
+    """Tests for _generate_concept_unit behavior."""
+
+    async def test_generate_concept_unit_success(self) -> None:
+        orchestrator = CourseOrchestrator()
+        topic = _make_topics(1)[0]
+        content = SimpleNamespace(content_markdown="content")
+        quiz = Mock()
+        node_payload = {"id": "node-1", "status": NodeStatus.LOCKED.value}
+
+        with (
+            patch.object(
+                orchestrator_module,
+                "NodeStatus",
+                _FakeNodeStatus,
+            ),
+            patch.object(
+                orchestrator_module.generator_agent,
+                "generate_explanation",
+                new_callable=AsyncMock,
+                return_value=content,
+            ) as mock_generate,
+            patch.object(
+                orchestrator_module.quizzer_agent,
+                "generate_quiz",
+                new_callable=AsyncMock,
+                return_value=quiz,
+            ) as mock_quiz,
+            patch.object(
+                orchestrator_module.learning_manager,
+                "create_concept_node",
+                return_value=node_payload,
+            ) as mock_create,
+        ):
+            result = await orchestrator._generate_concept_unit(
+                topic=topic,
+                prev_summary="Start",
+                next_summary="End",
+                session_id="session-1",
+                sequence_index=0,
+            )
+
+        mock_generate.assert_awaited_once_with(
+            topic=topic,
+            prev_summary=None,
+            next_summary=None,
+        )
+        mock_quiz.assert_awaited_once_with(
+            topic=topic,
+            content="content",
+        )
+        mock_create.assert_called_once()
+        self.assertEqual(result["node"], node_payload)
+        self.assertIsNone(result["error_message"])
+
+    async def test_generate_concept_unit_failure_returns_skeleton(self) -> None:
+        orchestrator = CourseOrchestrator()
+        topic = _make_topics(1)[0]
+        skeleton = {"status": NodeStatus.ERROR.value, "title": topic.title}
+
+        with (
+            patch.object(
+                orchestrator_module.generator_agent,
+                "generate_explanation",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("boom"),
+            ),
+            patch.object(
+                CourseOrchestrator,
+                "_create_skeleton_card",
+                return_value=skeleton,
+            ) as mock_skeleton,
+        ):
+            result = await orchestrator._generate_concept_unit(
+                topic=topic,
+                prev_summary="Start",
+                next_summary="End",
+                session_id="session-1",
+                sequence_index=1,
+            )
+
+        mock_skeleton.assert_called_once()
+        self.assertEqual(result["node"], skeleton)
+        self.assertEqual(result["error_message"], "boom")
+
+
+class TestCourseOrchestratorGatherResults(unittest.TestCase):
+    """Tests for _process_gather_results handling."""
+
+    def test_process_gather_results_handles_failures(self) -> None:
+        orchestrator = CourseOrchestrator()
+        topics = _make_topics(3)
+        skeleton = {"status": NodeStatus.ERROR.value, "title": "Fallback"}
+
+        results = [
+            RuntimeError("boom"),
+            {
+                "node": {
+                    "status": NodeStatus.ERROR.value,
+                    "sequence_index": 1,
+                    "title": "Topic 1",
+                    "error_message": "fail",
+                },
+                "generation_ms": 2.0,
+            },
+            {"node": {"status": NodeStatus.LOCKED.value}, "generation_ms": 4.0},
+            "unexpected",
+        ]
+
+        with patch.object(
+            CourseOrchestrator,
+            "_create_skeleton_card",
+            return_value=skeleton,
+        ):
+            nodes, serial_ms = orchestrator._process_gather_results(
+                results=results,
+                topics=topics,
+                session_id="session-1",
+            )
+
+        self.assertEqual(len(nodes), 4)
+        self.assertEqual(nodes[0], skeleton)
+        self.assertEqual(nodes[3], skeleton)
+        self.assertEqual(serial_ms, 6.0)
+
+
+class TestCourseOrchestratorRegenerateNode(unittest.IsolatedAsyncioTestCase):
+    """Tests for regenerate_node behavior."""
+
+    async def test_regenerate_node_success(self) -> None:
+        orchestrator = CourseOrchestrator()
+        node = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 1,
+            "title": "Topic 1",
+            "status": NodeStatus.ERROR.value,
+            "retry_available": True,
+        }
+        previous_node = {
+            "sequence_index": 0,
+            "title": "Topic 0",
+            "status": NodeStatus.COMPLETED.value,
+        }
+        next_node = {
+            "sequence_index": 2,
+            "title": "Topic 2",
+            "status": NodeStatus.LOCKED.value,
+        }
+        updated_node = {"id": "node-1", "status": NodeStatus.LOCKED.value}
+        connection = Mock()
+        content = SimpleNamespace(content_markdown="regenerated")
+        quiz = Mock()
+
+        with (
+            patch.object(
+                orchestrator_module,
+                "NodeStatus",
+                _FakeNodeStatus,
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_node_by_id",
+                return_value=node,
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "get_session_nodes",
+                return_value=[previous_node, node, next_node],
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "update_node_content",
+                return_value=updated_node,
+            ) as mock_update,
+            patch.object(
+                orchestrator_module.generator_agent,
+                "generate_explanation",
+                new_callable=AsyncMock,
+                return_value=content,
+            ) as mock_generate,
+            patch.object(
+                orchestrator_module.quizzer_agent,
+                "generate_quiz",
+                new_callable=AsyncMock,
+                return_value=quiz,
+            ) as mock_quiz,
+        ):
+            result = await orchestrator.regenerate_node("node-1")
+
+        connection.close.assert_called_once()
+        mock_generate.assert_awaited_once()
+        mock_quiz.assert_awaited_once()
+        update_kwargs = mock_update.call_args.kwargs
+        self.assertEqual(update_kwargs["node_id"], "node-1")
+        self.assertEqual(update_kwargs["content_markdown"], "regenerated")
+        self.assertEqual(update_kwargs["status"].value, "VIEWING_EXPLANATION")
+        self.assertEqual(update_kwargs["quiz"], quiz)
+        self.assertIsNone(update_kwargs["error_message"])
+        self.assertFalse(update_kwargs["retry_available"])
+        self.assertEqual(result["id"], "node-1")
+        self.assertTrue(result["regenerated"])
+
+    async def test_regenerate_node_returns_none_when_missing(self) -> None:
+        orchestrator = CourseOrchestrator()
+        connection = Mock()
+
+        with (
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_node_by_id",
+                return_value=None,
+            ),
+        ):
+            result = await orchestrator.regenerate_node("missing")
+
+        self.assertIsNone(result)
+
+    async def test_regenerate_node_returns_none_when_not_retryable(self) -> None:
+        orchestrator = CourseOrchestrator()
+        connection = Mock()
+
+        with (
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_node_by_id",
+                return_value={
+                    "id": "node-1",
+                    "status": NodeStatus.ERROR.value,
+                    "retry_available": False,
+                },
+            ),
+        ):
+            result = await orchestrator.regenerate_node("node-1")
+
+        self.assertIsNone(result)
+
+    async def test_regenerate_node_returns_none_when_not_error_status(self) -> None:
+        orchestrator = CourseOrchestrator()
+        connection = Mock()
+
+        with (
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                orchestrator_module.learning_manager,
+                "_get_node_by_id",
+                return_value={
+                    "id": "node-1",
+                    "status": NodeStatus.LOCKED.value,
+                    "retry_available": True,
+                },
+            ),
+        ):
+            result = await orchestrator.regenerate_node("node-1")
+
+        self.assertIsNone(result)
+
+
+if __name__ == "__main__":
+    unittest.main()
