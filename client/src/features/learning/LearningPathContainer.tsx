@@ -3,19 +3,20 @@
 
 // Fetches learning session data via React Query, manages loading/error
 // states, and renders the vertical learning path with concept nodes.
-// Handles course generation and session restoration.
+// Handles course generation, session restoration, and sequential flow mutations.
 
 // @see: client/src/lib/learningApi.ts - API functions
 // @note: Requires sessionId prop or generates new course from query
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
 import {
   generateCourse,
   getLearningSession,
 } from '@/lib/learningApi';
-import type { LearningSessionWithNodes } from '@/types/learning';
+import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
+import { useLearningMutations } from './useLearningMutations';
+import { ConceptCard } from './ConceptCard';
 
 interface LearningPathContainerProps {
   /** Existing session ID to load */
@@ -39,6 +40,12 @@ export function LearningPathContainer({
     sessionId
   );
 
+  // Track quiz results for feedback display
+  const [quizResults, setQuizResults] = useState<Record<string, QuizSubmitResponse>>({});
+  
+  // Track which node just achieved mastery (for celebration animation)
+  const [masteredNodeId, setMasteredNodeId] = useState<string | null>(null);
+
   // Fetch existing session
   const {
     data: session,
@@ -59,6 +66,63 @@ export function LearningPathContainer({
       onCourseGenerated?.(data);
     },
   });
+
+  // Learning mutations hook with sequential flow callbacks
+  const {
+    proceedToQuiz,
+    submitAnswer,
+    retry,
+    continueToNext,
+    regenerate,
+    isAnyLoading,
+  } = useLearningMutations({
+    sessionId: activeSessionId!,
+    onQuizResult: (result) => {
+      // Store result for the node to show in feedback view
+      setQuizResults((prev) => ({
+        ...prev,
+        [result.node_id]: result,
+      }));
+    },
+    onMasteryAchieved: (nodeId) => {
+      // Trigger celebration animation
+      setMasteredNodeId(nodeId);
+      
+      // Clear after animation completes
+      setTimeout(() => setMasteredNodeId(null), 2000);
+      
+      // Find next node and scroll to it after a delay
+      const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
+      const nextNode = session?.nodes[nodeIndex + 1];
+      if (nextNode) {
+        setTimeout(() => {
+          continueToNext(nodeId, nextNode.id);
+        }, 1500);
+      }
+    },
+    onRetryNeeded: (nodeId, result) => {
+      // User needs to retry - result already stored in quizResults
+      console.log(`Retry needed for node ${nodeId}: ${result.score_percent}%`);
+    },
+    onError: (error, context) => {
+      console.error(`Mutation error (${context}):`, error);
+      // TODO: Show toast notification
+    },
+  });
+
+  // Find active node (first non-completed, non-locked for sequential flow)
+  const activeNodeId = session?.nodes.find(
+    (n) => n.status !== 'LOCKED' && n.status !== 'COMPLETED'
+  )?.id;
+
+  // Handle continue to next (manual button click, not auto-scroll)
+  const handleContinueToNext = (nodeId: string) => {
+    const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
+    const nextNode = session?.nodes[nodeIndex + 1];
+    if (nextNode) {
+      continueToNext(nodeId, nextNode.id);
+    }
+  };
 
   // Auto-generate if query provided but no sessionId
   const shouldGenerate = !activeSessionId && query && !generateMutation.isPending;
@@ -141,35 +205,39 @@ export function LearningPathContainer({
         />
       </div>
 
-      {/* Nodes list */}
+      {/* Nodes list with ConceptCard components */}
       <div className="flex flex-col gap-4">
-        {session.nodes.map((node, index) => (
-          <div
-            key={node.id}
-            className={cn(
-              'border rounded-lg p-4 transition-all',
-              node.status === 'LOCKED' && 'opacity-50 bg-muted',
-              node.status === 'COMPLETED' && 'border-green-500 bg-green-50',
-              node.status === 'ERROR' && 'border-destructive bg-destructive/10',
-              node.status !== 'LOCKED' &&
-                node.status !== 'COMPLETED' &&
-                node.status !== 'ERROR' &&
-                'border-primary'
+        {session.nodes.map((node) => (
+          <div key={node.id} id={`node-${node.id}`}>
+            <ConceptCard
+              node={node}
+              isActive={node.id === activeNodeId}
+              quizResult={quizResults[node.id]}
+              onProceedToQuiz={proceedToQuiz}
+              onQuizSubmit={submitAnswer}
+              onRetryQuiz={retry}
+              onContinueToNext={handleContinueToNext}
+              onRegenerate={regenerate}
+            />
+            {/* Mastery celebration overlay */}
+            {masteredNodeId === node.id && (
+              <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-50">
+                <div className="animate-bounce text-6xl">
+                  🎉
+                </div>
+              </div>
             )}
-          >
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-semibold text-muted-foreground">
-                {index + 1}
-              </span>
-              <h2 className="text-lg font-medium">{node.title}</h2>
-              <span className="ml-auto text-xs uppercase tracking-wide text-muted-foreground">
-                {node.status.replace('_', ' ')}
-              </span>
-            </div>
-            {/* TODO: Render ConceptCard component here in 05-02 */}
           </div>
         ))}
       </div>
+
+      {/* Loading overlay for mutations */}
+      {isAnyLoading && (
+        <div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+          <span className="text-sm text-muted-foreground">Updating...</span>
+        </div>
+      )}
     </div>
   );
 }
