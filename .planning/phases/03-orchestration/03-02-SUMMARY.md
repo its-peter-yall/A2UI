@@ -17,7 +17,7 @@
 - Run: RUN_INTEGRATION_TESTS=1 python -m unittest server.tests.test_orchestrator_integration -v
 
 ## Commit Hash
-- <TO_BE_FILLED_AFTER_COMMIT>
+- 7db73d2
 
 ## Deviations
 - Read .planning/ROADMAP.md to update phase status.
