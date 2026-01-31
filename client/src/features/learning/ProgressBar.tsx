@@ -14,14 +14,28 @@
 // - Screen reader announcements for progress changes
 // - Visual contrast ratios maintained for all states
 
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { ConceptNode, NodeStatus } from '@/types/learning';
+import { motion } from 'framer-motion';
+import { progressStepVariants } from './animations';
 
 interface ProgressBarProps {
   nodes: ConceptNode[];
   currentNodeId?: string;
   onNodeClick?: (nodeId: string) => void;
   className?: string;
+}
+
+/**
+ * Hook to store previous value of a prop or state.
+ */
+function usePrevious<T>(value: T): T | undefined {
+  const ref = useRef<T | undefined>(undefined);
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return ref.current;
 }
 
 export function ProgressBar({
@@ -32,6 +46,13 @@ export function ProgressBar({
 }: ProgressBarProps) {
   const completedCount = nodes.filter((n) => n.status === 'COMPLETED').length;
   const progressPercent = nodes.length > 0 ? (completedCount / nodes.length) * 100 : 0;
+
+  // Track previous statuses to detect "just completed" moments
+  const previousNodes = usePrevious(nodes);
+  const previousStatuses = previousNodes?.reduce((acc, node) => {
+    acc[node.id] = node.status;
+    return acc;
+  }, {} as Record<string, NodeStatus>);
 
   return (
     <div className={cn('w-full', className)}>
@@ -53,9 +74,15 @@ export function ProgressBar({
         aria-valuemax={100}
         aria-label={`Course progress: ${Math.round(progressPercent)}% complete`}
       >
-        <div
-          className="h-full bg-green-500 transition-all duration-500 ease-out"
-          style={{ width: `${progressPercent}%` }}
+        <motion.div
+          className="h-full bg-green-500 rounded-full"
+          initial={{ width: 0 }}
+          animate={{ width: `${progressPercent}%` }}
+          transition={{
+            type: 'spring',
+            stiffness: 100,
+            damping: 20,
+          }}
         />
       </div>
 
@@ -66,10 +93,14 @@ export function ProgressBar({
             const isCurrent = node.id === currentNodeId;
             const isLocked = node.status === 'LOCKED';
             const canClick = !isLocked && onNodeClick;
+            
+            const justCompleted = 
+              node.status === 'COMPLETED' && 
+              previousStatuses?.[node.id] !== 'COMPLETED';
 
             return (
               <li key={node.id} className="flex-1">
-                <button
+                <motion.button
                   onClick={() => {
                     // Only allow clicking non-locked nodes
                     if (canClick) {
@@ -81,8 +112,11 @@ export function ProgressBar({
                   aria-current={isCurrent ? 'step' : undefined}
                   aria-label={`${node.title}: ${formatStatusForScreenReader(node.status, index + 1)}`}
                   title={`${node.title} (${formatStatus(node.status)})`}
+                  variants={progressStepVariants}
+                  initial="incomplete"
+                  animate={justCompleted ? 'complete' : node.status === 'COMPLETED' ? 'complete' : 'incomplete'}
                   className={cn(
-                    'w-full h-2 rounded-full transition-all duration-200',
+                    'w-full h-2 rounded-full transition-colors duration-200',
                     getStepColor(node.status),
                     isCurrent && 'ring-2 ring-offset-1 ring-primary',
                     isLocked

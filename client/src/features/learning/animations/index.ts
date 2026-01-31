@@ -201,3 +201,11 @@ export const reducedMotionVariants: Variants = {
   visible: { opacity: 1 },
   exit: { opacity: 0 },
 };
+
+// ============================================================
+// Component Exports
+// ============================================================
+export { Confetti } from './Confetti';
+export { MasteryCelebration } from './MasteryCelebration';
+export { AnimatedCard, ContentTransition, RetryTransition, UnlockPulse } from './CardTransitions';
+export { AnimatedOption, ScoreReveal, CheckmarkAnimation, CrossAnimation } from './QuizAnimations';

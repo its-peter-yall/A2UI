@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MessageBubble } from './MessageBubble';
 import type { LocalMessage } from '@/types/api';
-import React from 'react';
 
 describe('MessageBubble', () => {
     it('should render user message', () => {

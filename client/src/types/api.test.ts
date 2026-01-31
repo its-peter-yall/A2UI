@@ -24,7 +24,7 @@ describe('API Types', () => {
       timestamp: '2023-01-01'
     };
     expectTypeOf(message).toBeObject();
-    expectTypeOf(message.role).toEqualTypeOf<'user' | 'assistant' | 'system'>();
+    expectTypeOf(message.role).toEqualTypeOf<'user' | 'assistant' | 'system' | 'model'>();
   });
 
   it('should have correct User interface', () => {

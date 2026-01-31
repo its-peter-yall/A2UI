@@ -3,7 +3,7 @@
 ## Milestone: v1.0 - Core Learning Path System
 
 ### Phase 01: Database Schema & Models
-**Status**: `pending`
+**Status**: `completed`
 **Directory**: `phases/01-database-schema/`
 **Estimated Plans**: 2
 
@@ -27,7 +27,7 @@ Extend SQLite schema for learning-specific entities.
 ---
 
 ### Phase 02: AI Agent Infrastructure
-**Status**: `pending`
+**Status**: `completed`
 **Directory**: `phases/02-agent-infrastructure/`
 **Estimated Plans**: 3
 
@@ -198,7 +198,7 @@ VIEWING_EXPLANATION → (proceed) → IN_QUIZ → (submit) → SHOWING_FEEDBACK
 ---
 
 ### Phase 07: Animations & Gamification
-**Status**: `in_progress`
+**Status**: `completed`
 **Directory**: `phases/07-animations/`
 **Estimated Plans**: 2
 
@@ -256,7 +256,7 @@ End-to-end integration, testing, and polish.
 | 04 | API Endpoints | 2 | completed | 03a |
 | 05 | Frontend Components | 3 | completed | 04 |
 | 06 | Sequential Flow State Machine & Navigation | 2 | completed | 05 |
-| 07 | Animations & Gamification | 2 | in_progress | 06 |
+| 07 | Animations & Gamification | 2 | completed | 06 |
 | 08 | Integration & Polish | 2 | pending | 07 |
 
 **Total Estimated Plans**: 20

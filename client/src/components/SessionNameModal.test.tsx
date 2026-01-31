@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SessionNameModal } from './SessionNameModal';
-import React from 'react';
 
 // Mock Lucide icons
 vi.mock('lucide-react', () => ({
