@@ -67,11 +67,18 @@ class SessionUpdate(BaseModel):
         min_length=1,
         max_length=200,
     )
+    is_pinned: Optional[bool] = Field(
+        default=None,
+        description="Whether the session is pinned",
+    )
 
 
 class SessionResponse(ResponseBase, TimestampMixin, SessionBase):
     """Schema for session responses including metadata."""
 
+    is_pinned: bool = Field(
+        default=False, description="Whether the session is pinned to the top"
+    )
     message_count: Optional[int] = Field(
         default=0, description="Number of messages in this session"
     )

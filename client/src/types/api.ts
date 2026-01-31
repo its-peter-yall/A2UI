@@ -15,6 +15,7 @@ export interface Session {
     created_at: string;
     updated_at: string;
     messages?: Message[]; // Optional if fetched separately
+    is_pinned?: boolean;
 }
 
 export interface Message {
@@ -46,7 +47,7 @@ export interface UpdateSessionRequest {
 }
 
 export interface SendMessageRequest {
-    content: string;
+    message: string;
     session_id: string;
     model?: string; // Optional model selection
 }

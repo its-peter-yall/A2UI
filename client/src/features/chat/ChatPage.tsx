@@ -14,6 +14,7 @@ export function ChatPage() {
     const [sessions, setSessions] = useState<Session[]>([]);
     const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
     const [sessionToRename, setSessionToRename] = useState<Session | null>(null);
+    const [isCreatingSession, setIsCreatingSession] = useState(false);
 
     // Chat Logic
     const { messages, isLoading: isChatLoading, sendMessage, isSending } = useChat(currentSessionId);
@@ -36,11 +37,19 @@ export function ChatPage() {
     }, []);
 
     // Handlers
-    const handleCreateSession = async () => {
+    const handleCreateSessionClick = () => {
+        setIsCreatingSession(true);
+        setSessionToRename(null);
+        setIsRenameModalOpen(true);
+    };
+
+    const handleCreateSessionWithName = async (title: string) => {
         try {
-            const newSession = await api.createSession({ title: "New Chat" });
+            const newSession = await api.createSession({ title });
             setSessions([newSession, ...sessions]);
             setCurrentSessionId(newSession.id);
+            setIsRenameModalOpen(false);
+            setIsCreatingSession(false);
         } catch (err) {
             console.error("Failed to create session", err);
         }
@@ -59,6 +68,10 @@ export function ChatPage() {
     };
 
     const handleRenameSession = async (title: string) => {
+        if (isCreatingSession) {
+            await handleCreateSessionWithName(title);
+            return;
+        }
         if (!sessionToRename) return;
         try {
             const updated = await api.updateSession(sessionToRename.id, title);
@@ -70,6 +83,15 @@ export function ChatPage() {
         }
     };
 
+    const handlePinSession = async (sessionId: string, isPinned: boolean) => {
+        try {
+            const updated = await api.pinSession(sessionId, isPinned);
+            setSessions(sessions.map(s => s.id === updated.id ? updated : s));
+        } catch (err) {
+            console.error("Failed to pin session", err);
+        }
+    };
+
     const openRenameModal = (session: Session) => {
         setSessionToRename(session);
         setIsRenameModalOpen(true);
@@ -77,10 +99,10 @@ export function ChatPage() {
 
     return (
         <div className="flex h-screen w-full overflow-hidden bg-background text-foreground">
-            {/* Mobile Sidebar Overlay */}
+            {/* Mobile Sidebar Toggle (Floating when closed) */}
             {!sidebarOpen && (
                 <button 
-                    className="fixed left-4 top-4 z-50 md:hidden p-2 bg-secondary rounded-md"
+                    className="fixed left-4 top-4 z-50 md:hidden p-2 bg-secondary rounded-md shadow-md border border-border"
                     onClick={() => setSidebarOpen(true)}
                 >
                     <Menu className="h-5 w-5" />
@@ -88,20 +110,20 @@ export function ChatPage() {
             )}
 
             {/* Sidebar */}
-            <div className={`${sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full w-0'} fixed md:relative z-40 h-full transition-all duration-300 ease-in-out border-r border-border bg-muted/30`}>
-                <SessionSidebar
-                    sessions={sessions}
-                    currentSessionId={currentSessionId}
-                    onSelectSession={setCurrentSessionId}
-                    onCreateSession={handleCreateSession}
-                    onDeleteSession={handleDeleteSession}
-                    onRenameSession={openRenameModal}
-                    onClose={() => setSidebarOpen(false)}
-                />
-            </div>
+            <SessionSidebar
+                sessions={sessions}
+                currentSessionId={currentSessionId}
+                onSelectSession={setCurrentSessionId}
+                onCreateSession={handleCreateSessionClick}
+                onDeleteSession={handleDeleteSession}
+                onRenameSession={openRenameModal}
+                onPinSession={handlePinSession}
+                isOpen={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
+            />
 
             {/* Main Content */}
-            <div className="flex flex-1 flex-col h-full w-full relative">
+            <div className="flex flex-1 flex-col h-full w-full relative overflow-hidden">
                 {/* Header / Top Bar (Optional) */}
                 <div className="h-14 border-b border-border flex items-center px-4 justify-between bg-background/50 backdrop-blur-sm sticky top-0 z-10">
                     <div className="flex items-center gap-2">
@@ -123,14 +145,14 @@ export function ChatPage() {
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
                     {!currentSessionId ? (
-                         <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-4">
+                         <div className="min-h-full flex flex-col items-center justify-center text-muted-foreground gap-4">
                             <div className="bg-muted p-4 rounded-full">
                                 <MessageSquarePlus className="h-8 w-8" />
                             </div>
                             <p>Select a chat or start a new one</p>
                             <button 
-                                onClick={handleCreateSession}
-                                className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover:bg-primary/90 transition-colors"
+                                onClick={handleCreateSessionClick}
+                                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
                             >
                                 Start New Chat
                             </button>
@@ -164,9 +186,15 @@ export function ChatPage() {
             {/* Modals */}
             <SessionNameModal
                 isOpen={isRenameModalOpen}
-                onClose={() => setIsRenameModalOpen(false)}
+                onClose={() => {
+                    setIsRenameModalOpen(false);
+                    setIsCreatingSession(false);
+                    setSessionToRename(null);
+                }}
                 onSave={handleRenameSession}
                 initialName={sessionToRename?.title || ""}
+                title={isCreatingSession ? "Create New Session" : "Rename Session"}
+                submitLabel={isCreatingSession ? "Create Session" : "Save Changes"}
             />
         </div>
     );

@@ -28,7 +28,7 @@ export function useChat(sessionId: string | null) {
             if (!sessionId) throw new Error("No session ID");
             return api.sendMessage({
                 session_id: sessionId,
-                content,
+                message: content,
                 model: DEFAULT_MODEL
             });
         },

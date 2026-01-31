@@ -27,6 +27,7 @@ class SessionManager:
         """Get a database connection with row factory."""
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def init_db(self) -> None:
@@ -40,6 +41,7 @@ class SessionManager:
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
+                    is_pinned INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -93,10 +95,10 @@ class SessionManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO sessions (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO sessions (id, title, is_pinned, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (session_id, title, now, now),
+                (session_id, title, 0, now, now),
             )
             conn.commit()
 
@@ -105,6 +107,7 @@ class SessionManager:
             return {
                 "id": session_id,
                 "title": title,
+                "is_pinned": False,
                 "created_at": now,
                 "updated_at": now,
                 "message_count": 0,
@@ -126,13 +129,14 @@ class SessionManager:
                 SELECT 
                     s.id, 
                     s.title, 
+                    s.is_pinned,
                     s.created_at, 
                     s.updated_at,
                     COUNT(m.id) as message_count
                 FROM sessions s
                 LEFT JOIN messages m ON s.id = m.session_id
                 GROUP BY s.id
-                ORDER BY s.updated_at DESC
+                ORDER BY s.is_pinned DESC, s.updated_at DESC
                 LIMIT ? OFFSET ?
                 """,
                 (limit, offset),
@@ -144,6 +148,7 @@ class SessionManager:
                     {
                         "id": row["id"],
                         "title": row["title"],
+                        "is_pinned": bool(row["is_pinned"]),
                         "created_at": row["created_at"],
                         "updated_at": row["updated_at"],
                         "message_count": row["message_count"],
@@ -168,6 +173,7 @@ class SessionManager:
                 SELECT 
                     s.id, 
                     s.title, 
+                    s.is_pinned,
                     s.created_at, 
                     s.updated_at,
                     COUNT(m.id) as message_count
@@ -184,6 +190,7 @@ class SessionManager:
                 return {
                     "id": row["id"],
                     "title": row["title"],
+                    "is_pinned": bool(row["is_pinned"]),
                     "created_at": row["created_at"],
                     "updated_at": row["updated_at"],
                     "message_count": row["message_count"],
@@ -196,20 +203,44 @@ class SessionManager:
         finally:
             conn.close()
 
-    def update_session(self, session_id: str, title: str) -> Optional[Dict[str, Any]]:
-        """Update a session's title and return the updated session."""
+    def update_session(
+        self,
+        session_id: str,
+        title: Optional[str] = None,
+        is_pinned: Optional[bool] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update a session's title and/or pin status and return the updated session."""
         conn = self._get_connection()
         try:
             now = datetime.utcnow().isoformat()
-
             cursor = conn.cursor()
+
+            # Build the update query dynamically
+            updates = []
+            params = []
+
+            if title is not None:
+                updates.append("title = ?")
+                params.append(title)
+
+            if is_pinned is not None:
+                updates.append("is_pinned = ?")
+                params.append(1 if is_pinned else 0)
+
+            if not updates:
+                return self.get_session(session_id)
+
+            updates.append("updated_at = ?")
+            params.append(now)
+            params.append(session_id)
+
             cursor.execute(
-                """
+                f"""
                 UPDATE sessions 
-                SET title = ?, updated_at = ?
+                SET {", ".join(updates)}
                 WHERE id = ?
                 """,
-                (title, now, session_id),
+                params,
             )
 
             if cursor.rowcount == 0:
@@ -305,27 +336,51 @@ class SessionManager:
         finally:
             conn.close()
 
-    def get_history(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get message history for a session."""
+    def get_history(
+        self, session_id: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get message history for a session.
+
+        Args:
+            session_id: The session ID to get history for
+            limit: Maximum number of messages to return. If None, returns all messages.
+        """
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT 
-                    id, 
-                    session_id, 
-                    role, 
-                    content, 
-                    thinking_content, 
-                    timestamp
-                FROM messages
-                WHERE session_id = ?
-                ORDER BY timestamp ASC
-                LIMIT ?
-                """,
-                (session_id, limit),
-            )
+            if limit is None:
+                cursor.execute(
+                    """
+                    SELECT 
+                        id, 
+                        session_id, 
+                        role, 
+                        content, 
+                        thinking_content, 
+                        timestamp
+                    FROM messages
+                    WHERE session_id = ?
+                    ORDER BY timestamp ASC
+                    """,
+                    (session_id,),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT 
+                        id, 
+                        session_id, 
+                        role, 
+                        content, 
+                        thinking_content, 
+                        timestamp
+                    FROM messages
+                    WHERE session_id = ?
+                    ORDER BY timestamp ASC
+                    LIMIT ?
+                    """,
+                    (session_id, limit),
+                )
 
             messages = []
             for row in cursor.fetchall():

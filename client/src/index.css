@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @theme {
   --color-border: hsl(var(--border));
@@ -90,7 +91,7 @@
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 47 100% 50%; /* #FFD400 Cyber Yellow */
+    --primary: 50 100% 50%; /* #FFD300 */
     --primary-foreground: 240 5.9% 10%;
 
     --secondary: 240 3.7% 15.9%;
@@ -121,3 +122,65 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 }
+
+/* Custom Typography Overrides for Dark Mode */
+
+@layer utilities {
+
+  .prose-invert :is(h1, h2, h3, h4, h5, h6, strong, b, a, code, .prose-bullets, li::marker) {
+
+    color: #FFD300 !important;
+
+  }
+
+
+
+
+
+  .prose-invert :is(h1, h2, h3) {
+
+    margin-top: 2rem !important;
+
+    margin-bottom: 1rem !important;
+
+    display: block !important;
+
+  }
+
+
+
+  .prose-invert ul {
+
+    list-style-type: disc !important;
+
+    padding-left: 1.5rem !important;
+
+    margin-top: 1rem !important;
+
+    margin-bottom: 1rem !important;
+
+  }
+
+
+
+  .prose-invert li {
+
+    margin-bottom: 0.5rem !important;
+
+  }
+
+  
+
+  .prose-invert {
+
+    --tw-prose-body: var(--color-foreground);
+
+    --tw-prose-quotes: var(--color-muted-foreground);
+
+  }
+
+}
+
+
+
+

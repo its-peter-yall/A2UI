@@ -36,7 +36,7 @@ def build_context(history: List[dict]) -> List[dict]:
     summary="Send a chat message",
     description="Send a message to the chat endpoint and get a response from Vertex AI.",
 )
-async def chat(request: ChatRequest) -> ChatResponse:
+def chat(request: ChatRequest) -> ChatResponse:
     """
     Process a chat message and return the AI response.
 
@@ -49,21 +49,33 @@ async def chat(request: ChatRequest) -> ChatResponse:
     6. Return response
     """
     try:
-        # Step 1: Validate session exists
-        session = session_manager.get_session(request.session_id)
-        if not session:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Session not found: {request.session_id}",
+        # Step 1: Validate session exists or create new one when session_id is empty
+        session_id = request.session_id
+
+        if session_id:
+            session = session_manager.get_session(session_id)
+            if not session:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Session not found: {session_id}",
+                )
+        else:
+            # Create new session with title from first message (truncated to 50 chars)
+            title = (
+                request.message[:50] + "..."
+                if len(request.message) > 50
+                else request.message
             )
+            session_data = session_manager.create_session(title=title)
+            session_id = session_data["id"]
 
         # Step 2: Save user message to DB
         user_message = session_manager.add_message(
-            session_id=request.session_id, role="user", content=request.message
+            session_id=session_id, role="user", content=request.message
         )
 
         # Step 3: Fetch recent history for context
-        history = session_manager.get_history(request.session_id, limit=50)
+        history = session_manager.get_history(session_id, limit=50)
         formatted_history = build_context(history)
 
         # Step 4: Call Vertex AI (if initialized)
@@ -84,7 +96,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # Step 5: Save assistant response to DB
         assistant_message = session_manager.add_message(
-            session_id=request.session_id,
+            session_id=session_id,
             role="model",
             content=response_text,
             thinking_content=thinking_content,
@@ -92,7 +104,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
         # Step 6: Return response
         return ChatResponse(
-            session_id=request.session_id,
+            session_id=session_id,
             message=MessageResponse(**assistant_message),
             thinking_content=thinking_content,
         )

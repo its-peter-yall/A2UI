@@ -94,10 +94,10 @@ export function MessageBubble({ message }: MessageBubbleProps) {
                 )}
 
                 <div className={cn(
-                    "prose max-w-none text-[15px] leading-relaxed font-medium warp-break-words",
+                    "prose max-w-none text-[15px] leading-relaxed font-medium break-words",
                     isUser
                         ? "prose-neutral prose-p:text-primary-foreground prose-headings:text-primary-foreground prose-strong:text-primary-foreground"
-                        : "prose-invert prose-p:text-foreground prose-headings:text-foreground prose-strong:text-primary prose-a:text-primary hover:prose-a:text-primary/80 prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none"
+                        : "prose-invert prose-p:text-foreground prose-headings:text-primary prose-strong:text-primary prose-a:text-primary hover:prose-a:text-primary/80 prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none"
                 )}>
                     <ReactMarkdown
                         remarkPlugins={[remarkGfm]}

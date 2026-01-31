@@ -11,6 +11,8 @@ vi.mock('lucide-react', () => ({
     Trash2: () => <div data-testid="trash-icon" />,
     MoreVertical: () => <div data-testid="more-icon" />,
     X: () => <div data-testid="x-icon" />,
+    Pin: () => <div data-testid="pin-icon" />,
+    Pencil: () => <div data-testid="pencil-icon" />,
 }));
 
 describe('SessionSidebar', () => {
@@ -27,6 +29,8 @@ describe('SessionSidebar', () => {
                 onSelectSession={() => {}}
                 onCreateSession={() => {}}
                 onDeleteSession={() => {}}
+                onRenameSession={() => {}}
+                onPinSession={() => {}}
                 isOpen={true}
                 onClose={() => {}}
             />
@@ -44,6 +48,8 @@ describe('SessionSidebar', () => {
                 onSelectSession={selectMock}
                 onCreateSession={() => {}}
                 onDeleteSession={() => {}}
+                onRenameSession={() => {}}
+                onPinSession={() => {}}
                 isOpen={true}
                 onClose={() => {}}
             />
@@ -60,6 +66,8 @@ describe('SessionSidebar', () => {
                 onSelectSession={() => {}}
                 onCreateSession={() => {}}
                 onDeleteSession={() => {}}
+                onRenameSession={() => {}}
+                onPinSession={() => {}}
                 isOpen={true}
                 onClose={() => {}}
             />

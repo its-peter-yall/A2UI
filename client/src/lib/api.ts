@@ -55,6 +55,11 @@ export const updateSession = async (sessionId: string, title: string): Promise<S
     return response.data;
 };
 
+export const pinSession = async (sessionId: string, isPinned: boolean): Promise<Session> => {
+    const response = await api.patch<Session>(`/sessions/${sessionId}`, { is_pinned: isPinned });
+    return response.data;
+};
+
 // --- Chat ---
 
 export const sendMessage = async (data: SendMessageRequest): Promise<SendMessageResponse> => {

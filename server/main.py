@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from server.utils.vertex_client import init_vertex, get_vertex_status
 from server.database.persistence import session_manager
+from server.database.learning_persistence import learning_manager
 from server.routers import sessions_router, chat_router
 import logging
 
@@ -32,6 +33,8 @@ async def lifespan(app: FastAPI):
     try:
         session_manager.init_db()
         logger.info("Database initialized successfully.")
+        learning_manager.init_learning_tables()
+        logger.info("Learning tables initialized successfully.")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 

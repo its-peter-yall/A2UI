@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 interface SessionNameModalProps {
     isOpen: boolean;
     title?: string;
+    submitLabel?: string;
     initialName?: string;
     onSave: (name: string) => void;
     onClose: () => void;
@@ -14,6 +15,7 @@ interface SessionNameModalProps {
 export function SessionNameModal({
     isOpen,
     title = 'Create New Session',
+    submitLabel = 'Create Session',
     initialName = '',
     onSave,
     onClose,
@@ -82,7 +84,7 @@ export function SessionNameModal({
                             disabled={!name.trim()}
                             className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                         >
-                            Create Session
+                            {submitLabel}
                         </button>
                     </div>
                 </form>

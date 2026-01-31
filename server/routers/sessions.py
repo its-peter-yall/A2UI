@@ -1,6 +1,6 @@
 """Session management API endpoints."""
 
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
 import logging
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
     summary="Create a new session",
     description="Create a new chat session with the given title.",
 )
-async def create_session(request: SessionCreate) -> SessionResponse:
+def create_session(request: SessionCreate) -> SessionResponse:
     """Create a new chat session."""
     try:
         session_data = session_manager.create_session(title=request.title)
@@ -44,7 +44,7 @@ async def create_session(request: SessionCreate) -> SessionResponse:
     summary="List all sessions",
     description="Get a list of all sessions sorted by most recently updated.",
 )
-async def list_sessions(limit: int = 50, offset: int = 0) -> List[SessionResponse]:
+def list_sessions(limit: int = 50, offset: int = 0) -> List[SessionResponse]:
     """List all sessions."""
     try:
         sessions_data = session_manager.list_sessions(limit=limit, offset=offset)
@@ -63,7 +63,7 @@ async def list_sessions(limit: int = 50, offset: int = 0) -> List[SessionRespons
     summary="Get session by ID",
     description="Get a specific session including its message history.",
 )
-async def get_session(session_id: str) -> SessionWithMessages:
+def get_session(session_id: str) -> SessionWithMessages:
     """Get a session by ID with its message history."""
     try:
         # Get session metadata
@@ -74,8 +74,8 @@ async def get_session(session_id: str) -> SessionWithMessages:
                 detail=f"Session not found: {session_id}",
             )
 
-        # Get message history
-        messages_data = session_manager.get_history(session_id)
+        # Get full message history (no limit)
+        messages_data = session_manager.get_history(session_id, limit=None)
         messages = [MessageResponse(**msg) for msg in messages_data]
 
         return SessionWithMessages(**session_data, messages=messages)
@@ -93,18 +93,20 @@ async def get_session(session_id: str) -> SessionWithMessages:
     "/{session_id}",
     response_model=SessionResponse,
     summary="Update session",
-    description="Update a session's title.",
+    description="Update a session's title and/or pin status.",
 )
-async def update_session(session_id: str, request: SessionUpdate) -> SessionResponse:
-    """Update a session's title."""
+def update_session(session_id: str, request: SessionUpdate) -> SessionResponse:
+    """Update a session's title and/or pin status."""
     try:
-        if not request.title:
+        if request.title is None and request.is_pinned is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Title is required for update",
+                detail="At least one field (title or is_pinned) is required for update",
             )
 
-        session_data = session_manager.update_session(session_id, title=request.title)
+        session_data = session_manager.update_session(
+            session_id, title=request.title, is_pinned=request.is_pinned
+        )
         if not session_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -128,7 +130,7 @@ async def update_session(session_id: str, request: SessionUpdate) -> SessionResp
     summary="Delete session",
     description="Delete a session and all its messages.",
 )
-async def delete_session(session_id: str) -> None:
+def delete_session(session_id: str) -> None:
     """Delete a session and all its messages."""
     try:
         deleted = session_manager.delete_session(session_id)
@@ -151,12 +153,17 @@ async def delete_session(session_id: str) -> None:
     "/{session_id}/messages",
     response_model=List[MessageResponse],
     summary="Get session messages",
-    description="Get all messages for a specific session.",
+    description="Get full message history for a specific session.",
 )
-async def get_session_messages(
-    session_id: str, limit: int = 100
+def get_session_messages(
+    session_id: str, limit: Optional[int] = None
 ) -> List[MessageResponse]:
-    """Get all messages for a session."""
+    """Get full message history for a session.
+
+    Args:
+        session_id: The session ID to get messages for
+        limit: Maximum number of messages to return. If None (default), returns all messages.
+    """
     try:
         # First check if session exists
         session_data = session_manager.get_session(session_id)
@@ -166,6 +173,7 @@ async def get_session_messages(
                 detail=f"Session not found: {session_id}",
             )
 
+        # Get full history by default (limit=None)
         messages_data = session_manager.get_history(session_id, limit=limit)
         return [MessageResponse(**msg) for msg in messages_data]
     except HTTPException:

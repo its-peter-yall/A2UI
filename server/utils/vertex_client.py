@@ -52,21 +52,12 @@ def get_vertex_status():
 
 def generate_chat_response(
     messages: list,
-    model: str = "gemini-2.0-flash-001",
-    temperature: float = 0.7,
-    max_output_tokens: int = 2048,
+    model: str = "gemini-2.5-flash",
+    temperature: float = 0.4,
+    max_output_tokens: int = 30000,
 ) -> tuple[str, str | None]:
     """
-    Generate a chat response using Vertex AI.
-
-    Args:
-        messages: List of message dicts with 'role' and 'content' keys
-        model: The model name to use
-        temperature: Sampling temperature
-        max_output_tokens: Maximum tokens to generate
-
-    Returns:
-        Tuple of (response_text, thinking_content)
+    Generate a chat response using Vertex AI with Thinking Mode enabled.
     """
     global _is_initialized
 
@@ -74,62 +65,73 @@ def generate_chat_response(
         raise RuntimeError("Vertex AI not initialized")
 
     try:
-        from vertexai.generative_models import GenerativeModel
-        from vertexai.preview.generative_models import Part
+        from vertexai.generative_models import GenerativeModel, Content, Part
 
-        # Initialize the model
-        generative_model = GenerativeModel(model_name=model)
+        # Initialize the model with a high-energy, professional Tutor Persona
+        system_instruction = (
+            "You are an elite Academic Research Tutor with a high-energy, inspiring persona.\n\n"
+            "MANDATORY FORMATTING RULES (STRICT VISUAL STRUCTURE REQUIRED):\n"
+            "1. TRIPLE NEWLINES: You MUST use three newlines between main sections to ensure clear vertical separation.\n"
+            "2. SECTION HEADERS: Every main section MUST start with '### ' (Example: ### Quantum Mechanics). NEVER just bold a line.\n"
+            "3. TERMINOLOGY: Bold all technical terms using '**'.\n"
+            "4. LISTS: Every list item MUST start on its own new line with a '-' symbol.\n"
+            "5. FORMULAS: ALWAYS use code blocks for mathematical expressions.\n\n"
+            "RESPONSE STRUCTURE EXAMPLE:\n"
+            "### [Title of Topic]\n\n\n"
+            "An enthusiastic introductory sentence using **Professional Terminology**.\n\n\n"
+            "### Core Objectives\n\n\n"
+            "- **Objective 1**: Actionable insight description.\n"
+            "- **Objective 2**: Measurable outcome description.\n\n\n"
+            "### Technical Breakdown\n\n\n"
+            "Detailed explanation using a `code block` for formulas.\n\n"
+            "Behavioral Guidelines:\n"
+            "1. INTERNAL REASONING: THINK step-by-step internally before providing your final answer.\n"
+            "2. CLARITY & PRECISION: Use professional terminology and provide actionable insights.\n"
+            "3. OUTCOME-FOCUSED: Always aim for measurable educational outcomes.\n"
+            "4. CONCISE & DENSE: Keep responses focused. Prioritize essential keywords.\n"
+            "5. TONE: Be infectious in your enthusiasm! Encourage the user constantly."
+        )
+        
+        generative_model = GenerativeModel(
+            model_name=model,
+            system_instruction=system_instruction
+        )
 
         # Convert messages to the format expected by Vertex AI
-        # Format: user and model alternating
         formatted_history = []
         for msg in messages:
             role = msg.get("role", "user")
+            api_role = "model" if role in ["model", "assistant"] else "user"
             content = msg.get("content", "")
 
-            if role == "user":
-                formatted_history.append({"role": "user", "parts": [content]})
-            elif role == "model":
-                formatted_history.append({"role": "model", "parts": [content]})
-
-        # Start a chat session
-        chat = generative_model.start_chat(
-            history=formatted_history[:-1] if formatted_history else []
-        )
-
-        # Send the last message (or empty if none)
-        last_message = (
-            formatted_history[-1]["parts"][0] if formatted_history else "Hello"
-        )
+            formatted_history.append(
+                Content(role=api_role, parts=[Part.from_text(content)])
+            )
 
         # Generate response
-        response = chat.send_message(
-            last_message,
+        # Note: thinking_config removed as it is not supported in this SDK version for gemini-2.5-flash
+        response = generative_model.generate_content(
+            formatted_history,
             generation_config={
                 "temperature": temperature,
                 "max_output_tokens": max_output_tokens,
-            },
+            }
         )
 
-        # Extract text and thinking content if available
+        # Extract text and thinking content
         response_text = response.text
         thinking_content = None
 
-        # Check if response has thinking content (for supported models)
-        if hasattr(response, "candidates") and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, "content") and candidate.content:
-                # Some models may have thinking content in parts
-                for part in candidate.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        # First text part is the main response
-                        if not response_text:
-                            response_text = part.text
-                    # Check for thinking/reasoning content if available
-                    if hasattr(part, "thought") and part.thought:
-                        thinking_content = part.thought
+        # Extract thoughts if present in the parts
+        if response.candidates:
+            parts = response.candidates[0].content.parts
+            for part in parts:
+                if hasattr(part, "thought") and part.thought:
+                    thinking_content = part.thought
+                elif hasattr(part, "text") and not response_text:
+                    response_text = part.text
 
-        logger.info(f"Generated response with model {model}")
+        logger.info(f"Generated response with thinking mode using model {model}")
         return response_text, thinking_content
 
     except Exception as e:

@@ -10,8 +10,8 @@ class ChatRequest(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    session_id: str = Field(
-        ..., description="ID of the session to continue, or empty to create new"
+    session_id: Optional[str] = Field(
+        default="", description="ID of the session to continue, or empty to create new"
     )
     message: str = Field(..., description="The user's message content", min_length=1)
     model: Optional[str] = Field(
