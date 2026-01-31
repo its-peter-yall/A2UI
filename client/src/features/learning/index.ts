@@ -7,6 +7,10 @@ export { ConceptCard } from './ConceptCard';
 export { MarkdownRenderer } from './MarkdownRenderer';
 export { SkeletonCard, SkeletonPath } from './SkeletonCard';
 export { QuizFeedback } from './QuizFeedback';
+export { TopicInput } from './TopicInput';
+export { ProgressBar } from './ProgressBar';
+export { LearningPage } from './LearningPage';
+export { LearningHome } from './LearningHome';
 
 // Hooks
 export { useQuizFeedback } from './useQuizFeedback';
