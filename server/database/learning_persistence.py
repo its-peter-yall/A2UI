@@ -116,6 +116,36 @@ class LearningManager:
                 """
             )
 
+            # Quiz attempts table for mastery tracking
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS quiz_attempts (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL,
+                    attempt_number INTEGER NOT NULL,
+                    selected_option_id TEXT NOT NULL,
+                    is_correct INTEGER NOT NULL,
+                    score_percent INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (node_id)
+                        REFERENCES concept_nodes(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_quiz_attempts_node_id
+                ON quiz_attempts(node_id)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_quiz_attempts_node_attempt
+                ON quiz_attempts(node_id, attempt_number)
+                """
+            )
+
             self._ensure_concept_node_columns(conn)
 
             conn.commit()
@@ -604,6 +634,218 @@ class LearningManager:
             return QuizCard.model_validate(json.loads(row["payload"]))
         except sqlite3.Error as e:
             logger.error(f"Error getting quiz for node: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def create_quiz_attempt(
+        self,
+        node_id: str,
+        selected_option_id: str,
+    ) -> Dict[str, Any]:
+        """Record a quiz attempt and return result with mastery status.
+
+        Args:
+            node_id: The concept node identifier
+            selected_option_id: The selected option (A, B, C, or D)
+
+        Returns:
+            Dict with attempt details including is_correct, score_percent,
+            correct_option_id, explanation, and is_mastered
+
+        Raises:
+            ValueError: If node_id not found or has no quiz
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # Get quiz data for this node
+            quiz = self.get_quiz_for_node(node_id)
+            if quiz is None:
+                raise ValueError(f"No quiz found for node: {node_id}")
+
+            # Find correct option and selected option details
+            correct_option = None
+            selected_option = None
+            for opt in quiz.options:
+                if opt.is_correct:
+                    correct_option = opt
+                if opt.id == selected_option_id:
+                    selected_option = opt
+
+            if selected_option is None:
+                raise ValueError(f"Invalid option id: {selected_option_id}")
+
+            is_correct = selected_option.is_correct
+            score_percent = 100 if is_correct else 0
+
+            # Get next attempt number
+            cursor.execute(
+                """
+                SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt
+                FROM quiz_attempts
+                WHERE node_id = ?
+                """,
+                (node_id,),
+            )
+            attempt_number = cursor.fetchone()["next_attempt"]
+
+            # Insert attempt record
+            attempt_id = str(uuid.uuid4())
+            now = datetime.now(timezone.utc).isoformat()
+            cursor.execute(
+                """
+                INSERT INTO quiz_attempts (
+                    id, node_id, attempt_number, selected_option_id,
+                    is_correct, score_percent, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    node_id,
+                    attempt_number,
+                    selected_option_id,
+                    1 if is_correct else 0,
+                    score_percent,
+                    now,
+                ),
+            )
+            conn.commit()
+
+            logger.info(
+                f"Quiz attempt recorded: node={node_id}, "
+                f"attempt={attempt_number}, correct={is_correct}"
+            )
+
+            return {
+                "id": attempt_id,
+                "node_id": node_id,
+                "attempt_number": attempt_number,
+                "selected_option_id": selected_option_id,
+                "is_correct": is_correct,
+                "score_percent": score_percent,
+                "correct_option_id": correct_option.id,
+                "explanation": selected_option.explanation,
+                "is_mastered": is_correct,  # 100% = mastered for single question
+                "created_at": now,
+                "updated_at": now,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error creating quiz attempt: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_quiz_attempts(self, node_id: str) -> Dict[str, Any]:
+        """Get quiz attempt history for a node.
+
+        Args:
+            node_id: The concept node identifier
+
+        Returns:
+            Dict with total_attempts, is_mastered, best_score, and attempts list
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # Get quiz data for this node to extract correct_option_id and explanations
+            quiz = self.get_quiz_for_node(node_id)
+
+            # Get all attempts ordered by attempt_number
+            cursor.execute(
+                """
+                SELECT
+                    id, node_id, attempt_number, selected_option_id,
+                    is_correct, score_percent, created_at
+                FROM quiz_attempts
+                WHERE node_id = ?
+                ORDER BY attempt_number ASC
+                """,
+                (node_id,),
+            )
+            rows = cursor.fetchall()
+
+            attempts = []
+            best_score = 0
+            is_mastered = False
+
+            # Find correct option from quiz
+            correct_option_id = None
+            explanations = {}
+            if quiz:
+                for opt in quiz.options:
+                    explanations[opt.id] = opt.explanation
+                    if opt.is_correct:
+                        correct_option_id = opt.id
+
+            for row in rows:
+                score = row["score_percent"]
+                if score > best_score:
+                    best_score = score
+                if score == 100:
+                    is_mastered = True
+
+                selected_id = row["selected_option_id"]
+                attempts.append(
+                    {
+                        "id": row["id"],
+                        "node_id": row["node_id"],
+                        "attempt_number": row["attempt_number"],
+                        "selected_option_id": selected_id,
+                        "is_correct": bool(row["is_correct"]),
+                        "score_percent": score,
+                        "correct_option_id": correct_option_id or "A",  # fallback
+                        "explanation": explanations.get(
+                            selected_id, "No explanation available"
+                        ),
+                        "is_mastered": score == 100,
+                        "created_at": row["created_at"],
+                        "updated_at": row[
+                            "created_at"
+                        ],  # Same as created_at for attempts
+                    }
+                )
+
+            return {
+                "node_id": node_id,
+                "total_attempts": len(attempts),
+                "is_mastered": is_mastered,
+                "best_score": best_score,
+                "attempts": attempts,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error getting quiz attempts: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def check_mastery(self, node_id: str) -> bool:
+        """Check if a node's quiz has been mastered (100% score achieved).
+
+        Args:
+            node_id: The concept node identifier
+
+        Returns:
+            True if any attempt scored 100%, False otherwise
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1
+                FROM quiz_attempts
+                WHERE node_id = ? AND score_percent = 100
+                LIMIT 1
+                """,
+                (node_id,),
+            )
+            return cursor.fetchone() is not None
+        except sqlite3.Error as e:
+            logger.error(f"Error checking mastery: {e}")
             raise
         finally:
             conn.close()
