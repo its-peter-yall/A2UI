@@ -30,12 +30,12 @@ class GeneratedContent(BaseModel):
     content_markdown: str = Field(
         ...,
         description="The full educational content in Markdown format",
-        min_length=100,
+        min_length=300,
     )
     key_takeaways: List[str] = Field(
         ...,
         description="3-5 key takeaways the learner should remember",
-        min_length=2,
+        min_length=3,
         max_length=5,
     )
 

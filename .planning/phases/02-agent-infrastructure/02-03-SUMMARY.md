@@ -26,9 +26,11 @@ Created `GeneratorAgent` class extending `BaseAgent` with:
 **Pydantic Model**:
 ```python
 class GeneratedContent(BaseModel):
-    content_markdown: str  # Full educational content in Markdown
-    key_takeaways: List[str]  # 3-5 key takeaways (min 2, max 5)
+    content_markdown: str  # Full educational content in Markdown (min 300 chars)
+    key_takeaways: List[str]  # 3-5 key takeaways (min 3, max 5)
 ```
+
+**Note**: The plan specified returning a markdown string, but the implementation returns a `GeneratedContent` object with `content_markdown` and `key_takeaways` fields. This provides richer structured output for downstream consumers.
 
 ### Task 2: Implement Quizzer Agent ✅
 **File**: `server/agents/quizzer.py`
@@ -145,9 +147,27 @@ All 58 agent tests pass:
 | `server/tests/test_quizzer_agent.py` | Created |
 | `server/agents/__init__.py` | Updated exports |
 
-## Deviations
+## Deviations and Refinements
 
-None. All tasks completed as specified in the plan.
+### Schema Validation Enhancements
+After initial implementation, schema validation was tightened to enforce strict requirements:
+
+1. **QuizCard validation**:
+   - Changed from "at least 2 options" to **exactly 4 options** (A, B, C, D)
+   - Changed from "at least 1 correct" to **exactly 1 correct**
+   - Added ID pattern validation: `^[A-D]$`
+   - Added non-empty explanation requirement (`min_length=1`)
+
+2. **GeneratedContent constraints**:
+   - Increased `content_markdown` from 100 to **300 char minimum**
+   - Changed `key_takeaways` from 2-5 to **3-5 items** (matches plan spec)
+
+3. **Quizzer prompt enhancement**:
+   - Added explicit "JSON format" mention to output requirements section
+   - Added note about schema validation rejection for invalid output
+
+### API Difference from Plan
+The plan specified `generate_explanation()` should return a markdown string, but the implementation returns a `GeneratedContent` object with both `content_markdown` and `key_takeaways` fields. This provides richer structured output for downstream consumers while maintaining the same core functionality.
 
 ## Next Steps
 

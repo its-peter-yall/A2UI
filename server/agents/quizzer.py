@@ -94,7 +94,7 @@ EVERY option MUST have an explanation:
 
 ## Strict Output Requirements
 
-Your output MUST follow this exact structure:
+Your output MUST follow this exact structure in JSON format:
 
 1. **question_text**: Clear, unambiguous question text
    - Should be answerable with the provided content
@@ -107,6 +107,8 @@ Your output MUST follow this exact structure:
    - **explanation**: Required explanation (see above)
    
 3. **difficulty**: One of "easy", "medium", or "hard"
+
+The response will be validated as JSON against a strict schema. Invalid output will be rejected.
 
 ## Example Output Structure
 

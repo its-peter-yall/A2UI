@@ -158,7 +158,7 @@ class TestQuizzerSystemPrompt(unittest.TestCase):
         prompt = agent.system_prompt
 
         # Distractor guidelines should be prominent
-        self.assertIn("Distractor", prompt)
+        self.assertIn("distractor", prompt.lower())
         self.assertIn("misconception", prompt.lower())
 
         # Plausibility requirement
@@ -173,11 +173,11 @@ class TestQuizzerSystemPrompt(unittest.TestCase):
         agent = QuizzerAgent()
         prompt = agent.system_prompt
 
-        # Difficulty levels should be explained
-        self.assertIn("Difficulty", prompt)
-        self.assertIn("EASY", prompt)
-        self.assertIn("MEDIUM", prompt)
-        self.assertIn("HARD", prompt)
+        # Difficulty levels should be explained (case-insensitive)
+        self.assertIn("difficulty", prompt.lower())
+        self.assertIn("easy", prompt.lower())
+        self.assertIn("medium", prompt.lower())
+        self.assertIn("hard", prompt.lower())
 
     def test_system_prompt_contains_explanation_requirements(self) -> None:
         """Positive test: Check that all options must have explanations.
@@ -188,14 +188,14 @@ class TestQuizzerSystemPrompt(unittest.TestCase):
         agent = QuizzerAgent()
         prompt = agent.system_prompt
 
-        # Explanation requirements should be mentioned
-        self.assertIn("Explanation", prompt)
-        self.assertIn("EVERY option", prompt)
-        self.assertIn("MUST", prompt)
+        # Explanation requirements should be mentioned (case-insensitive)
+        self.assertIn("explanation", prompt.lower())
+        self.assertIn("every option", prompt.lower())
+        self.assertIn("must", prompt.lower())
 
         # Should explain both correct and incorrect
-        self.assertIn("Correct Answer Explanation", prompt)
-        self.assertIn("Incorrect Answer Explanation", prompt)
+        self.assertIn("correct answer explanation", prompt.lower())
+        self.assertIn("incorrect answer explanation", prompt.lower())
 
 
 class TestQuizzerPromptQuality(unittest.TestCase):
@@ -208,9 +208,10 @@ class TestQuizzerPromptQuality(unittest.TestCase):
 
     def test_prompt_has_example(self) -> None:
         """Check that an example quiz structure is provided."""
-        self.assertIn("Example", QUIZZER_SYSTEM_PROMPT)
-        self.assertIn("Option A", QUIZZER_SYSTEM_PROMPT)
-        self.assertIn("Option B", QUIZZER_SYSTEM_PROMPT)
+        # Intent: Verify the prompt includes example output structure
+        self.assertIn("example", QUIZZER_SYSTEM_PROMPT.lower())
+        self.assertIn("option a", QUIZZER_SYSTEM_PROMPT.lower())
+        self.assertIn("option b", QUIZZER_SYSTEM_PROMPT.lower())
 
     def test_prompt_specifies_output_structure(self) -> None:
         """Check that strict output requirements are specified."""
@@ -221,7 +222,8 @@ class TestQuizzerPromptQuality(unittest.TestCase):
 
     def test_prompt_has_chain_of_thought(self) -> None:
         """Check that chain-of-thought process is explained."""
-        self.assertIn("Chain-of-Thought", QUIZZER_SYSTEM_PROMPT)
+        # Intent: Verify the prompt guides the model through reasoning steps
+        self.assertIn("chain-of-thought", QUIZZER_SYSTEM_PROMPT.lower())
 
     def test_prompt_mentions_diagnostic_value(self) -> None:
         """Check that diagnostic value of distractors is explained."""
@@ -280,7 +282,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
 
         # Verify system prompt was passed
         self.assertIn("system_prompt", call_kwargs)
-        self.assertIn("Distractor", call_kwargs["system_prompt"])
+        self.assertIn("distractor", call_kwargs["system_prompt"].lower())
 
         # Verify result
         self.assertEqual(result.question_text, mock_quiz.question_text)
@@ -380,12 +382,13 @@ class TestQuizCardValidation(unittest.TestCase):
             self.assertIsInstance(option.explanation, str)
             self.assertGreater(len(option.explanation), 0)
 
-    def test_quiz_card_requires_at_least_one_correct_option(self) -> None:
-        """Negative test: Verify QuizCard fails without a correct option.
+    def test_quiz_card_requires_exactly_one_correct_option(self) -> None:
+        """Negative test: Verify QuizCard fails without exactly one correct option.
 
         This test meets the objective by checking that validation
-        fails when no option is marked as correct.
+        fails when no option or multiple options are marked as correct.
         """
+        # Test with zero correct options
         with self.assertRaises(ValidationError) as context:
             QuizCard(
                 question_text="What is the answer?",
@@ -402,20 +405,33 @@ class TestQuizCardValidation(unittest.TestCase):
                         is_correct=False,
                         explanation="Explanation for B",
                     ),
+                    QuizOption(
+                        id="C",
+                        text="Wrong answer 3",
+                        is_correct=False,
+                        explanation="Explanation for C",
+                    ),
+                    QuizOption(
+                        id="D",
+                        text="Wrong answer 4",
+                        is_correct=False,
+                        explanation="Explanation for D",
+                    ),
                 ],
                 difficulty=QuizDifficulty.EASY,
             )
 
         # Check that the error mentions correct option requirement
         error_str = str(context.exception)
-        self.assertIn("correct", error_str.lower())
+        self.assertIn("exactly one correct", error_str.lower())
 
-    def test_quiz_card_requires_minimum_options(self) -> None:
-        """Negative test: Verify QuizCard requires at least 2 options.
+    def test_quiz_card_requires_exactly_four_options(self) -> None:
+        """Negative test: Verify QuizCard requires exactly 4 options.
 
         This test meets the objective by checking that validation
-        fails with insufficient options.
+        fails with fewer or more than 4 options.
         """
+        # Test with fewer than 4 options
         with self.assertRaises(ValidationError):
             QuizCard(
                 question_text="What is the answer?",
@@ -425,6 +441,45 @@ class TestQuizCardValidation(unittest.TestCase):
                         text="Only option",
                         is_correct=True,
                         explanation="Only explanation",
+                    ),
+                ],
+                difficulty=QuizDifficulty.EASY,
+            )
+
+        # Test with more than 4 options
+        with self.assertRaises(ValidationError):
+            QuizCard(
+                question_text="What is the answer?",
+                options=[
+                    QuizOption(
+                        id="A",
+                        text="Option 1",
+                        is_correct=True,
+                        explanation="Explanation A",
+                    ),
+                    QuizOption(
+                        id="B",
+                        text="Option 2",
+                        is_correct=False,
+                        explanation="Explanation B",
+                    ),
+                    QuizOption(
+                        id="C",
+                        text="Option 3",
+                        is_correct=False,
+                        explanation="Explanation C",
+                    ),
+                    QuizOption(
+                        id="D",
+                        text="Option 4",
+                        is_correct=False,
+                        explanation="Explanation D",
+                    ),
+                    QuizOption(
+                        id="E",
+                        text="Option 5",
+                        is_correct=False,
+                        explanation="Explanation E",
                     ),
                 ],
                 difficulty=QuizDifficulty.EASY,

@@ -41,11 +41,17 @@ class QuizOption(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: str = Field(..., description="Stable identifier for this option")
+    id: str = Field(
+        ...,
+        description="Stable identifier for this option (A, B, C, or D)",
+        pattern=r"^[A-D]$",
+    )
     text: str = Field(..., description="Option text shown to the user", min_length=1)
     is_correct: bool = Field(..., description="Whether this option is correct")
     explanation: str = Field(
-        ..., description="Feedback explaining why this option is correct or not"
+        ...,
+        description="Feedback explaining why this option is correct or not",
+        min_length=1,
     )
 
 
@@ -56,7 +62,10 @@ class QuizCard(BaseModel):
 
     question_text: str = Field(..., description="Quiz question text", min_length=1)
     options: List[QuizOption] = Field(
-        ..., description="Answer options for the quiz", min_length=2
+        ...,
+        description="Answer options for the quiz (exactly 4 required: A, B, C, D)",
+        min_length=4,
+        max_length=4,
     )
     difficulty: QuizDifficulty = Field(
         default=QuizDifficulty.MEDIUM, description="Difficulty for the quiz"
@@ -65,10 +74,29 @@ class QuizCard(BaseModel):
     @field_validator("options")
     @classmethod
     def validate_options(cls, options: List[QuizOption]) -> List[QuizOption]:
-        if len(options) < 2:
-            raise ValueError("QuizCard requires at least 2 options")
-        if not any(option.is_correct for option in options):
-            raise ValueError("QuizCard requires at least one correct option")
+        # Validate exactly 4 options
+        if len(options) != 4:
+            raise ValueError("QuizCard requires exactly 4 options (A, B, C, D)")
+
+        # Validate exactly one correct option
+        correct_count = sum(1 for opt in options if opt.is_correct)
+        if correct_count != 1:
+            raise ValueError(
+                f"QuizCard requires exactly one correct option, found {correct_count}"
+            )
+
+        # Validate option IDs are A, B, C, D
+        expected_ids = {"A", "B", "C", "D"}
+        actual_ids = {opt.id for opt in options}
+        if actual_ids != expected_ids:
+            raise ValueError(
+                f"QuizCard options must have IDs A, B, C, D. Found: {sorted(actual_ids)}"
+            )
+
+        # Validate unique IDs
+        if len(actual_ids) != 4:
+            raise ValueError("QuizCard option IDs must be unique")
+
         return options
 
 
