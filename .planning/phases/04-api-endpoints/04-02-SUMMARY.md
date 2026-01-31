@@ -51,8 +51,8 @@ Successfully implemented four API endpoints for quiz submission, mastery enforce
 
 **Error Handling**:
 - `404`: Node not found
-- `400`: Node not in IN_QUIZ state
-- `400`: Invalid option ID (must be A-D)
+- `400`: Node not in IN_QUIZ state (invalid state transition)
+- `422`: Invalid option ID (must be A-D)
 - `500`: Internal server error
 
 ---
@@ -70,7 +70,7 @@ Successfully implemented four API endpoints for quiz submission, mastery enforce
 
 **Error Handling**:
 - `404`: Node not found
-- `400`: Node not in SHOWING_FEEDBACK state
+- `400`: Node not in SHOWING_FEEDBACK state (invalid state transition)
 - `400`: Quiz already mastered (cannot retry)
 - `500`: Internal server error
 

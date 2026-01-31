@@ -27,6 +27,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/learning", tags=["learning"])
 
 
+def _get_visibility_flags(status_val: NodeStatus) -> tuple[bool, bool]:
+    content_visible = status_val in {
+        NodeStatus.VIEWING_EXPLANATION,
+        NodeStatus.SHOWING_FEEDBACK,
+        NodeStatus.COMPLETED,
+    }
+    quiz_visible = status_val in {
+        NodeStatus.IN_QUIZ,
+        NodeStatus.SHOWING_FEEDBACK,
+        NodeStatus.COMPLETED,
+    }
+    return content_visible, quiz_visible
+
+
+def _mask_node_content(node: dict) -> dict:
+    status_val = NodeStatus(node["status"])
+    content_visible, quiz_visible = _get_visibility_flags(status_val)
+    response_node = dict(node)
+    if not content_visible:
+        response_node["content_markdown"] = " "
+    if not quiz_visible:
+        response_node["quiz"] = None
+    return response_node
+
+
 class GenerateCourseRequest(BaseModel):
     """Request schema for generating a learning course."""
 
@@ -112,8 +137,10 @@ async def generate_course(
             user_id=request.user_id,
         )
         session = result.get("session", {})
-        nodes = result.get("nodes", [])
+        nodes = [_mask_node_content(node) for node in result.get("nodes", [])]
         return LearningSessionWithNodes(**session, nodes=nodes)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating course: {e}")
         raise HTTPException(
@@ -139,7 +166,7 @@ def get_learning_session(session_id: str) -> LearningSessionWithNodes:
             )
 
         nodes_data = learning_manager.get_session_nodes(session_id)
-        nodes = [ConceptNodeResponse(**node) for node in nodes_data]
+        nodes = [ConceptNodeResponse(**_mask_node_content(node)) for node in nodes_data]
 
         return LearningSessionWithNodes(**session, nodes=nodes)
     except HTTPException:
@@ -174,23 +201,8 @@ def get_concept_node(node_id: str) -> ConceptNodeWithVisibility:
             )
 
         status_val = NodeStatus(node["status"])
-
-        content_visible = status_val in {
-            NodeStatus.VIEWING_EXPLANATION,
-            NodeStatus.SHOWING_FEEDBACK,
-            NodeStatus.COMPLETED,
-        }
-        quiz_visible = status_val in {
-            NodeStatus.IN_QUIZ,
-            NodeStatus.SHOWING_FEEDBACK,
-            NodeStatus.COMPLETED,
-        }
-
-        response_node = dict(node)
-        if not content_visible:
-            response_node["content_markdown"] = ""
-        if not quiz_visible:
-            response_node["quiz"] = None
+        content_visible, quiz_visible = _get_visibility_flags(status_val)
+        response_node = _mask_node_content(dict(node))
 
         return ConceptNodeWithVisibility(
             **response_node,
@@ -250,76 +262,28 @@ def transition_node(
     "/nodes/{node_id}/submit-quiz",
     response_model=QuizSubmitResponse,
     summary="Submit quiz answer",
-    description="Submit a quiz answer and get feedback. Transitions state automatically.",
+    description="Submit a quiz answer and get feedback. Transitions state atomically.",
 )
 def submit_quiz(node_id: str, request: QuizSubmitRequest) -> QuizSubmitResponse:
-    """Submit a quiz answer, record attempt, and handle state transitions."""
+    """Submit a quiz answer, record attempt, and handle state transitions atomically."""
     try:
-        # Verify node exists and is in IN_QUIZ state
-        conn = learning_manager._get_connection()
-        try:
-            node = learning_manager._get_node_by_id(node_id, conn)
-        finally:
-            conn.close()
-
-        if not node:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Concept node not found: {node_id}",
-            )
-
-        current_status = NodeStatus(node["status"])
-        if current_status != NodeStatus.IN_QUIZ:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Node must be in IN_QUIZ state to submit. Current: {current_status.value}",
-            )
-
-        # Record the attempt
-        attempt = learning_manager.create_quiz_attempt(
+        # Submit quiz atomically - all operations in single transaction
+        result = learning_manager.submit_quiz(
             node_id=node_id,
             selected_option_id=request.selected_option_id,
-        )
-
-        # Transition to SHOWING_FEEDBACK
-        learning_manager.update_node_status(node_id, NodeStatus.SHOWING_FEEDBACK)
-
-        # If mastered, unlock next node (if exists)
-        next_node_unlocked = False
-        if attempt["is_mastered"]:
-            # Transition current to COMPLETED
-            learning_manager.update_node_status(node_id, NodeStatus.COMPLETED)
-
-            # Unlock next node
-            next_node = learning_manager.get_next_node(
-                session_id=node["learning_session_id"],
-                sequence_index=node["sequence_index"],
-            )
-            if next_node and NodeStatus(next_node["status"]) == NodeStatus.LOCKED:
-                learning_manager.update_node_status(
-                    next_node["id"],
-                    NodeStatus.VIEWING_EXPLANATION,
-                )
-                next_node_unlocked = True
-
-        # Determine final node status
-        final_status = (
-            NodeStatus.COMPLETED
-            if attempt["is_mastered"]
-            else NodeStatus.SHOWING_FEEDBACK
         )
 
         return QuizSubmitResponse(
             node_id=node_id,
-            attempt_number=attempt["attempt_number"],
-            is_correct=attempt["is_correct"],
-            score_percent=attempt["score_percent"],
-            correct_option_id=attempt["correct_option_id"],
+            attempt_number=result["attempt_number"],
+            is_correct=result["is_correct"],
+            score_percent=result["score_percent"],
+            correct_option_id=result["correct_option_id"],
             selected_option_id=request.selected_option_id,
-            explanation=attempt["explanation"],
-            is_mastered=attempt["is_mastered"],
-            next_node_unlocked=next_node_unlocked,
-            node_status=final_status,
+            explanation=result["explanation"],
+            is_mastered=result["is_mastered"],
+            next_node_unlocked=result["next_node_unlocked"],
+            node_status=result["final_status"],
         )
     except ValueError as e:
         raise HTTPException(
