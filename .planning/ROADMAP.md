@@ -11,7 +11,7 @@ Extend SQLite schema for learning-specific entities.
 
 **Deliverables**:
 - `learning_sessions` table (user learning course instances)
-- `concept_nodes` table (cards with status: LOCKED/UNLOCKED/COMPLETED)
+- `concept_nodes` table (cards with status: LOCKED/VIEWING_EXPLANATION/IN_QUIZ/SHOWING_FEEDBACK/COMPLETED)
 - `quiz_data` table (JSONB payload for quiz structure)
 - Pydantic schemas for all new entities
 - Database migration/initialization logic
@@ -53,7 +53,7 @@ Implement Planner, Generator, and Quizzer agents with Instructor library.
 ---
 
 ### Phase 03: Async Orchestration Layer
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/03-orchestration/`
 **Estimated Plans**: 2
 
@@ -73,6 +73,36 @@ Implement Scatter-Gather pattern for parallel agent execution.
 - [ ] Partial failures don't crash entire course
 - [ ] Context injection produces coherent narratives
 - [ ] Retry logic handles API errors gracefully
+
+---
+
+### Phase 03a: Schema Fixes for Sequential Flow
+**Status**: `pending`
+**Directory**: `phases/03a-schema-fixes/`
+**Estimated Plans**: 2
+
+Address design gaps identified in `issues.md` before implementing API endpoints.
+
+**Deliverables**:
+- Updated `NodeStatus` enum with sequential flow states:
+  - `LOCKED`, `VIEWING_EXPLANATION`, `IN_QUIZ`, `SHOWING_FEEDBACK`, `COMPLETED`, `ERROR`
+- Updated state transition logic in `_is_valid_transition()`
+- `quiz_attempts` table for tracking multiple attempts per node
+- Pydantic models: `QuizAttemptCreate`, `QuizAttemptResponse`, `QuizAttemptHistory`
+- LearningManager methods: `create_quiz_attempt()`, `get_quiz_attempts()`, `check_mastery()`
+
+**Dependencies**: Phase 03 (orchestration layer must exist)
+
+**Verification**:
+- [ ] NodeStatus has 6 values with correct transitions
+- [ ] quiz_attempts table created with foreign key to concept_nodes
+- [ ] Mastery check returns True only after 100% score
+- [ ] All existing tests still pass
+
+**Issues Addressed**:
+- Issue #1: Quiz retry with mastery requirement
+- Issue #2: Quiz integrity (state-based content visibility)
+- Issue #3: Sequential flow (Option A decision)
 
 ---
 
@@ -127,27 +157,43 @@ Build React components for learning path UI.
 
 ---
 
-### Phase 06: State Management & Flow
+### Phase 06: Sequential Flow State Machine & Navigation
 **Status**: `pending`
 **Directory**: `phases/06-state-flow/`
 **Estimated Plans**: 2
 
-Wire up client-side state management and gated progression.
+Implement the sequential learning flow with mastery-based progression.
+
+**Sequential Flow**:
+```
+VIEWING_EXPLANATION → (proceed) → IN_QUIZ → (submit) → SHOWING_FEEDBACK
+                                                              ↓
+                                    ← (retry if <100%) ←─────┘
+                                                              ↓
+                                    → (continue if 100%) → COMPLETED → unlock next
+```
 
 **Deliverables**:
-- React Query mutations for quiz submission
-- Optimistic updates with invalidation
-- Client-side quiz answer state (Zustand optional)
-- Unlock flow: submit → validate → unlock → scroll to next
-- Error handling and retry UI
+- `useNodeState` hook: Determines available actions per node status
+- `useLearningMutations` hook: State machine mutations with mastery callbacks
+- `optimisticUpdates.ts`: Cache updates with rollback on error
+- `ProgressBar` component: Visual mastery progress, click-to-scroll (non-locked only)
+- Mastery gate: 100% score required to unlock next topic
+- Retry loop: SHOWING_FEEDBACK → IN_QUIZ → SHOWING_FEEDBACK until 100%
+- Auto-scroll to next node after mastery achievement
+- Course completion celebration overlay
+- `LearningPage` / `LearningHome` page components with routing
 
 **Dependencies**: Phase 05 (components)
 
 **Verification**:
-- [ ] Quiz submission triggers refetch
-- [ ] UI reflects server state after mutation
-- [ ] Error states display retry option
-- [ ] Flow completes end-to-end
+- [ ] Explanation hidden during quiz (IN_QUIZ status enforces this)
+- [ ] Retry button only appears when score < 100%
+- [ ] Continue button only appears when score = 100%
+- [ ] Cannot click locked nodes in progress bar
+- [ ] Next topic unlocks only after current topic mastered
+- [ ] Course completion celebrated when all nodes COMPLETED
+- [ ] Routes /learn and /learn/:sessionId work correctly
 
 ---
 
@@ -203,16 +249,17 @@ End-to-end integration, testing, and polish.
 
 | Phase | Name | Plans | Status | Dependencies |
 |-------|------|-------|--------|--------------|
-| 01 | Database Schema & Models | 2 | pending | - |
-| 02 | AI Agent Infrastructure | 3 | pending | 01 |
-| 03 | Async Orchestration Layer | 2 | pending | 02 |
-| 04 | API Endpoints | 2 | pending | 03 |
+| 01 | Database Schema & Models | 2 | completed | - |
+| 02 | AI Agent Infrastructure | 3 | completed | 01 |
+| 03 | Async Orchestration Layer | 2 | in_progress | 02 |
+| 03a | Schema Fixes for Sequential Flow | 2 | pending | 03 |
+| 04 | API Endpoints | 2 | pending | 03a |
 | 05 | Frontend Components | 3 | pending | 04 |
-| 06 | State Management & Flow | 2 | pending | 05 |
+| 06 | Sequential Flow State Machine & Navigation | 2 | pending | 05 |
 | 07 | Animations & Gamification | 2 | pending | 06 |
 | 08 | Integration & Polish | 2 | pending | 07 |
 
-**Total Estimated Plans**: 18
+**Total Estimated Plans**: 20
 **Execution Model**: Sequential phases, atomic plans within each phase
 
 ---

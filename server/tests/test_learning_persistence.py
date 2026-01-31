@@ -110,7 +110,7 @@ class TestLearningManager(unittest.TestCase):
             sequence_index=1,
             title="Quiz",
             content_markdown="Content",
-            status=NodeStatus.UNLOCKED,
+            status=NodeStatus.VIEWING_EXPLANATION,
             quiz=quiz,
         )
         self.assertIsNotNone(node["quiz"])
@@ -152,10 +152,12 @@ class TestLearningManager(unittest.TestCase):
             content_markdown="Content",
             status=NodeStatus.LOCKED,
         )
-        updated = self.manager.update_node_status(node["id"], NodeStatus.UNLOCKED)
+        updated = self.manager.update_node_status(
+            node["id"], NodeStatus.VIEWING_EXPLANATION
+        )
         self.assertIsNotNone(updated)
         assert updated is not None
-        self.assertEqual(updated["status"], NodeStatus.UNLOCKED.value)
+        self.assertEqual(updated["status"], NodeStatus.VIEWING_EXPLANATION.value)
 
     def test_update_node_content(self) -> None:
         session_id = self._create_session()
@@ -165,19 +167,39 @@ class TestLearningManager(unittest.TestCase):
             title="Intro",
             content_markdown="Content",
             status=NodeStatus.ERROR,
+            error_message="Generation failed",
+            retry_available=True,
         )
         quiz = _make_quiz_card()
         updated = self.manager.update_node_content(
             node_id=node["id"],
             content_markdown="Updated content",
-            status=NodeStatus.UNLOCKED,
+            status=NodeStatus.VIEWING_EXPLANATION,
             quiz=quiz,
         )
         self.assertIsNotNone(updated)
         assert updated is not None
         self.assertEqual(updated["content_markdown"], "Updated content")
-        self.assertEqual(updated["status"], NodeStatus.UNLOCKED.value)
+        self.assertEqual(updated["status"], NodeStatus.VIEWING_EXPLANATION.value)
         self.assertEqual(updated["quiz"]["question_text"], quiz.question_text)
+        self.assertIsNone(updated["error_message"])
+        self.assertFalse(updated["retry_available"])
+
+    def test_error_metadata_persisted(self) -> None:
+        session_id = self._create_session()
+        self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=0,
+            title="Failed",
+            content_markdown="Placeholder",
+            status=NodeStatus.ERROR,
+            error_message="Test failure",
+            retry_available=True,
+        )
+        nodes = self.manager.get_session_nodes(session_id)
+        self.assertEqual(len(nodes), 1)
+        self.assertEqual(nodes[0]["error_message"], "Test failure")
+        self.assertTrue(nodes[0]["retry_available"])
 
     def test_get_next_node(self) -> None:
         session_id = self._create_session()
@@ -220,7 +242,7 @@ class TestLearningManager(unittest.TestCase):
             sequence_index=0,
             title="Quiz",
             content_markdown="Content",
-            status=NodeStatus.UNLOCKED,
+            status=NodeStatus.VIEWING_EXPLANATION,
             quiz=quiz,
         )
         stored_quiz = self.manager.get_quiz_for_node(node["id"])
@@ -237,7 +259,7 @@ class TestLearningManager(unittest.TestCase):
             sequence_index=0,
             title="Quiz",
             content_markdown="Content",
-            status=NodeStatus.UNLOCKED,
+            status=NodeStatus.VIEWING_EXPLANATION,
             quiz=quiz,
         )
 

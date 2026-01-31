@@ -238,9 +238,11 @@ class CourseOrchestrator:
                 content=content.content_markdown,
             )
 
-            # Determine initial status (first node is UNLOCKED, rest are LOCKED)
+            # Determine initial status (first node is VIEWING_EXPLANATION, rest are LOCKED)
             initial_status = (
-                NodeStatus.UNLOCKED if sequence_index == 0 else NodeStatus.LOCKED
+                NodeStatus.VIEWING_EXPLANATION
+                if sequence_index == 0
+                else NodeStatus.LOCKED
             )
 
             # Create concept node in database
@@ -308,7 +310,7 @@ class CourseOrchestrator:
             topics: Original list of topics for error context
 
         Returns:
-            List of processed node dicts (success or SkeletonCards)
+            Tuple of processed node dicts and serial time estimate in ms
         """
         processed_nodes: List[Dict[str, Any]] = []
         generation_times: List[float] = []
@@ -399,6 +401,8 @@ class CourseOrchestrator:
             content_markdown=placeholder_content,
             status=NodeStatus.ERROR,
             quiz=None,
+            error_message=str(error),
+            retry_available=True,
         )
         return {
             "id": node["id"],
@@ -407,11 +411,11 @@ class CourseOrchestrator:
             "title": node["title"],
             "content_markdown": node["content_markdown"],
             "status": node["status"],
+            "error_message": node.get("error_message"),
+            "retry_available": node.get("retry_available", True),
             "created_at": node["created_at"],
             "updated_at": node["updated_at"],
             "quiz": node.get("quiz"),
-            "error_message": str(error),
-            "retry_available": True,
             "topic_index": sequence_index,
             "topic_title": title,
         }
@@ -444,6 +448,25 @@ class CourseOrchestrator:
 
             if not node:
                 logger.warning(f"Node not found for regeneration: {node_id}")
+                return None
+
+            if node.get("status") != NodeStatus.ERROR.value:
+                logger.warning(
+                    "Node regeneration skipped; node is not in ERROR status",
+                    extra={
+                        "node_id": node_id,
+                        "status": node.get("status"),
+                    },
+                )
+                return None
+
+            if not node.get("retry_available", False):
+                logger.warning(
+                    "Node regeneration skipped; retry not available",
+                    extra={
+                        "node_id": node_id,
+                    },
+                )
                 return None
 
             session_id = node["learning_session_id"]
@@ -492,15 +515,17 @@ class CourseOrchestrator:
 
             new_status = NodeStatus.LOCKED
             if sequence_index == 0:
-                new_status = NodeStatus.UNLOCKED
+                new_status = NodeStatus.VIEWING_EXPLANATION
             elif previous_status == NodeStatus.COMPLETED.value:
-                new_status = NodeStatus.UNLOCKED
+                new_status = NodeStatus.VIEWING_EXPLANATION
 
             updated_node = learning_manager.update_node_content(
                 node_id=node_id,
                 content_markdown=content.content_markdown,
                 status=new_status,
                 quiz=quiz,
+                error_message=None,
+                retry_available=False,
             )
             if not updated_node:
                 logger.warning(f"Node not found for regeneration update: {node_id}")

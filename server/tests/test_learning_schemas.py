@@ -46,7 +46,14 @@ def _make_topic(index: int) -> TopicNode:
 
 class TestNodeStatus(unittest.TestCase):
     def test_status_values(self) -> None:
-        expected_values = {"LOCKED", "UNLOCKED", "COMPLETED", "ERROR"}
+        expected_values = {
+            "LOCKED",
+            "VIEWING_EXPLANATION",
+            "IN_QUIZ",
+            "SHOWING_FEEDBACK",
+            "COMPLETED",
+            "ERROR",
+        }
         actual_values = {status.value for status in NodeStatus}
         self.assertEqual(expected_values, actual_values)
 
