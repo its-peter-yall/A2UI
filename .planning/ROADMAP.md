@@ -5,7 +5,7 @@
 ### Phase 01: Database Schema & Models
 **Status**: `pending`
 **Directory**: `phases/01-database-schema/`
-**Estimated Plans**: 1
+**Estimated Plans**: 2
 
 Extend SQLite schema for learning-specific entities.
 
@@ -203,7 +203,7 @@ End-to-end integration, testing, and polish.
 
 | Phase | Name | Plans | Status | Dependencies |
 |-------|------|-------|--------|--------------|
-| 01 | Database Schema & Models | 1 | pending | - |
+| 01 | Database Schema & Models | 2 | pending | - |
 | 02 | AI Agent Infrastructure | 3 | pending | 01 |
 | 03 | Async Orchestration Layer | 2 | pending | 02 |
 | 04 | API Endpoints | 2 | pending | 03 |
@@ -212,7 +212,7 @@ End-to-end integration, testing, and polish.
 | 07 | Animations & Gamification | 2 | pending | 06 |
 | 08 | Integration & Polish | 2 | pending | 07 |
 
-**Total Estimated Plans**: 17
+**Total Estimated Plans**: 18
 **Execution Model**: Sequential phases, atomic plans within each phase
 
 ---
