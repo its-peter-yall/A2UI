@@ -1,0 +1,169 @@
+# base.py
+# Abstract base class for all AI agents in the learning system
+
+# Provides common functionality for agents including structured generation via
+# InstructorClient, system prompt building, and context formatting. All concrete
+# agents (PlannerAgent, GeneratorAgent, QuizzerAgent) inherit from this class.
+
+# @see: server/utils/instructor_client.py - Underlying structured output client
+# @see: server/schemas/learning.py - Pydantic models used for response validation
+# @note: Subclasses must implement the abstract system_prompt property
+
+from __future__ import annotations
+
+import logging
+from abc import ABC, abstractmethod
+from typing import Any, Optional, Type, TypeVar
+
+from pydantic import BaseModel
+
+from server.utils.instructor_client import instructor_client
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class BaseAgent(ABC):
+    """
+    Abstract base class for AI agents.
+
+    Provides common functionality for all agents including structured generation
+    via InstructorClient, system prompt building, and context formatting.
+
+    Subclasses must implement the system_prompt property to define their
+    specific behavior and persona.
+    """
+
+    def __init__(self, role: str) -> None:
+        """
+        Initialize the agent with a specific role.
+
+        Args:
+            role: Agent role key matching MODEL_CONFIGS (planner, generator, quizzer)
+        """
+        self._role = role
+        logger.debug(f"Initialized {self.__class__.__name__} with role: {role}")
+
+    @property
+    def role(self) -> str:
+        """Get the agent's role."""
+        return self._role
+
+    @property
+    @abstractmethod
+    def system_prompt(self) -> str:
+        """
+        Return the system prompt for this agent.
+
+        Must be implemented by subclasses to define the agent's persona,
+        capabilities, and output format requirements.
+
+        Returns:
+            System prompt string
+        """
+        pass
+
+    async def generate(
+        self,
+        response_model: Type[T],
+        user_message: str,
+        context: Optional[dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> T:
+        """
+        Generate a structured response using the agent's role configuration.
+
+        Builds the full system prompt with context injection and calls
+        the InstructorClient for validated structured output.
+
+        Args:
+            response_model: Pydantic model class for response validation
+            user_message: The user's input message/query
+            context: Optional dict of context data for prompt augmentation
+            **kwargs: Additional arguments passed to the instructor client
+
+        Returns:
+            Validated instance of response_model
+
+        Raises:
+            ValueError: If instructor client not initialized
+            Exception: On generation failures after retries
+        """
+        # Build the full system prompt with context
+        full_system_prompt = self._build_system_prompt(context)
+
+        # Prepare messages
+        messages = [{"role": "user", "content": user_message}]
+
+        try:
+            response = await instructor_client.create_structured(
+                role=self._role,
+                response_model=response_model,
+                messages=messages,
+                system_prompt=full_system_prompt,
+                **kwargs,
+            )
+            logger.info(f"{self.__class__.__name__} generated structured response")
+            return response
+
+        except Exception as e:
+            logger.error(f"{self.__class__.__name__} generation failed: {e}")
+            raise
+
+    def _build_system_prompt(self, context: Optional[dict[str, Any]] = None) -> str:
+        """
+        Build the full system prompt with optional context injection.
+
+        Combines the base system prompt from the subclass with formatted
+        context data when provided.
+
+        Args:
+            context: Optional dict of context data to inject
+
+        Returns:
+            Complete system prompt string
+        """
+        base_prompt = self.system_prompt
+
+        if context:
+            context_str = self._format_context(context)
+            return f"{base_prompt}\n\n{context_str}"
+
+        return base_prompt
+
+    def _format_context(self, context: dict[str, Any]) -> str:
+        """
+        Format context dictionary for injection into the system prompt.
+
+        Override in subclasses for custom context formatting.
+
+        Args:
+            context: Dictionary of context data
+
+        Returns:
+            Formatted context string
+        """
+        if not context:
+            return ""
+
+        lines = ["## Context"]
+        for key, value in context.items():
+            if isinstance(value, list):
+                lines.append(f"\n### {key.replace('_', ' ').title()}")
+                for item in value:
+                    lines.append(f"- {item}")
+            else:
+                lines.append(f"\n### {key.replace('_', ' ').title()}")
+                lines.append(str(value))
+
+        return "\n".join(lines)
+
+    def get_model_config(self) -> dict[str, Any]:
+        """
+        Get the model configuration for this agent's role.
+
+        Returns:
+            Configuration dict with model, temperature, max_tokens
+        """
+        return instructor_client.get_model_config(self._role)
