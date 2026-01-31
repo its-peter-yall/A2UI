@@ -20,11 +20,14 @@
 
 ## Deviations
 - execute-phase.md was not found in loaded context; no gate applied.
+- lsp_diagnostics command was not available in this environment.
 
 ## Verification results
 - python -c "from server.schemas.learning import *; print('All schemas valid')": All schemas valid
 - python -c "from server.database.learning_persistence import learning_manager; learning_manager.init_learning_tables(); print('Tables created')": Tables created
 - python -c "CRUD check via LearningManager": CRUD ok True 1 True 1 True
+- python -c "PRAGMA foreign_keys check": foreign_keys 1
+- python -m unittest (repo root): OK (2 tests) with Python 3.10 deprecation warnings
 - python -m uvicorn server.main:app --reload --port 8000: Started, log showed "Learning tables initialized successfully" (command timed out after 20s)
 
 ## Commit
