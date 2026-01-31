@@ -22,6 +22,21 @@ class Settings:
     # Validation helper
     @classmethod
     def validate(cls):
+        """Validate required settings. GOOGLE_APPLICATION_CREDENTIALS is optional in ADC environments."""
+        missing = []
+        if not cls.PROJECT_ID:
+            missing.append("PROJECT_ID")
+        # Note: GOOGLE_APPLICATION_CREDENTIALS is optional - ADC (Application Default Credentials)
+        # can be used in Cloud Run, GKE, or local gcloud auth environments
+
+        if missing:
+            print(f"WARNING: Missing environment variables: {', '.join(missing)}")
+            return False
+        return True
+
+    @classmethod
+    def validate_with_credentials(cls):
+        """Strict validation requiring GOOGLE_APPLICATION_CREDENTIALS (for local dev)."""
         missing = []
         if not cls.PROJECT_ID:
             missing.append("PROJECT_ID")

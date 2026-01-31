@@ -20,7 +20,7 @@ from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
+    retry_if_not_exception_type,
 )
 
 from server.config import settings
@@ -35,17 +35,17 @@ MODEL_CONFIGS = {
     "planner": {
         "model": "gemini-1.5-pro",
         "temperature": 0.3,
-        "max_tokens": 4096,
+        "max_output_tokens": 4096,
     },
     "generator": {
         "model": "gemini-1.5-flash",
         "temperature": 0.7,
-        "max_tokens": 2048,
+        "max_output_tokens": 2048,
     },
     "quizzer": {
         "model": "gemini-1.5-flash",
         "temperature": 0.2,
-        "max_tokens": 1024,
+        "max_output_tokens": 1024,
     },
 }
 
@@ -76,19 +76,22 @@ class InstructorClient:
             logger.debug("InstructorClient already initialized")
             return True
 
-        if not settings.validate():
-            logger.warning("InstructorClient init skipped: missing config")
+        # Check only PROJECT_ID - GOOGLE_APPLICATION_CREDENTIALS is optional in ADC environments
+        if not settings.PROJECT_ID:
+            logger.warning("InstructorClient init skipped: PROJECT_ID not configured")
             return False
 
         try:
             # Create a client for each role configuration
             for role, config in MODEL_CONFIGS.items():
                 model_name = config["model"]
-                # Use from_provider with vertexai prefix as per docs
+                # Use from_provider with vertexai prefix and VERTEXAI_TOOLS mode
                 client = instructor.from_provider(
                     f"vertexai/{model_name}",
                     project=settings.PROJECT_ID,
                     location=settings.LOCATION,
+                    mode=instructor.Mode.VERTEXAI_TOOLS,
+                    async_client=True,  # Enable async support
                 )
                 self._clients[role] = {
                     "client": client,
@@ -109,10 +112,20 @@ class InstructorClient:
         """Check if the client has been initialized."""
         return self._initialized
 
+    def _raise_for_invalid_state(self, role: str) -> None:
+        """Raise ValueError if client not initialized or role invalid."""
+        if not self._initialized:
+            raise ValueError("InstructorClient not initialized. Call init() first.")
+
+        if role not in self._clients:
+            raise ValueError(
+                f"Unknown role: {role}. Available: {list(self._clients.keys())}"
+            )
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type((Exception,)),
+        retry=retry_if_not_exception_type((ValueError, TypeError)),
         reraise=True,
     )
     async def create_structured(
@@ -143,13 +156,8 @@ class InstructorClient:
             ValueError: If role is not configured or client not initialized
             Exception: On API errors after retry attempts exhausted
         """
-        if not self._initialized:
-            raise ValueError("InstructorClient not initialized. Call init() first.")
-
-        if role not in self._clients:
-            raise ValueError(
-                f"Unknown role: {role}. Available: {list(self._clients.keys())}"
-            )
+        # Check state before retry - these should fail fast without retries
+        self._raise_for_invalid_state(role)
 
         client_info = self._clients[role]
         client = client_info["client"]
@@ -161,13 +169,18 @@ class InstructorClient:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
+        # Build generation_config for Gemini/Vertex AI
+        generation_config = {
+            "temperature": config.get("temperature", 0.5),
+            "max_output_tokens": config.get("max_output_tokens", 2048),
+        }
+
         try:
-            # Call the instructor client
-            response = client.create(
+            # Call the instructor client with await (async_client=True)
+            response = await client.create(
                 response_model=response_model,
                 messages=full_messages,
-                temperature=config.get("temperature", 0.5),
-                max_tokens=config.get("max_tokens", 2048),
+                generation_config=generation_config,
                 **kwargs,
             )
 
@@ -186,7 +199,7 @@ class InstructorClient:
             role: Agent role key
 
         Returns:
-            Configuration dict with model, temperature, max_tokens
+            Configuration dict with model, temperature, max_output_tokens
         """
         if role not in MODEL_CONFIGS:
             raise ValueError(f"Unknown role: {role}")

@@ -59,8 +59,35 @@ Integrate the Instructor library with Vertex AI for structured output validation
 | generator | gemini-1.5-flash | 0.7 | 2048 |
 | quizzer | gemini-1.5-flash | 0.2 | 1024 |
 
+## Bug Fixes Applied (Code Review)
+The following bugs were identified and fixed in `server/utils/instructor_client.py`:
+
+### Bug 1: Async/Sync Client Mismatch ✓
+- **Issue**: Client created without `async_client=True` but `client.create()` was called with await
+- **Fix**: Added `async_client=True` to `instructor.from_provider()` call
+
+### Bug 2: Missing VERTEXAI_TOOLS Mode ✓
+- **Issue**: Plan required `Mode.VERTEXAI_TOOLS` but client was created without mode parameter
+- **Fix**: Added `mode=instructor.Mode.VERTEXAI_TOOLS` to `from_provider()` call
+
+### Bug 3: Incorrect Parameter Passing ✓
+- **Issue**: `temperature` and `max_tokens` passed as top-level args instead of `generation_config`
+- **Fix**: Wrapped parameters in `generation_config` dict and renamed `max_tokens` to `max_output_tokens`
+
+### Bug 4: Hard Requirement on GOOGLE_APPLICATION_CREDENTIALS ✓
+- **Issue**: `settings.validate()` required GOOGLE_APPLICATION_CREDENTIALS, breaking ADC environments (Cloud Run, gcloud auth)
+- **Fix**: Modified validation to only require PROJECT_ID; credentials are optional in ADC environments
+
+### Bug 5: Tenacity Retrying Configuration Errors ✓
+- **Issue**: Tenacity retried all exceptions including `ValueError` for "not initialized" or "unknown role"
+- **Fix**: Changed retry condition to `retry_if_not_exception_type((ValueError, TypeError))` so config errors fail fast
+
+### Bug 6: Missing Vertex AI Extra ✓
+- **Issue**: Only installed `instructor>=1.0.0` without vertexai extras
+- **Fix**: Changed to `instructor[vertexai]>=1.0.0` in requirements.txt
+
 ## Notes
-- Used `instructor.from_provider("vertexai/{model}")` approach per latest Instructor documentation
+- Used `instructor.from_provider("vertexai/{model}", async_client=True, mode=Mode.VERTEXAI_TOOLS)` approach per latest Instructor documentation
 - Instructor automatically handles Pydantic validation and retries
 - BaseAgent provides template pattern for concrete agents (PlannerAgent, GeneratorAgent, QuizzerAgent)
 
