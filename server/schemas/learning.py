@@ -1,0 +1,193 @@
+# learning.py
+# Pydantic schema models for retrieval-based learning features
+
+# Longer description (2-4 lines):
+# - Defines enums and structured models for learning sessions and concept nodes.
+# - Captures planner output (CourseOutline) and quiz payload structures.
+# - Provides request/response schemas for session and quiz operations.
+
+# @see: server/database/learning_persistence.py - Persistence layer for learning data
+# @note: Quiz payloads stored as JSON should conform to QuizCard structure
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from server.schemas.common import ResponseBase, TimestampMixin
+
+
+class NodeStatus(str, Enum):
+    """Status values for learning concept nodes."""
+
+    LOCKED = "LOCKED"
+    UNLOCKED = "UNLOCKED"
+    COMPLETED = "COMPLETED"
+
+
+class QuizDifficulty(str, Enum):
+    """Difficulty levels for quiz cards."""
+
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
+class QuizOption(BaseModel):
+    """Single quiz option with correctness and explanation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="Stable identifier for this option")
+    text: str = Field(..., description="Option text shown to the user", min_length=1)
+    is_correct: bool = Field(..., description="Whether this option is correct")
+    explanation: str = Field(
+        ..., description="Feedback explaining why this option is correct or not"
+    )
+
+
+class QuizCard(BaseModel):
+    """Quiz content attached to a concept node."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    question_text: str = Field(..., description="Quiz question text", min_length=1)
+    options: List[QuizOption] = Field(
+        ..., description="Answer options for the quiz", min_length=2
+    )
+    difficulty: QuizDifficulty = Field(
+        default=QuizDifficulty.MEDIUM, description="Difficulty for the quiz"
+    )
+
+    @field_validator("options")
+    @classmethod
+    def validate_options(cls, options: List[QuizOption]) -> List[QuizOption]:
+        if len(options) < 2:
+            raise ValueError("QuizCard requires at least 2 options")
+        if not any(option.is_correct for option in options):
+            raise ValueError("QuizCard requires at least one correct option")
+        return options
+
+
+class TopicNode(BaseModel):
+    """Planner output node describing a course topic."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    index: int = Field(..., description="Sequence index for this topic", ge=0)
+    title: str = Field(..., description="Short topic title", min_length=1)
+    summary_for_context: str = Field(
+        ...,
+        description="Summary used for context injection when generating content",
+        min_length=1,
+    )
+    key_terms: List[str] = Field(
+        default_factory=list, description="Key terms to emphasize"
+    )
+
+
+class CourseOutline(BaseModel):
+    """Planner output model describing the course outline."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    course_title: str = Field(..., description="Title of the course", min_length=1)
+    topics: List[TopicNode] = Field(
+        ..., description="Ordered list of topic nodes", min_length=5
+    )
+
+    @field_validator("topics")
+    @classmethod
+    def validate_topics(cls, topics: List[TopicNode]) -> List[TopicNode]:
+        if len(topics) < 5:
+            raise ValueError("CourseOutline requires at least 5 topics")
+        return topics
+
+
+class ConceptNodeBase(BaseModel):
+    """Base fields for concept nodes."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    learning_session_id: str = Field(
+        ..., description="Learning session identifier for this node"
+    )
+    sequence_index: int = Field(..., description="Order of the node", ge=0)
+    title: str = Field(..., description="Concept title", min_length=1)
+    content_markdown: str = Field(
+        ..., description="Markdown content for the concept", min_length=1
+    )
+    status: NodeStatus = Field(
+        default=NodeStatus.LOCKED, description="Current status of the node"
+    )
+
+
+class ConceptNodeCreate(ConceptNodeBase):
+    """Schema for creating a concept node."""
+
+    quiz: Optional[QuizCard] = Field(
+        default=None, description="Optional quiz payload for the node"
+    )
+
+
+class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
+    """Response schema for concept nodes."""
+
+    quiz: Optional[QuizCard] = Field(
+        default=None, description="Quiz payload if available"
+    )
+
+
+class LearningSessionBase(BaseModel):
+    """Base fields for learning sessions."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: Optional[str] = Field(default=None, description="User identifier")
+    query: str = Field(..., description="Original user query", min_length=1)
+    course_title: str = Field(..., description="Generated course title", min_length=1)
+
+
+class LearningSessionCreate(LearningSessionBase):
+    """Schema for creating a learning session."""
+
+    pass
+
+
+class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase):
+    """Response schema for learning sessions."""
+
+    total_nodes: int = Field(default=0, description="Total nodes in the session")
+    completed_nodes: int = Field(
+        default=0, description="Number of completed nodes"
+    )
+
+
+class QuizSubmission(BaseModel):
+    """Payload for submitting quiz answers."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    node_id: str = Field(..., description="Concept node identifier")
+    selected_option_id: str = Field(..., description="Selected option identifier")
+
+
+class QuizResult(BaseModel):
+    """Result of a quiz submission."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    node_id: str = Field(..., description="Concept node identifier")
+    is_correct: bool = Field(..., description="Whether the answer was correct")
+    correct_option_id: Optional[str] = Field(
+        default=None, description="Correct option identifier"
+    )
+    explanation: Optional[str] = Field(
+        default=None, description="Explanation for the selected answer"
+    )
+    submitted_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Submission timestamp"
+    )
