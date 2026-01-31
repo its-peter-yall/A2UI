@@ -133,7 +133,7 @@ Create REST endpoints for learning path operations.
 ---
 
 ### Phase 05: Frontend Components
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/05-frontend-components/`
 **Estimated Plans**: 3
 
@@ -254,7 +254,7 @@ End-to-end integration, testing, and polish.
 | 03 | Async Orchestration Layer | 2 | in_progress | 02 |
 | 03a | Schema Fixes for Sequential Flow | 2 | pending | 03 |
 | 04 | API Endpoints | 2 | pending | 03a |
-| 05 | Frontend Components | 3 | pending | 04 |
+| 05 | Frontend Components | 3 | in_progress | 04 |
 | 06 | Sequential Flow State Machine & Navigation | 2 | pending | 05 |
 | 07 | Animations & Gamification | 2 | pending | 06 |
 | 08 | Integration & Polish | 2 | pending | 07 |
