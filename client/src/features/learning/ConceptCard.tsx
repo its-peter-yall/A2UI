@@ -10,15 +10,18 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { ConceptNode, NodeStatus } from '@/types/learning';
+import type { ConceptNode, NodeStatus, QuizSubmitResponse } from '@/types/learning';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { QuizFeedback } from './QuizFeedback';
 
 interface ConceptCardProps {
   node: ConceptNode;
   isActive?: boolean;
+  quizResult?: QuizSubmitResponse;
   onProceedToQuiz?: (nodeId: string) => void;
   onQuizSubmit?: (nodeId: string, optionId: string) => void;
   onRetryQuiz?: (nodeId: string) => void;
+  onContinueToNext?: (nodeId: string) => void;
   onRegenerate?: (nodeId: string) => void;
 }
 
@@ -28,7 +31,9 @@ export function ConceptCard({
   onProceedToQuiz,
   onQuizSubmit,
   onRetryQuiz,
+  onContinueToNext,
   onRegenerate,
+  quizResult,
 }: ConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
@@ -161,21 +166,19 @@ export function ConceptCard({
           </div>
         )}
 
-        {/* SHOWING_FEEDBACK state - placeholder, full impl in 05-03 */}
-        {node.status === 'SHOWING_FEEDBACK' && (
-          <div className="space-y-4">
-            <p className="text-muted-foreground">
-              Feedback will be shown here. See Plan 05-03 for QuizIntervention.
-            </p>
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <button
-                onClick={handleRetry}
-                className="px-4 py-2 border rounded-md hover:bg-muted transition-colors"
-              >
-                Retry Quiz
-              </button>
-            </div>
-          </div>
+        {/* SHOWING_FEEDBACK state */}
+        {node.status === 'SHOWING_FEEDBACK' && node.quiz && quizResult && (
+          <QuizFeedback
+            quiz={node.quiz}
+            result={quizResult}
+            attemptCount={quizResult.attempt_number}
+            onRetry={handleRetry}
+            onContinue={
+              quizResult.next_node_unlocked
+                ? () => onContinueToNext?.(node.id)
+                : undefined
+            }
+          />
         )}
 
         {/* COMPLETED state */}
