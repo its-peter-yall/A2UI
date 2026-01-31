@@ -66,6 +66,8 @@ class LearningManager:
                     title TEXT NOT NULL,
                     content_markdown TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    error_message TEXT,
+                    retry_available INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (learning_session_id)
@@ -113,6 +115,8 @@ class LearningManager:
                 ON quiz_data(node_id)
                 """
             )
+
+            self._ensure_concept_node_columns(conn)
 
             conn.commit()
             logger.info("Learning tables initialized successfully")
@@ -204,7 +208,15 @@ class LearningManager:
         content_markdown: str,
         status: NodeStatus,
         quiz: Optional[QuizCard] = None,
+        error_message: Optional[str] = None,
+        retry_available: bool = False,
     ) -> Dict[str, Any]:
+        """Create a new concept node for a learning session.
+
+        Callers must provide the correct initial status:
+        - NodeStatus.VIEWING_EXPLANATION for the first node (sequence_index=0)
+        - NodeStatus.LOCKED for subsequent nodes (sequence_index>0)
+        """
         conn = self._get_connection()
         try:
             node_id = str(uuid.uuid4())
@@ -216,9 +228,9 @@ class LearningManager:
                 """
                 INSERT INTO concept_nodes (
                     id, learning_session_id, sequence_index, title, content_markdown,
-                    status, created_at, updated_at
+                    status, error_message, retry_available, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     node_id,
@@ -227,6 +239,8 @@ class LearningManager:
                     title,
                     content_markdown,
                     status.value,
+                    error_message,
+                    int(retry_available),
                     now,
                     now,
                 ),
@@ -252,6 +266,8 @@ class LearningManager:
                 "title": title,
                 "content_markdown": content_markdown,
                 "status": status.value,
+                "error_message": error_message,
+                "retry_available": retry_available,
                 "created_at": now,
                 "updated_at": now,
                 "quiz": quiz_payload,
@@ -287,6 +303,8 @@ class LearningManager:
                     cn.title,
                     cn.content_markdown,
                     cn.status,
+                    cn.error_message,
+                    cn.retry_available,
                     cn.created_at,
                     cn.updated_at,
                     qd.payload AS quiz_payload
@@ -310,6 +328,10 @@ class LearningManager:
                         "title": row["title"],
                         "content_markdown": row["content_markdown"],
                         "status": row["status"],
+                        "error_message": row["error_message"],
+                        "retry_available": bool(row["retry_available"])
+                        if row["retry_available"] is not None
+                        else False,
                         "created_at": row["created_at"],
                         "updated_at": row["updated_at"],
                         "quiz": quiz_payload,
@@ -373,6 +395,8 @@ class LearningManager:
         content_markdown: str,
         status: NodeStatus,
         quiz: Optional[QuizCard],
+        error_message: Optional[str] = None,
+        retry_available: bool = False,
     ) -> Optional[Dict[str, Any]]:
         conn = self._get_connection()
         try:
@@ -398,10 +422,19 @@ class LearningManager:
             cursor.execute(
                 """
                 UPDATE concept_nodes
-                SET content_markdown = ?, status = ?, updated_at = ?
+                SET content_markdown = ?, status = ?, error_message = ?,
+                    retry_available = ?, updated_at = ?
                 WHERE id = ? AND status = ?
                 """,
-                (content_markdown, status.value, now, node_id, current_status.value),
+                (
+                    content_markdown,
+                    status.value,
+                    error_message,
+                    int(retry_available),
+                    now,
+                    node_id,
+                    current_status.value,
+                ),
             )
             if cursor.rowcount == 0:
                 node = self._get_node_by_id(node_id, conn)
@@ -458,13 +491,44 @@ class LearningManager:
     def _is_valid_transition(
         current_status: NodeStatus, next_status: NodeStatus
     ) -> bool:
+        """Validate state transitions for the sequential learning flow.
+
+        Valid transitions:
+            LOCKED → VIEWING_EXPLANATION (unlock when previous completed)
+            VIEWING_EXPLANATION → IN_QUIZ (user clicks "proceed to quiz")
+            VIEWING_EXPLANATION → ERROR (generation failed)
+            IN_QUIZ → SHOWING_FEEDBACK (quiz submitted)
+            SHOWING_FEEDBACK → IN_QUIZ (retry quiz, score < 100%)
+            SHOWING_FEEDBACK → COMPLETED (score = 100%)
+            ERROR → LOCKED (reset for retry)
+            ERROR → VIEWING_EXPLANATION (regeneration succeeded)
+
+        Note: First node starts as VIEWING_EXPLANATION (not LOCKED).
+        """
         if current_status == next_status:
             return True
         allowed = {
-            NodeStatus.LOCKED: {NodeStatus.UNLOCKED, NodeStatus.ERROR},
-            NodeStatus.UNLOCKED: {NodeStatus.COMPLETED, NodeStatus.ERROR},
-            NodeStatus.COMPLETED: set(),
-            NodeStatus.ERROR: {NodeStatus.LOCKED, NodeStatus.UNLOCKED},
+            NodeStatus.LOCKED: {
+                NodeStatus.VIEWING_EXPLANATION,  # Unlocked by previous completion
+                NodeStatus.ERROR,
+            },
+            NodeStatus.VIEWING_EXPLANATION: {
+                NodeStatus.IN_QUIZ,  # User clicks "proceed to quiz"
+                NodeStatus.ERROR,
+            },
+            NodeStatus.IN_QUIZ: {
+                NodeStatus.SHOWING_FEEDBACK,  # Quiz submitted
+                NodeStatus.ERROR,
+            },
+            NodeStatus.SHOWING_FEEDBACK: {
+                NodeStatus.IN_QUIZ,  # Retry (score < 100%)
+                NodeStatus.COMPLETED,  # Mastered (score = 100%)
+            },
+            NodeStatus.COMPLETED: set(),  # Terminal state
+            NodeStatus.ERROR: {
+                NodeStatus.LOCKED,  # Reset
+                NodeStatus.VIEWING_EXPLANATION,  # Regeneration succeeded
+            },
         }
         return next_status in allowed[current_status]
 
@@ -483,6 +547,8 @@ class LearningManager:
                     cn.title,
                     cn.content_markdown,
                     cn.status,
+                    cn.error_message,
+                    cn.retry_available,
                     cn.created_at,
                     cn.updated_at,
                     qd.payload AS quiz_payload
@@ -506,6 +572,10 @@ class LearningManager:
                 "title": row["title"],
                 "content_markdown": row["content_markdown"],
                 "status": row["status"],
+                "error_message": row["error_message"],
+                "retry_available": bool(row["retry_available"])
+                if row["retry_available"] is not None
+                else False,
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
                 "quiz": quiz_payload,
@@ -551,6 +621,8 @@ class LearningManager:
                 cn.title,
                 cn.content_markdown,
                 cn.status,
+                cn.error_message,
+                cn.retry_available,
                 cn.created_at,
                 cn.updated_at,
                 qd.payload AS quiz_payload
@@ -571,10 +643,25 @@ class LearningManager:
             "title": row["title"],
             "content_markdown": row["content_markdown"],
             "status": row["status"],
+            "error_message": row["error_message"],
+            "retry_available": bool(row["retry_available"])
+            if row["retry_available"] is not None
+            else False,
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "quiz": quiz_payload,
         }
+
+    def _ensure_concept_node_columns(self, conn: sqlite3.Connection) -> None:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(concept_nodes)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+        if "error_message" not in existing_columns:
+            cursor.execute("ALTER TABLE concept_nodes ADD COLUMN error_message TEXT")
+        if "retry_available" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN retry_available INTEGER DEFAULT 0"
+            )
 
 
 learning_manager = LearningManager()

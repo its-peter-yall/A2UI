@@ -21,10 +21,26 @@ from server.schemas.common import ResponseBase, TimestampMixin
 
 
 class NodeStatus(str, Enum):
-    """Status values for learning concept nodes."""
+    """Status values for learning concept nodes.
+
+    State Flow:
+        LOCKED → VIEWING_EXPLANATION → IN_QUIZ → SHOWING_FEEDBACK → COMPLETED
+                        ↓                              ↓
+                      ERROR                        (retry loop back to IN_QUIZ)
+
+    States:
+        LOCKED: Cannot access yet; previous node not completed
+        VIEWING_EXPLANATION: Reading content, quiz hidden
+        IN_QUIZ: Taking quiz, explanation hidden (pure retrieval)
+        SHOWING_FEEDBACK: Showing results and explanations
+        COMPLETED: 100% quiz score achieved, can review
+        ERROR: Generation or system error occurred
+    """
 
     LOCKED = "LOCKED"
-    UNLOCKED = "UNLOCKED"
+    VIEWING_EXPLANATION = "VIEWING_EXPLANATION"
+    IN_QUIZ = "IN_QUIZ"
+    SHOWING_FEEDBACK = "SHOWING_FEEDBACK"
     COMPLETED = "COMPLETED"
     ERROR = "ERROR"
 
@@ -183,6 +199,12 @@ class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
 
     quiz: Optional[QuizCard] = Field(
         default=None, description="Quiz payload if available"
+    )
+    error_message: Optional[str] = Field(
+        default=None, description="Error message if generation failed"
+    )
+    retry_available: bool = Field(
+        default=False, description="Whether retry is available"
     )
 
 
