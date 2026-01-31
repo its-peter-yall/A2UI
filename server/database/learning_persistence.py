@@ -15,7 +15,7 @@ import json
 import logging
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -128,7 +128,7 @@ class LearningManager:
         conn = self._get_connection()
         try:
             session_id = str(uuid.uuid4())
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -208,7 +208,7 @@ class LearningManager:
         conn = self._get_connection()
         try:
             node_id = str(uuid.uuid4())
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             cursor = conn.cursor()
             if not self._learning_session_exists(session_id, conn):
                 raise ValueError(f"Learning session not found: {session_id}")
@@ -327,7 +327,7 @@ class LearningManager:
     ) -> Optional[Dict[str, Any]]:
         conn = self._get_connection()
         try:
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -350,16 +350,106 @@ class LearningManager:
                 """
                 UPDATE concept_nodes
                 SET status = ?, updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = ?
                 """,
-                (status.value, now, node_id),
+                (status.value, now, node_id, current_status.value),
             )
             if cursor.rowcount == 0:
-                return None
+                node = self._get_node_by_id(node_id, conn)
+                if node is None:
+                    return None
+                raise ValueError("Node status changed during update; retry")
             conn.commit()
             return self._get_node_by_id(node_id, conn)
         except sqlite3.Error as e:
             logger.error(f"Error updating node status: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def update_node_content(
+        self,
+        node_id: str,
+        content_markdown: str,
+        status: NodeStatus,
+        quiz: Optional[QuizCard],
+    ) -> Optional[Dict[str, Any]]:
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT status
+                FROM concept_nodes
+                WHERE id = ?
+                """,
+                (node_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            current_status = NodeStatus(row["status"])
+            if not self._is_valid_transition(current_status, status):
+                raise ValueError(
+                    "Invalid status transition from "
+                    f"{current_status.value} to {status.value}"
+                )
+            cursor.execute(
+                """
+                UPDATE concept_nodes
+                SET content_markdown = ?, status = ?, updated_at = ?
+                WHERE id = ? AND status = ?
+                """,
+                (content_markdown, status.value, now, node_id, current_status.value),
+            )
+            if cursor.rowcount == 0:
+                node = self._get_node_by_id(node_id, conn)
+                if node is None:
+                    return None
+                raise ValueError("Node status changed during update; retry")
+
+            if quiz is None:
+                cursor.execute(
+                    """
+                    DELETE FROM quiz_data
+                    WHERE node_id = ?
+                    """,
+                    (node_id,),
+                )
+            else:
+                quiz_payload = json.dumps(quiz.model_dump())
+                cursor.execute(
+                    """
+                    SELECT id
+                    FROM quiz_data
+                    WHERE node_id = ?
+                    """,
+                    (node_id,),
+                )
+                quiz_row = cursor.fetchone()
+                if quiz_row:
+                    cursor.execute(
+                        """
+                        UPDATE quiz_data
+                        SET payload = ?
+                        WHERE node_id = ?
+                        """,
+                        (quiz_payload, node_id),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO quiz_data (id, node_id, payload, created_at)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        (str(uuid.uuid4()), node_id, quiz_payload, now),
+                    )
+
+            conn.commit()
+            return self._get_node_by_id(node_id, conn)
+        except sqlite3.Error as e:
+            logger.error(f"Error updating node content: {e}")
             raise
         finally:
             conn.close()
@@ -371,9 +461,10 @@ class LearningManager:
         if current_status == next_status:
             return True
         allowed = {
-            NodeStatus.LOCKED: {NodeStatus.UNLOCKED},
-            NodeStatus.UNLOCKED: {NodeStatus.COMPLETED},
+            NodeStatus.LOCKED: {NodeStatus.UNLOCKED, NodeStatus.ERROR},
+            NodeStatus.UNLOCKED: {NodeStatus.COMPLETED, NodeStatus.ERROR},
             NodeStatus.COMPLETED: set(),
+            NodeStatus.ERROR: {NodeStatus.LOCKED, NodeStatus.UNLOCKED},
         }
         return next_status in allowed[current_status]
 

@@ -46,30 +46,39 @@ def _make_topic(index: int) -> TopicNode:
 
 class TestNodeStatus(unittest.TestCase):
     def test_status_values(self) -> None:
-        expected_values = {"LOCKED", "UNLOCKED", "COMPLETED"}
+        expected_values = {"LOCKED", "UNLOCKED", "COMPLETED", "ERROR"}
         actual_values = {status.value for status in NodeStatus}
         self.assertEqual(expected_values, actual_values)
 
 
 class TestQuizSchemas(unittest.TestCase):
     def test_quiz_option_valid(self) -> None:
-        option = _make_quiz_option("opt-1", True)
-        self.assertEqual(option.id, "opt-1")
+        option = _make_quiz_option("A", True)
+        self.assertEqual(option.id, "A")
         self.assertTrue(option.is_correct)
 
     def test_quiz_card_valid(self) -> None:
-        options = [_make_quiz_option("opt-1", True), _make_quiz_option("opt-2", False)]
+        options = [
+            _make_quiz_option("A", True),
+            _make_quiz_option("B", False),
+            _make_quiz_option("C", False),
+            _make_quiz_option("D", False),
+        ]
         card = QuizCard(
             question_text="What is the answer?",
             options=options,
             difficulty=QuizDifficulty.MEDIUM,
         )
         self.assertEqual(card.question_text, "What is the answer?")
-        self.assertEqual(len(card.options), 2)
+        self.assertEqual(len(card.options), 4)
         self.assertEqual(card.difficulty, QuizDifficulty.MEDIUM)
 
     def test_quiz_card_requires_min_options(self) -> None:
-        options = [_make_quiz_option("opt-1", True)]
+        options = [
+            _make_quiz_option("A", True),
+            _make_quiz_option("B", False),
+            _make_quiz_option("C", False),
+        ]
         with self.assertRaises(ValidationError):
             QuizCard(question_text="Too few", options=options)
 
@@ -116,6 +125,6 @@ class TestSessionSchemas(unittest.TestCase):
 
 class TestQuizSubmission(unittest.TestCase):
     def test_submission_valid(self) -> None:
-        submission = QuizSubmission(node_id="node-1", selected_option_id="opt-1")
+        submission = QuizSubmission(node_id="node-1", selected_option_id="A")
         self.assertEqual(submission.node_id, "node-1")
-        self.assertEqual(submission.selected_option_id, "opt-1")
+        self.assertEqual(submission.selected_option_id, "A")

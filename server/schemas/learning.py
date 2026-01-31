@@ -26,6 +26,7 @@ class NodeStatus(str, Enum):
     LOCKED = "LOCKED"
     UNLOCKED = "UNLOCKED"
     COMPLETED = "COMPLETED"
+    ERROR = "ERROR"
 
 
 class QuizDifficulty(str, Enum):
@@ -90,7 +91,8 @@ class QuizCard(BaseModel):
         actual_ids = {opt.id for opt in options}
         if actual_ids != expected_ids:
             raise ValueError(
-                f"QuizCard options must have IDs A, B, C, D. Found: {sorted(actual_ids)}"
+                "QuizCard options must have IDs A, B, C, D. "
+                f"Found: {sorted(actual_ids)}"
             )
 
         # Validate unique IDs

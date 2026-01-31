@@ -51,6 +51,11 @@ The CourseOrchestrator implements the Scatter-Gather pattern:
 - Failed topics return SkeletonCards with:
   ```python
   {
+      "id": str,
+      "learning_session_id": str,
+      "sequence_index": int,
+      "title": str,
+      "content_markdown": str,
       "status": "ERROR",
       "error_message": str(exception),
       "retry_available": True,
@@ -58,7 +63,8 @@ The CourseOrchestrator implements the Scatter-Gather pattern:
       "topic_title": str,
   }
   ```
-- The `regenerate_node()` method allows retry of individual failed nodes
+- Failed nodes are persisted with `NodeStatus.ERROR` and can be retried by ID
+- The `regenerate_node()` method updates persisted content and timestamps
 
 **Exception Handling:**
 - `_generate_concept_unit()` wraps all logic in try/except
@@ -71,6 +77,7 @@ The CourseOrchestrator implements the Scatter-Gather pattern:
 - Planner execution time
 - Total scatter-gather time  
 - Per-topic generation times (logged individually)
+- Serial estimate and latency savings vs parallel execution
 - Success/failure counts
 
 **Structured Logging Format:**
@@ -81,6 +88,8 @@ logger.info(
         "session_id": session_id,
         "planner_ms": round(planner_time_ms, 2),
         "parallel_ms": round(parallel_time_ms, 2),
+        "serial_estimate_ms": round(serial_estimate_ms, 2),
+        "latency_savings_ms": round(latency_savings_ms, 2),
         "total_ms": round(total_time_ms, 2),
         "cards_success": success_count,
         "cards_failed": failure_count,
@@ -99,7 +108,7 @@ logger.info(
 
 2. **Context Injection:** First topic gets `prev_summary="Start"`, last topic gets `next_summary="End"`. Summaries come from `TopicNode.summary_for_context`.
 
-3. **Node Status:** First node is `UNLOCKED`, all others are `LOCKED` initially.
+3. **Node Status:** First node is `UNLOCKED`, all others are `LOCKED` initially; failed nodes are persisted as `ERROR`.
 
 4. **Singleton Pattern:** `course_orchestrator` singleton follows existing agent patterns.
 
@@ -124,7 +133,7 @@ logger.info(
 
 ## Notes
 
-- The `regenerate_node()` method works but notes that `learning_manager` doesn't yet have an `update_node_content()` method - regenerated content is returned but not persisted to database
+- `update_node_content()` now persists regenerated content and refreshes `updated_at`
 - A future improvement could add semaphore-based rate limiting for high-traffic scenarios
 - Consider adding OpenTelemetry integration for production observability
 

@@ -22,16 +22,28 @@ def _make_quiz_card() -> QuizCard:
         question_text="What is 2 + 2?",
         options=[
             QuizOption(
-                id="opt-1",
+                id="A",
                 text="4",
                 is_correct=True,
                 explanation="2 + 2 equals 4",
             ),
             QuizOption(
-                id="opt-2",
+                id="B",
                 text="5",
                 is_correct=False,
                 explanation="2 + 2 does not equal 5",
+            ),
+            QuizOption(
+                id="C",
+                text="3",
+                is_correct=False,
+                explanation="2 + 2 does not equal 3",
+            ),
+            QuizOption(
+                id="D",
+                text="6",
+                is_correct=False,
+                explanation="2 + 2 does not equal 6",
             ),
         ],
         difficulty=QuizDifficulty.EASY,
@@ -145,6 +157,28 @@ class TestLearningManager(unittest.TestCase):
         assert updated is not None
         self.assertEqual(updated["status"], NodeStatus.UNLOCKED.value)
 
+    def test_update_node_content(self) -> None:
+        session_id = self._create_session()
+        node = self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=0,
+            title="Intro",
+            content_markdown="Content",
+            status=NodeStatus.ERROR,
+        )
+        quiz = _make_quiz_card()
+        updated = self.manager.update_node_content(
+            node_id=node["id"],
+            content_markdown="Updated content",
+            status=NodeStatus.UNLOCKED,
+            quiz=quiz,
+        )
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated["content_markdown"], "Updated content")
+        self.assertEqual(updated["status"], NodeStatus.UNLOCKED.value)
+        self.assertEqual(updated["quiz"]["question_text"], quiz.question_text)
+
     def test_get_next_node(self) -> None:
         session_id = self._create_session()
         self.manager.create_concept_node(
@@ -193,7 +227,7 @@ class TestLearningManager(unittest.TestCase):
         self.assertIsNotNone(stored_quiz)
         assert stored_quiz is not None
         self.assertEqual(stored_quiz.question_text, quiz.question_text)
-        self.assertEqual(len(stored_quiz.options), 2)
+        self.assertEqual(len(stored_quiz.options), 4)
 
     def test_cascade_delete(self) -> None:
         session_id = self._create_session()

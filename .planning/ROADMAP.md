@@ -27,9 +27,9 @@ Extend SQLite schema for learning-specific entities.
 ---
 
 ### Phase 02: AI Agent Infrastructure
-**Status**: `completed`
+**Status**: `pending`
 **Directory**: `phases/02-agent-infrastructure/`
-**Estimated Plans**: 3 (3 completed)
+**Estimated Plans**: 3
 
 Implement Planner, Generator, and Quizzer agents with Instructor library.
 
@@ -204,7 +204,7 @@ End-to-end integration, testing, and polish.
 | Phase | Name | Plans | Status | Dependencies |
 |-------|------|-------|--------|--------------|
 | 01 | Database Schema & Models | 2 | pending | - |
-| 02 | AI Agent Infrastructure | 3 | completed | 01 |
+| 02 | AI Agent Infrastructure | 3 | pending | 01 |
 | 03 | Async Orchestration Layer | 2 | pending | 02 |
 | 04 | API Endpoints | 2 | pending | 03 |
 | 05 | Frontend Components | 3 | pending | 04 |

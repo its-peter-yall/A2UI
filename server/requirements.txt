@@ -4,5 +4,3 @@ google-cloud-aiplatform
 python-dotenv
 pydantic
 vertexai
-instructor[vertexai]>=1.0.0
-tenacity>=8.2.0

@@ -12,11 +12,13 @@
 ## Files created
 - server/database/learning_persistence.py
 - server/schemas/learning.py
+- server/tests/test_learning_persistence.py
 - .planning/ROADMAP.md
 - .planning/phases/01-database-schema/01-01-SUMMARY.md
 
 ## Files modified
-- None
+- server/database/learning_persistence.py (atomic status update, UTC timestamps)
+- server/schemas/learning.py (UTC timestamps)
 
 ## Deviations
 - execute-phase.md was not found in loaded context; no gate applied.
@@ -27,7 +29,8 @@
 - python -c "from server.database.learning_persistence import learning_manager; learning_manager.init_learning_tables(); print('Tables created')": Tables created
 - python -c "CRUD check via LearningManager": CRUD ok True 1 True 1 True
 - python -c "PRAGMA foreign_keys check": foreign_keys 1
-- python -m unittest (repo root): OK (2 tests) with Python 3.10 deprecation warnings
+- python -m unittest server.tests.test_learning_persistence: OK (2 tests)
+- python -m unittest (repo root): OK (4 tests) with Python 3.10 deprecation warnings
 - python -m uvicorn server.main:app --reload --port 8000: Started, log showed "Learning tables initialized successfully" (command timed out after 20s)
 
 ## Commit

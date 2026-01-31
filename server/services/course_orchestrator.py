@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from server.agents import generator_agent, planner_agent, quizzer_agent
 from server.agents.generator import GeneratedContent
@@ -104,6 +104,16 @@ class CourseOrchestrator:
         topics = outline.topics
 
         for i, topic in enumerate(topics):
+            if topic.index != i:
+                logger.warning(
+                    "Topic index mismatch: list index does not match topic index",
+                    extra={
+                        "session_id": session_id,
+                        "list_index": i,
+                        "topic_index": topic.index,
+                        "topic_title": topic.title,
+                    },
+                )
             # Determine prev_summary and next_summary for context injection
             prev_summary = topics[i - 1].summary_for_context if i > 0 else "Start"
             next_summary = (
@@ -117,7 +127,7 @@ class CourseOrchestrator:
                     prev_summary=prev_summary,
                     next_summary=next_summary,
                     session_id=session_id,
-                    sequence_index=topic.index,
+                    sequence_index=i,
                 )
             )
             tasks.append(task)
@@ -132,14 +142,17 @@ class CourseOrchestrator:
         processed_nodes = self._process_gather_results(
             results=results,
             topics=topics,
+            session_id=session_id,
         )
+        nodes, serial_estimate_ms = processed_nodes
 
         # Calculate totals
         total_time_ms = (time.perf_counter() - total_start) * 1000
         success_count = sum(
-            1 for node in processed_nodes if node.get("status") != "ERROR"
+            1 for node in nodes if node.get("status") != NodeStatus.ERROR.value
         )
-        failure_count = len(processed_nodes) - success_count
+        failure_count = len(nodes) - success_count
+        latency_savings_ms = max(serial_estimate_ms - parallel_time_ms, 0)
 
         # Structured performance logging
         logger.info(
@@ -148,6 +161,8 @@ class CourseOrchestrator:
                 "session_id": session_id,
                 "planner_ms": round(planner_time_ms, 2),
                 "parallel_ms": round(parallel_time_ms, 2),
+                "serial_estimate_ms": round(serial_estimate_ms, 2),
+                "latency_savings_ms": round(latency_savings_ms, 2),
                 "total_ms": round(total_time_ms, 2),
                 "cards_success": success_count,
                 "cards_failed": failure_count,
@@ -163,13 +178,15 @@ class CourseOrchestrator:
                 "course_title": outline.course_title,
                 "created_at": session["created_at"],
                 "updated_at": session["updated_at"],
-                "total_nodes": len(processed_nodes),
+                "total_nodes": len(nodes),
                 "completed_nodes": 0,
             },
-            "nodes": processed_nodes,
+            "nodes": nodes,
             "metrics": {
                 "planner_ms": round(planner_time_ms, 2),
                 "parallel_ms": round(parallel_time_ms, 2),
+                "serial_estimate_ms": round(serial_estimate_ms, 2),
+                "latency_savings_ms": round(latency_savings_ms, 2),
                 "total_ms": round(total_time_ms, 2),
                 "cards_success": success_count,
                 "cards_failed": failure_count,
@@ -203,6 +220,10 @@ class CourseOrchestrator:
         Returns:
             Dict containing node data on success, or SkeletonCard on failure
         """
+        start_time = time.perf_counter()
+        success = False
+        error_message = None
+        node: Optional[Dict[str, Any]] = None
         try:
             # Generate educational content
             content: GeneratedContent = await generator_agent.generate_explanation(
@@ -235,26 +256,45 @@ class CourseOrchestrator:
             logger.info(
                 f"Generated concept unit for topic {sequence_index}: '{topic.title}'"
             )
-
-            return node
-
+            success = True
         except Exception as e:
             # Return SkeletonCard for partial failure
+            error_message = str(e)
             logger.error(
                 f"Failed to generate concept unit for topic {sequence_index} "
                 f"'{topic.title}': {e}"
             )
-            return self._create_skeleton_card(
+            node = self._create_skeleton_card(
                 error=e,
-                topic_index=topic.index,
-                topic_title=topic.title,
+                session_id=session_id,
+                sequence_index=sequence_index,
+                title=topic.title,
             )
+        finally:
+            generation_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(
+                "Concept unit generation completed",
+                extra={
+                    "session_id": session_id,
+                    "topic_index": sequence_index,
+                    "topic_title": topic.title,
+                    "generation_ms": round(generation_ms, 2),
+                    "success": success,
+                },
+            )
+
+        return {
+            "node": node,
+            "generation_ms": generation_ms,
+            "error_message": error_message,
+        }
 
     def _process_gather_results(
         self,
         results: List[Any],
         topics: List[TopicNode],
-    ) -> List[Dict[str, Any]]:
+        session_id: str,
+    ) -> Tuple[List[Dict[str, Any]], float]:
         """
         Process results from asyncio.gather and separate successes from failures.
 
@@ -271,13 +311,14 @@ class CourseOrchestrator:
             List of processed node dicts (success or SkeletonCards)
         """
         processed_nodes: List[Dict[str, Any]] = []
+        generation_times: List[float] = []
 
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 # asyncio.gather caught an exception (shouldn't happen often
                 # since _generate_concept_unit has its own try/except)
                 topic = topics[i] if i < len(topics) else None
-                topic_index = topic.index if topic else i
+                topic_index = i
                 topic_title = topic.title if topic else f"Topic {i}"
 
                 logger.warning(
@@ -286,19 +327,32 @@ class CourseOrchestrator:
 
                 skeleton = self._create_skeleton_card(
                     error=result,
-                    topic_index=topic_index,
-                    topic_title=topic_title,
+                    session_id=session_id,
+                    sequence_index=topic_index,
+                    title=topic_title,
                 )
                 processed_nodes.append(skeleton)
+                generation_times.append(0.0)
 
-            elif isinstance(result, dict):
-                if result.get("status") == "ERROR":
-                    # Already a SkeletonCard from _generate_concept_unit
+            elif isinstance(result, dict) and "node" in result:
+                node = result.get("node")
+                generation_ms = result.get("generation_ms", 0.0)
+                if (
+                    isinstance(node, dict)
+                    and node.get("status") == NodeStatus.ERROR.value
+                ):
                     logger.warning(
-                        f"SkeletonCard returned for topic {result.get('topic_index')}: "
-                        f"{result.get('error_message')}"
+                        "SkeletonCard returned for topic",
+                        extra={
+                            "session_id": session_id,
+                            "topic_index": node.get("sequence_index"),
+                            "topic_title": node.get("title"),
+                            "error_message": node.get("error_message"),
+                        },
                     )
-                processed_nodes.append(result)
+                if isinstance(node, dict):
+                    processed_nodes.append(node)
+                generation_times.append(float(generation_ms))
 
             else:
                 # Unexpected result type - log and create skeleton
@@ -306,18 +360,21 @@ class CourseOrchestrator:
                 topic = topics[i] if i < len(topics) else None
                 skeleton = self._create_skeleton_card(
                     error=ValueError(f"Unexpected result type: {type(result)}"),
-                    topic_index=topic.index if topic else i,
-                    topic_title=topic.title if topic else f"Topic {i}",
+                    session_id=session_id,
+                    sequence_index=i,
+                    title=topic.title if topic else f"Topic {i}",
                 )
                 processed_nodes.append(skeleton)
+                generation_times.append(0.0)
 
-        return processed_nodes
+        return processed_nodes, sum(generation_times)
 
     def _create_skeleton_card(
         self,
         error: Exception,
-        topic_index: int,
-        topic_title: str,
+        session_id: str,
+        sequence_index: int,
+        title: str,
     ) -> Dict[str, Any]:
         """
         Create a SkeletonCard dict for a failed generation.
@@ -327,18 +384,36 @@ class CourseOrchestrator:
 
         Args:
             error: The exception that caused the failure
-            topic_index: The index of the failed topic
-            topic_title: The title of the failed topic
+            session_id: The learning session identifier
+            sequence_index: The index of the failed topic
+            title: The title of the failed topic
 
         Returns:
             Dict representing a SkeletonCard
         """
+        placeholder_content = "Content generation failed. Retry is available."
+        node = learning_manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=sequence_index,
+            title=title,
+            content_markdown=placeholder_content,
+            status=NodeStatus.ERROR,
+            quiz=None,
+        )
         return {
-            "status": "ERROR",
+            "id": node["id"],
+            "learning_session_id": node["learning_session_id"],
+            "sequence_index": node["sequence_index"],
+            "title": node["title"],
+            "content_markdown": node["content_markdown"],
+            "status": node["status"],
+            "created_at": node["created_at"],
+            "updated_at": node["updated_at"],
+            "quiz": node.get("quiz"),
             "error_message": str(error),
             "retry_available": True,
-            "topic_index": topic_index,
-            "topic_title": topic_title,
+            "topic_index": sequence_index,
+            "topic_title": title,
         }
 
     async def regenerate_node(
@@ -358,11 +433,6 @@ class CourseOrchestrator:
         Returns:
             Updated node dict on success, None if node not found
         """
-        # NOTE: This method uses learning_manager's internal _get_node_by_id.
-        # A future improvement would add a public get_node_by_id method.
-        # Additionally, update_node_content is not yet implemented in learning_manager,
-        # so regenerated content is returned but not persisted.
-
         try:
             # Get session nodes and find the target node
             # This is a workaround until we have a proper get_node_by_id method
@@ -379,6 +449,7 @@ class CourseOrchestrator:
             session_id = node["learning_session_id"]
             sequence_index = node["sequence_index"]
             title = node["title"]
+            previous_status = None
 
             # Get all nodes to determine prev/next summaries
             all_nodes = learning_manager.get_session_nodes(session_id)
@@ -392,6 +463,7 @@ class CourseOrchestrator:
                     # For previous node, we don't have summary_for_context stored
                     # We use the title as a fallback
                     prev_summary = other_node["title"]
+                    previous_status = other_node["status"]
                 elif other_node["sequence_index"] == sequence_index + 1:
                     next_summary = other_node["title"]
 
@@ -418,29 +490,23 @@ class CourseOrchestrator:
                 content=content.content_markdown,
             )
 
-            # Update the node in database
-            # NOTE: The learning_manager doesn't have an update_node_content method.
-            # For a complete implementation, we'd need to add that method.
-            # For now, we log a warning and return the regenerated content
-            # without persisting it.
-            logger.warning(
-                f"Regenerated content for node {node_id}, but update_node_content "
-                "method not yet implemented in learning_manager"
-            )
+            new_status = NodeStatus.LOCKED
+            if sequence_index == 0:
+                new_status = NodeStatus.UNLOCKED
+            elif previous_status == NodeStatus.COMPLETED.value:
+                new_status = NodeStatus.UNLOCKED
 
-            # Return the updated node data (not persisted)
-            return {
-                "id": node_id,
-                "learning_session_id": session_id,
-                "sequence_index": sequence_index,
-                "title": title,
-                "content_markdown": content.content_markdown,
-                "status": node["status"],
-                "created_at": node["created_at"],
-                "updated_at": node["updated_at"],
-                "quiz": quiz.model_dump(),
-                "regenerated": True,
-            }
+            updated_node = learning_manager.update_node_content(
+                node_id=node_id,
+                content_markdown=content.content_markdown,
+                status=new_status,
+                quiz=quiz,
+            )
+            if not updated_node:
+                logger.warning(f"Node not found for regeneration update: {node_id}")
+                return None
+            updated_node["regenerated"] = True
+            return updated_node
 
         except Exception as e:
             logger.error(f"Failed to regenerate node {node_id}: {e}")
