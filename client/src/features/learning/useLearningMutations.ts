@@ -184,15 +184,6 @@ export function useLearningMutations({
       if (result.is_mastered) {
         // User achieved 100% - can proceed to next
         onMasteryAchieved?.(nodeId);
-
-        // Apply mastery updates: mark complete + unlock next
-        const session = queryClient.getQueryData<LearningSessionWithNodes>(queryKey);
-        const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
-
-        if (nodeIndex >= 0) {
-          // Use batch mastery update for efficiency
-          optimisticMasteryUpdate(queryClient, sessionId, nodeId, nodeIndex);
-        }
       } else {
         // User did not achieve 100% - must retry
         onRetryNeeded?.(nodeId, result);
@@ -204,8 +195,10 @@ export function useLearningMutations({
       onError?.(error as Error, 'submitQuiz');
     },
     
-    onSettled: () => {
-      invalidateSession();
+    onSettled: (result, error) => {
+      if (error || !result?.is_mastered) {
+        invalidateSession();
+      }
     },
   });
 
@@ -235,6 +228,49 @@ export function useLearningMutations({
       onError?.(error as Error, 'retryQuiz');
     },
     
+    onSettled: () => {
+      invalidateSession();
+    },
+  });
+
+  const completeMasteryMutation = useMutation({
+    mutationFn: async ({
+      nodeId,
+      nextNodeId,
+    }: {
+      nodeId: string;
+      nextNodeId?: string;
+    }) => {
+      await transitionNode(nodeId, 'COMPLETED');
+      if (nextNodeId) {
+        await transitionNode(nextNodeId, 'VIEWING_EXPLANATION');
+      }
+    },
+
+    onMutate: async ({ nodeId }): Promise<MutationContext> => {
+      await queryClient.cancelQueries({ queryKey });
+
+      const session = queryClient.getQueryData<LearningSessionWithNodes>(queryKey);
+      const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
+
+      if (nodeIndex >= 0) {
+        const rollback = optimisticMasteryUpdate(
+          queryClient,
+          sessionId,
+          nodeId,
+          nodeIndex
+        );
+        return { rollback };
+      }
+
+      return { rollback: () => undefined };
+    },
+
+    onError: (error, _variables, context) => {
+      context?.rollback();
+      onError?.(error as Error, 'complete');
+    },
+
     onSettled: () => {
       invalidateSession();
     },
@@ -310,8 +346,11 @@ export function useLearningMutations({
    * @param nextNodeId - Next node to scroll to
    */
   const continueToNext = (_nodeId: string, nextNodeId?: string) => {
+    completeMasteryMutation.mutate({
+      nodeId: _nodeId,
+      nextNodeId,
+    });
     if (nextNodeId) {
-      // Smooth scroll to next node
       document.getElementById(`node-${nextNodeId}`)?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
@@ -348,12 +387,14 @@ export function useLearningMutations({
     isSubmitting: submitQuizMutation.isPending,
     isRetrying: retryQuizMutation.isPending,
     isRegenerating: regenerateMutation.isPending,
+    isCompleting: completeMasteryMutation.isPending,
     
     /** True if any mutation is in progress */
     isAnyLoading:
       transitionMutation.isPending ||
       submitQuizMutation.isPending ||
       retryQuizMutation.isPending ||
-      regenerateMutation.isPending,
+      regenerateMutation.isPending ||
+      completeMasteryMutation.isPending,
   };
 }

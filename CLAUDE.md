@@ -1,18 +1,18 @@
-# claud.md
+# CLAUDE.md
 
 **For Claude Code (Anthropic CLI)**
 
-**Generated:** 2026-01-31
+**Generated:** 2026-02-01
 
 ## Project Context
 
-AgUI is a standalone "Pure Chat" application — a lightweight counterpart to AURA-CHAT that excludes RAG and Knowledge Graph functionality. It features a React frontend with session sidebar and chat interface, backed by a FastAPI server for session persistence and direct Vertex AI (Gemini) integration.
+AgUI is a standalone "Pure Chat" application — a lightweight counterpart to AURA-CHAT that excludes RAG and Knowledge Graph functionality. Target audience: Developers, power users, technical professionals seeking distraction-free AI chat. Features session management, chat history, direct Vertex AI (Gemini) integration.
 
 ## Quick Reference
 
 ### Structure
 - `client/`: React 19 + Vite + TypeScript + Tailwind 4.x
-- `server/`: FastAPI + Pydantic + Vertex AI integration
+- `server/`: FastAPI + Pydantic v2 + Vertex AI integration
 - `conductor/`: Product specs, style guides, and workflow docs
 
 ### Key Files
@@ -22,29 +22,38 @@ AgUI is a standalone "Pure Chat" application — a lightweight counterpart to AU
 | API client | `client/src/lib/api.ts` |
 | Query provider | `client/src/providers/QueryProvider.tsx` |
 | Chat feature | `client/src/features/chat/` |
+| Learning feature | `client/src/features/learning/` |
+| Learning API | `client/src/lib/learningApi.ts` |
 | Chat API | `server/routers/chat.py` |
+| Learning API | `server/routers/learning.py` |
 | Sessions API | `server/routers/sessions.py` |
 | Chat schemas | `server/schemas/chat.py` |
 | Session schemas | `server/schemas/session.py` |
 | Persistence | `server/database/persistence.py` |
 | Vertex client | `server/utils/vertex_client.py` |
+| Course orchestrator | `server/services/course_orchestrator.py` |
+| AI agents | `server/agents/*` |
 
 ### Dev Commands
 ```bash
-cd AgUI/client && npm install && npm run dev
-cd AgUI/server && python -m uvicorn server.main:app --reload --port 8000
+cd AgUI/client && npm install && npm run dev        # Frontend (http://localhost:5173)
+cd AgUI/server && python -m uvicorn server.main:app --reload --port 8000  # Backend
 ```
 
-### Tech Stack (from `conductor/tech-stack.md`)
-- **Frontend:** React 19, Vite, Tailwind 4.x, TanStack Query v5, Axios
-- **Backend:** FastAPI, Uvicorn, Google Vertex AI SDK, Pydantic v2
+### Routing
+- `/chat` - Main chat interface with session sidebar
+- `/learn` - Interactive learning feature (course-based AI tutoring)
+
+### Tech Stack
+- **Frontend:** React 19, Vite, Tailwind 4.x, TanStack Query v5, Axios, framer-motion, lucide-react, react-markdown, react-router-dom
+- **Backend:** FastAPI, Uvicorn, Google Vertex AI SDK, Pydantic v2, instructor, tenacity
 - **Persistence:** SQLite (local file-based)
 - **Testing:** Vitest (client), unittest (server)
 
 ### Configuration
 - API base URL: `VITE_API_URL` (defaults to `http://localhost:8000`)
 - Backend `.env`: `PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, `LOCATION`
-- Default model: `gemini-2.0-flash-001` (see `server/schemas/chat.py`)
+- Default model: `gemini-2.0-flash-001`
 
 ## Spec-Based Development
 
@@ -56,24 +65,31 @@ cd AgUI/server && python -m uvicorn server.main:app --reload --port 8000
 4. **`conductor/workflow.md`** — TDD workflow, quality gates, commit guidelines
 5. **`conductor/code_styleguides/`** — Language-specific style rules (TS, Python, HTML/CSS)
 
+**Rule**: If implementation differs from stack spec, STOP and update `tech-stack.md` first.
+
 ## Agent Behaviour
 
-### Research-First Principle
+### Research-First Principle (per `conductor/workflow.md`)
 - **ALWAYS web-search before implementing** unfamiliar libraries, APIs, or patterns
 - **NEVER assume** library behavior — verify with official documentation
+- **Search first** when encountering: new npm packages, Python libraries, framework features
+- Use `librarian` agent for docs, `explore` agent for codebase patterns
 
-### TDD Workflow (per `conductor/workflow.md`)
-1. Write failing tests (Red phase)
-2. Implement to pass tests (Green phase)
-3. Refactor with passing tests as safety net
-4. Verify >80% coverage
+### TDD Workflow (Red/Green/Refactor)
+1. **Red phase**: Write failing tests first
+2. **Green phase**: Implement to pass tests
+3. **Refactor**: Improve clarity with passing tests as safety net
+4. **Verify >80% coverage**
 
 ### Quality Gates (per `conductor/workflow.md`)
-- All tests pass
-- Coverage >80%
-- Follows style guides in `conductor/code_styleguides/`
-- Type safety enforced
-- No linting errors
+Before marking any task complete, verify:
+- [ ] All tests pass
+- [ ] Code coverage >80%
+- [ ] Code follows style guides in `conductor/code_styleguides/`
+- [ ] Public functions documented (docstrings/JSDoc)
+- [ ] Type safety enforced (no `as any`, `@ts-ignore`)
+- [ ] No linting errors
+- [ ] Documentation updated if needed
 
 ### Delegation Guidelines
 | Domain | Delegate To | When |
@@ -85,61 +101,86 @@ cd AgUI/server && python -m uvicorn server.main:app --reload --port 8000
 | Documentation | `document-writer` | READMEs, guides |
 | Hard debugging | `oracle` | After 2+ failed attempts |
 
-### Evidence Requirements
-Task complete only when:
-- [ ] `lsp_diagnostics` clean
-- [ ] Build passes
-- [ ] Tests pass
-- [ ] Coverage >80%
-- [ ] User request fully addressed
-
 ### File Headers (Required)
 ```typescript
 // {FILE_NAME}
 // {Brief 1-line description}
 
-// What problem does this solve?
-// Key functions/classes?
-// Context for future maintainers?
+// Longer description (2-4 lines):
+// - What problem does this solve?
+// - What are the key functions/classes?
+// - Any important context for future maintainers
 
 // @see: {Related files}
-// @note: {Caveats or gotchas}
+// @note: {Important caveats or gotchas}
 ```
+
+**Enforcement:**
+- New files: ALWAYS add header before first write
+- Existing files: Add header when modifying >30%
 
 ## Code Style Quick Ref
 
-### TypeScript (from `conductor/code_styleguides/typescript.md`)
+### TypeScript (per `conductor/code_styleguides/typescript.md`)
 - `const` by default; never `var`
-- Named exports preferred
+- **Named exports only** (no default exports)
 - Single quotes; explicit semicolons
 - Avoid `any`, `as`, non-null assertions
 - `UpperCamelCase` components/types
+- Hooks start with `use`
+- Type-only imports: `import type { Foo } from ...`
 
-### Python (from `conductor/code_styleguides/python.md`)
-- 4-space indent, 80-char lines
+### Python (per `conductor/code_styleguides/python.md`)
+- 4-space indent, **80-character lines**
 - `snake_case` functions, `PascalCase` classes
 - Docstrings: summary + Args/Returns/Raises
 - No mutable default args
+- Import grouping: stdlib → third-party → local (`server.*`)
 
-### HTML/CSS (from `conductor/code_styleguides/html-css.md`)
+### HTML/CSS (per `conductor/code_styleguides/html-css.md`)
 - 2-space indent, lowercase
 - Class selectors preferred
-- Alphabetize CSS declarations
+- **Alphabetize CSS declarations**
 - Use `cn()` from `client/src/lib/utils.ts` for Tailwind merging
 
-## Product Guidelines (from `conductor/product-guidelines.md`)
+### Import Ordering
+```ts
+import { StrictMode } from 'react'
+import type { Session } from '@/types/api'
+import { api } from '@/lib/api'
+import './index.css'
+```
+
+## Testing
+
+- **Client**: Vitest + Testing Library (`@testing-library/react`)
+- **Server**: stdlib `unittest` in `server/tests`
+- **Naming**: `*.test.ts` for client, `test_*.py` for server
+- **Coverage**: Target >80% per `conductor/workflow.md`
+- **Setup**: Coverage configured via `vitest.config.ts` (client)
+- Keep tests small, deterministic; mock external dependencies
+
+## Product Guidelines (per `conductor/product-guidelines.md`)
 
 ### Visual Identity
 - **Cyber Yellow (`#FFD400`)**: Primary actions, accents
 - **Dark Backgrounds**: Deep grays/blacks
 - **Typography**: Inter (UI), JetBrains Mono (code)
+- **Glassmorphism**: Light usage for cards/panels
 - **Rounding**: 8px-12px consistently
 
 ### UX Principles
-- Minimalism: Remove non-essential UI elements
-- Persistence: Instant session switching, draft preservation
-- Clarity: Visual cues for model states
-- Responsiveness: Sidebar toggle on mobile
+- **Pure Chat**: No RAG, no Knowledge Graph — clean conversation interface
+- **Minimalism**: Remove non-essential UI elements
+- **Persistence**: Instant session switching, draft preservation
+- **Clarity**: Visual cues for model states (thinking, generating, error)
+- **Thinking Mode**: Visual indicator when model is processing/thinking
+- **Responsiveness**: Sidebar toggle on mobile
+
+### Component Standards
+- **Message Bubbles**: User (distinct bg, right-aligned), AI (subtle bg, left-aligned, Markdown)
+- **Input Area**: Auto-expanding textarea, Cyber Yellow send button, model toggles
+- **Session Sidebar**: Clean list with active indicators, "New Session" button, rename/delete menus
 
 ## Full Documentation
 

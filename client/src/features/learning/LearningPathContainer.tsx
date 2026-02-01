@@ -255,6 +255,7 @@ export function LearningPathContainer({
 
   const error = sessionError || generateMutation.error;
   if (error) {
+    const isGenerateError = Boolean(generateMutation.error && !activeSessionId);
     const isNotFound =
       isSessionError &&
       axios.isAxiosError(error) &&
@@ -272,8 +273,12 @@ export function LearningPathContainer({
     return (
       <>
         <ErrorState
-          title="Failed to load session"
-          message="We couldn't load your learning session. Please try again."
+          title={isGenerateError ? 'Failed to generate course' : 'Failed to load session'}
+          message={
+            isGenerateError
+              ? "We couldn't generate your learning path. Please try again."
+              : "We couldn't load your learning session. Please try again."
+          }
           onRetry={() => {
             if (activeSessionId) {
               refetchSession();

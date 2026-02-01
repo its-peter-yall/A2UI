@@ -2,11 +2,16 @@
 // Tests for ConceptCard component
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConceptCard } from './ConceptCard';
 import type { ReactNode } from 'react';
 import type { ConceptNode } from '@/types/learning';
+import * as api from '@/lib/learningApi';
+
+vi.mock('@/lib/learningApi', () => ({
+  getQuizAttempts: vi.fn(),
+}));
 
 const mockNode: ConceptNode = {
   id: 'node-1',
@@ -114,5 +119,35 @@ describe('ConceptCard', () => {
     );
     fireEvent.click(screen.getByText(/skip for now/i));
     expect(onSkipNode).toHaveBeenCalledWith('node-1');
+  });
+
+  it('shows loading feedback state while quiz attempts load', async () => {
+    (api.getQuizAttempts as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise(() => {})
+    );
+
+    render(
+      <ConceptCard node={{ ...mockNode, status: 'SHOWING_FEEDBACK' }} />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/loading quiz feedback/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows feedback error state when attempts fail to load', async () => {
+    (api.getQuizAttempts as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Failed to load attempts')
+    );
+
+    render(
+      <ConceptCard node={{ ...mockNode, status: 'SHOWING_FEEDBACK' }} />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/unable to load feedback/i)).toBeInTheDocument();
+    });
   });
 });

@@ -15,6 +15,7 @@ import type { ConceptNode, NodeStatus, QuizSubmitResponse } from '@/types/learni
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { QuizFeedback } from './QuizFeedback';
 import { useQuizFeedback } from './useQuizFeedback';
+import { ErrorState, LoadingState } from './ErrorStates';
 import {
   AnimatedCard,
   ContentTransition,
@@ -64,7 +65,12 @@ export function ConceptCard({
   const isUnlocking =
     previousStatus === 'LOCKED' && node.status === 'VIEWING_EXPLANATION';
 
-  const { result: feedbackResult, attemptCount } = useQuizFeedback({
+  const {
+    result: feedbackResult,
+    attemptCount,
+    isLoading: isFeedbackLoading,
+    error: feedbackError,
+  } = useQuizFeedback({
     nodeId: node.id,
     latestResult: quizResult,
     enabled: node.status === 'SHOWING_FEEDBACK',
@@ -209,18 +215,39 @@ export function ConceptCard({
                 </div>
               )}
 
-              {node.status === 'SHOWING_FEEDBACK' && node.quiz && feedbackResult && (
-                <QuizFeedback
-                  quiz={node.quiz}
-                  result={feedbackResult}
-                  attemptCount={attemptCount}
-                  onRetry={handleRetry}
-                  onContinue={
-                    feedbackResult.next_node_unlocked
-                      ? () => onContinueToNext?.(node.id)
-                      : undefined
-                  }
-                />
+              {node.status === 'SHOWING_FEEDBACK' && node.quiz && (
+                <>
+                  {feedbackResult && (
+                    <QuizFeedback
+                      quiz={node.quiz}
+                      result={feedbackResult}
+                      attemptCount={attemptCount}
+                      onRetry={handleRetry}
+                      onContinue={
+                        feedbackResult.next_node_unlocked
+                          ? () => onContinueToNext?.(node.id)
+                          : undefined
+                      }
+                    />
+                  )}
+                  {!feedbackResult && isFeedbackLoading && (
+                    <LoadingState message="Loading quiz feedback..." />
+                  )}
+                  {!feedbackResult && !isFeedbackLoading && feedbackError && (
+                    <ErrorState
+                      title="Unable to load feedback"
+                      message="Please try again in a moment."
+                      showHomeLink={false}
+                    />
+                  )}
+                  {!feedbackResult && !isFeedbackLoading && !feedbackError && (
+                    <ErrorState
+                      title="Feedback unavailable"
+                      message="We couldn't load the latest quiz result."
+                      showHomeLink={false}
+                    />
+                  )}
+                </>
               )}
 
               {/* COMPLETED state */}

@@ -27,6 +27,7 @@ function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
+      mutations: { retry: false },
     },
   });
   return ({ children }: { children: ReactNode }) => (
@@ -104,5 +105,18 @@ describe('LearningPathContainer', () => {
     );
 
     expect(await screen.findByText(/no topics yet/i)).toBeInTheDocument();
+  });
+
+  it('renders generate error state when course generation fails', async () => {
+    (api.generateCourse as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Generation failed')
+    );
+
+    render(
+      <LearningPathContainer query="test query" />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(await screen.findByText(/failed to generate course/i)).toBeInTheDocument();
   });
 });

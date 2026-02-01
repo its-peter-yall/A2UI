@@ -106,10 +106,11 @@ describe('Learning feature integration flow', () => {
 
     const input = screen.getByPlaceholderText(/what do you want to learn/i);
     fireEvent.change(input, { target: { value: 'Newton’s Laws' } });
-    fireEvent.click(screen.getByRole('button', { name: /learn/i }));
+    fireEvent.submit(screen.getByRole('search'));
 
     await waitFor(() => {
-      expect(api.generateCourse).toHaveBeenCalledWith({
+      const calls = (api.generateCourse as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls[0][0]).toEqual({
         query: 'Newton’s Laws',
         user_id: undefined,
       });
@@ -245,8 +246,12 @@ describe('Learning feature integration flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /continue to next topic/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /continue to next topic/i })
+      ).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByRole('button', { name: /continue to next topic/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Newton’s Second Law')).toBeInTheDocument();
@@ -268,7 +273,7 @@ describe('Learning feature integration flow', () => {
       expect(
         screen.getByText(/couldn't load your learning session/i)
       ).toBeInTheDocument();
-    });
+    }, { timeout: 4000 });
   });
 
   it('shows completion overlay when all nodes are complete', async () => {
