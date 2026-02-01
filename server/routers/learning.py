@@ -18,6 +18,8 @@ from server.schemas.learning import (
     ConceptNodeResponse,
     LearningSessionResponse,
     NodeStatus,
+    QuizAttemptHistory,
+    QuizAttemptResponse,
 )
 from server.services.course_orchestrator import course_orchestrator
 
@@ -61,6 +63,16 @@ class TransitionRequest(BaseModel):
     target_status: NodeStatus = Field(
         ...,
         description="Target status to transition to",
+    )
+
+
+class QuizSubmitRequest(BaseModel):
+    """Request to submit a quiz answer."""
+
+    selected_option_id: str = Field(
+        ...,
+        description="Selected option identifier (A, B, C, or D)",
+        pattern=r"^[A-D]$",
     )
 
 
@@ -212,4 +224,131 @@ def transition_node(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to transition node: {str(e)}",
+        )
+
+
+@router.get(
+    "/nodes/{node_id}/attempts",
+    response_model=QuizAttemptHistory,
+    summary="Get quiz attempts",
+    description="Get all quiz attempts for a concept node with history.",
+)
+def get_quiz_attempts(node_id: str) -> QuizAttemptHistory:
+    """Retrieve quiz attempt history for a node."""
+    try:
+        history = learning_manager.get_quiz_attempts(node_id)
+        return QuizAttemptHistory(**history)
+    except Exception as e:
+        logger.error(f"Error getting quiz attempts: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quiz attempts: {str(e)}",
+        )
+
+
+@router.post(
+    "/nodes/{node_id}/submit-quiz",
+    response_model=QuizAttemptResponse,
+    summary="Submit quiz answer",
+    description="Submit a quiz answer and get immediate feedback. If mastered, unlocks next node.",
+)
+def submit_quiz(
+    node_id: str,
+    request: QuizSubmitRequest,
+) -> QuizAttemptResponse:
+    """Submit a quiz answer and record the attempt."""
+    try:
+        # Get current node info for session and sequence
+        conn = learning_manager._get_connection()
+        try:
+            node = learning_manager._get_node_by_id(node_id, conn)
+            if not node:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Concept node not found: {node_id}",
+                )
+        finally:
+            conn.close()
+
+        # Create the quiz attempt
+        result = learning_manager.create_quiz_attempt(
+            node_id=node_id,
+            selected_option_id=request.selected_option_id,
+        )
+
+        # If mastered, transition to SHOWING_FEEDBACK and unlock next node
+        # User stays in SHOWING_FEEDBACK to review, clicks Continue to go to COMPLETED
+        next_node_unlocked = False
+        if result.get("is_mastered"):
+            # Transition to SHOWING_FEEDBACK so user can see the feedback
+            learning_manager.update_node_status(
+                node_id=node_id,
+                status=NodeStatus.SHOWING_FEEDBACK,
+            )
+
+            # Check if there's a next node to unlock
+            next_node = learning_manager.get_next_node(
+                session_id=node["learning_session_id"],
+                sequence_index=node["sequence_index"],
+            )
+            if next_node and NodeStatus(next_node["status"]) == NodeStatus.LOCKED:
+                # Unlock the next node
+                learning_manager.update_node_status(
+                    node_id=next_node["id"],
+                    status=NodeStatus.VIEWING_EXPLANATION,
+                )
+                next_node_unlocked = True
+
+        # Add next_node_unlocked to result
+        result["next_node_unlocked"] = next_node_unlocked
+
+        return QuizAttemptResponse(**result)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error submitting quiz: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit quiz: {str(e)}",
+        )
+
+
+@router.post(
+    "/nodes/{node_id}/retry-quiz",
+    response_model=ConceptNodeResponse,
+    summary="Retry quiz",
+    description="Transition node from SHOWING_FEEDBACK back to IN_QUIZ to retry.",
+)
+def retry_quiz(node_id: str) -> ConceptNodeResponse:
+    """Transition node to IN_QUIZ state for retry after incorrect answer."""
+    try:
+        updated_node = learning_manager.update_node_status(
+            node_id=node_id,
+            status=NodeStatus.IN_QUIZ,
+        )
+
+        if not updated_node:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Concept node not found: {node_id}",
+            )
+
+        return ConceptNodeResponse(**updated_node)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrying quiz: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retry quiz: {str(e)}",
         )

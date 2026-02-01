@@ -84,8 +84,8 @@ class QuizCard(BaseModel):
         min_length=4,
         max_length=4,
     )
-    difficulty: QuizDifficulty = Field(
-        default=QuizDifficulty.MEDIUM, description="Difficulty for the quiz"
+    difficulty: str = Field(
+        default="medium", description="Difficulty for the quiz (easy, medium, hard)"
     )
 
     @field_validator("options")
@@ -301,6 +301,10 @@ class QuizAttemptResponse(ResponseBase, TimestampMixin, QuizAttemptBase):
     is_mastered: bool = Field(
         ...,
         description="Whether 100% score was achieved (can proceed)",
+    )
+    next_node_unlocked: bool = Field(
+        default=False,
+        description="Whether the next node was unlocked (only true if mastered and next node exists)",
     )
 
 

@@ -160,7 +160,10 @@ export function useLearningMutations({
     }: {
       nodeId: string;
       selectedOptionId: string;
-    }) => submitQuiz(nodeId, { selected_option_id: selectedOptionId }),
+    }) => {
+      // Server handles status transition internally
+      return submitQuiz(nodeId, { selected_option_id: selectedOptionId });
+    },
     
     onMutate: async ({ nodeId }): Promise<MutationContext> => {
       await queryClient.cancelQueries({ queryKey });
@@ -195,10 +198,9 @@ export function useLearningMutations({
       onError?.(error as Error, 'submitQuiz');
     },
     
-    onSettled: (result, error) => {
-      if (error || !result?.is_mastered) {
-        invalidateSession();
-      }
+    onSettled: () => {
+      // Always invalidate to sync server state after quiz submission
+      invalidateSession();
     },
   });
 
@@ -241,7 +243,19 @@ export function useLearningMutations({
       nodeId: string;
       nextNodeId?: string;
     }) => {
+      // Get current session state to check actual status
+      const session = queryClient.getQueryData<LearningSessionWithNodes>(queryKey);
+      const currentNode = session?.nodes.find((n) => n.id === nodeId);
+
+      // If still in IN_QUIZ, first transition to SHOWING_FEEDBACK
+      if (currentNode && currentNode.status === 'IN_QUIZ') {
+        await transitionNode(nodeId, 'SHOWING_FEEDBACK');
+      }
+
+      // Then transition to COMPLETED
       await transitionNode(nodeId, 'COMPLETED');
+
+      // Unlock next node
       if (nextNodeId) {
         await transitionNode(nextNodeId, 'VIEWING_EXPLANATION');
       }
@@ -251,9 +265,33 @@ export function useLearningMutations({
       await queryClient.cancelQueries({ queryKey });
 
       const session = queryClient.getQueryData<LearningSessionWithNodes>(queryKey);
+      const currentNode = session?.nodes.find((n) => n.id === nodeId);
       const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
 
       if (nodeIndex >= 0) {
+        // First optimistic transition to SHOWING_FEEDBACK if needed
+        if (currentNode && currentNode.status === 'IN_QUIZ') {
+          const rollbackShowFeedback = optimisticStatusUpdate(
+            queryClient,
+            sessionId,
+            nodeId,
+            'SHOWING_FEEDBACK'
+          );
+          // Then optimistic transition to COMPLETED
+          const rollback = optimisticMasteryUpdate(
+            queryClient,
+            sessionId,
+            nodeId,
+            nodeIndex
+          );
+          return {
+            rollback: () => {
+              rollbackShowFeedback();
+              rollback();
+            },
+          };
+        }
+
         const rollback = optimisticMasteryUpdate(
           queryClient,
           sessionId,

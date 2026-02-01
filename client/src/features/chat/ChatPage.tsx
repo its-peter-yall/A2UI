@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useChat } from './useChat';
 import { InputArea } from './InputArea';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { MessageBubble } from '@/components/MessageBubble';
 import { SessionNameModal } from '@/components/SessionNameModal';
-import { Menu, MessageSquarePlus } from 'lucide-react';
+import { Menu, MessageSquarePlus, GraduationCap } from 'lucide-react';
 import * as api from '@/lib/api';
 import type { Session } from '@/types/api';
 
@@ -135,8 +136,14 @@ export function ChatPage() {
                             {sessions.find(s => s.id === currentSessionId)?.title || "New Chat"}
                         </span>
                     </div>
-                    <div>
-                         {/* Controls like Model Selector could go here */}
+                    <div className="flex items-center gap-2">
+                        <Link
+                            to="/learn"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                        >
+                            <GraduationCap className="h-4 w-4" />
+                            Learn
+                        </Link>
                     </div>
                 </div>
 

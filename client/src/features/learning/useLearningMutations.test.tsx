@@ -102,6 +102,10 @@ describe('useLearningMutations - Sequential Flow', () => {
         node_status: 'SHOWING_FEEDBACK' as const,
       };
       (api.submitQuiz as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+      (api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'node-1',
+        status: 'SHOWING_FEEDBACK',
+      });
 
       const onQuizResult = vi.fn();
       const { result } = renderHook(
@@ -133,6 +137,10 @@ describe('useLearningMutations - Sequential Flow', () => {
         node_status: 'SHOWING_FEEDBACK' as const,
       };
       (api.submitQuiz as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+      (api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'node-1',
+        status: 'SHOWING_FEEDBACK',
+      });
 
       const onMasteryAchieved = vi.fn();
       const { result } = renderHook(
@@ -161,6 +169,10 @@ describe('useLearningMutations - Sequential Flow', () => {
         node_status: 'SHOWING_FEEDBACK' as const,
       };
       (api.submitQuiz as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
+      (api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'node-1',
+        status: 'SHOWING_FEEDBACK',
+      });
 
       const onRetryNeeded = vi.fn();
       const { result } = renderHook(
@@ -180,6 +192,10 @@ describe('useLearningMutations - Sequential Flow', () => {
       (api.submitQuiz as ReturnType<typeof vi.fn>).mockImplementation(
         () => new Promise((resolve) => { resolveSubmit = resolve; })
       );
+      (api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'node-1',
+        status: 'SHOWING_FEEDBACK',
+      });
 
       const { result } = renderHook(
         () => useLearningMutations({ sessionId: 'session-1' }),

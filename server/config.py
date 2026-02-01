@@ -13,6 +13,12 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Export credentials path to environment for Google Cloud SDK
+# The Google Cloud libraries expect GOOGLE_APPLICATION_CREDENTIALS in os.environ
+_vertex_config = os.getenv("VERTEX_CONFIG", "")
+if _vertex_config:
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _vertex_config
+
 
 class Settings:
     PROJECT_ID = os.getenv("PROJECT_ID", "")

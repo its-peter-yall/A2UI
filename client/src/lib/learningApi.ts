@@ -7,6 +7,7 @@
 // @see: client/src/types/learning.ts - Type definitions
 // @note: All endpoints require backend server running on port 8000
 
+import axios from 'axios';
 import { api } from './api';
 import type {
   ConceptNode,
@@ -20,12 +21,21 @@ import type {
   NodeStatus,
 } from '../types/learning';
 
+// Create a longer timeout client for course generation (can take 30-60s)
+const learningApi = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 120000, // 2 minutes for course generation
+});
+
 // --- Learning Session ---
 
 export const generateCourse = async (
   data: GenerateCourseRequest
 ): Promise<LearningSessionWithNodes> => {
-  const response = await api.post<LearningSessionWithNodes>(
+  const response = await learningApi.post<LearningSessionWithNodes>(
     '/learning/generate',
     data
   );

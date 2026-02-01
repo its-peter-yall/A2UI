@@ -225,7 +225,7 @@ class QuizzerAgent(BaseAgent):
         )
 
         logger.info(
-            f"QuizzerAgent created quiz: difficulty={quiz.difficulty.value}, "
+            f"QuizzerAgent created quiz: difficulty={quiz.difficulty}, "
             f"options={len(quiz.options)}"
         )
 

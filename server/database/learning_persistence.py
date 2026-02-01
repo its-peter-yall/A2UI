@@ -393,7 +393,13 @@ class LearningManager:
             if not row:
                 return None
             current_status = NodeStatus(row["status"])
+            logger.info(
+                f"Transition attempt: {current_status.value} -> {status.value} for node {node_id}"
+            )
             if not self._is_valid_transition(current_status, status):
+                logger.error(
+                    f"Invalid transition: {current_status.value} -> {status.value}"
+                )
                 raise ValueError(
                     "Invalid status transition from "
                     f"{current_status.value} to {status.value}"

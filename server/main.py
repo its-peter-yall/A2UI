@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from server.utils.vertex_client import init_vertex, get_vertex_status
+from server.utils.instructor_client import instructor_client
 from server.database.persistence import session_manager
 from server.database.learning_persistence import learning_manager
 from server.routers import sessions_router, chat_router, learning_router
@@ -42,6 +43,16 @@ async def lifespan(app: FastAPI):
     try:
         if init_vertex():
             logger.info("Vertex AI successfully initialized.")
+            # Initialize InstructorClient after Vertex AI is ready
+            try:
+                if instructor_client.init():
+                    logger.info("InstructorClient initialized successfully.")
+                else:
+                    logger.warning(
+                        "InstructorClient initialization skipped (missing config)."
+                    )
+            except Exception as e:
+                logger.error(f"InstructorClient initialization failed: {e}")
         else:
             logger.warning("Vertex AI initialization skipped (missing config).")
     except Exception as e:

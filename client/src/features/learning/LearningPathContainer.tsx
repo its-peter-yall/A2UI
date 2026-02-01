@@ -127,7 +127,11 @@ export function LearningPathContainer({
 
   const handleMutationError = (error: Error, context: string) => {
     console.error(`Mutation error (${context}):`, error);
-    showError(`Failed to ${context}. Please try again.`);
+    // Extract server error message if available
+    const axiosError = error as { response?: { data?: { detail?: string } } };
+    const serverMessage = axiosError?.response?.data?.detail;
+    const displayMessage = serverMessage || `Failed to ${context}. Please try again.`;
+    showError(displayMessage);
   };
 
   const {
@@ -138,6 +142,7 @@ export function LearningPathContainer({
     regenerate,
     isAnyLoading,
     isRegenerating,
+    isTransitioning,
   } = useLearningMutations({
     sessionId: activeSessionId ?? '',
     onQuizResult: handleQuizResult,
@@ -188,32 +193,12 @@ export function LearningPathContainer({
 
   // Handle celebration completion
   const handleCelebrationComplete = () => {
-    const completedNodeId = celebration.nodeId;
     setCelebrationBySession((prev) => ({
       ...prev,
       [activeSessionKey]: { active: false, isCourseComplete: false },
     }));
-    
-    // Auto-scroll to next node after celebration
-    if (completedNodeId) {
-      const masteredNode = session?.nodes.find(
-        (n) => n.id === completedNodeId
-      );
-      if (masteredNode) {
-        const nodeIndex = session?.nodes.findIndex(
-          (n) => n.id === masteredNode.id
-        ) ?? -1;
-        const nextNode = session?.nodes[nodeIndex + 1];
-        if (nextNode) {
-          // Add a small delay for smoother transition
-          setTimeout(() => {
-            scrollToNode(nextNode.id);
-            // Optionally auto-advance the mutation too
-            continueToNext(masteredNode.id, nextNode.id);
-          }, 500);
-        }
-      }
-    }
+    // Note: We do NOT auto-advance here. The user must click
+    // "Continue to Next Topic" in QuizFeedback to proceed.
   };
 
   // Auto-generate if query provided but no sessionId
@@ -395,6 +380,7 @@ export function LearningPathContainer({
                     onContinueToNext={handleContinueToNext}
                     onRegenerate={regenerate}
                     isRegenerating={isRegenerating}
+                    isTransitioning={isTransitioning}
                     canSkip={Boolean(nextNode)}
                     onSkipNode={(nodeId) => {
                       const nodeIndex = session.nodes.findIndex(

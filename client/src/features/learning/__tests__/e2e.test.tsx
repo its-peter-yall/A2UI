@@ -213,6 +213,10 @@ describe('Learning feature integration flow', () => {
       status: 'LOCKED',
     });
     const session = createSession([node, nextNode]);
+    const feedbackSession = createSession([
+      { ...node, status: 'SHOWING_FEEDBACK' },
+      nextNode,
+    ]);
     const unlockedSession = createSession([
       { ...node, status: 'COMPLETED' },
       { ...nextNode, status: 'VIEWING_EXPLANATION' },
@@ -232,9 +236,14 @@ describe('Learning feature integration flow', () => {
     };
 
     (api.getLearningSession as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(session)
-      .mockResolvedValue(unlockedSession);
+      .mockResolvedValueOnce(session)          // Initial load
+      .mockResolvedValueOnce(feedbackSession)  // After quiz submission
+      .mockResolvedValue(unlockedSession);     // After clicking continue
     (api.submitQuiz as ReturnType<typeof vi.fn>).mockResolvedValue(result);
+    (api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'node-1',
+      status: 'SHOWING_FEEDBACK',
+    });
 
     renderRoutes(['/learn/session-1']);
 

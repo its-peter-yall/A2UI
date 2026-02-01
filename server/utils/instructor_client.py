@@ -33,17 +33,17 @@ T = TypeVar("T", bound=BaseModel)
 # Model configuration for different agent roles
 MODEL_CONFIGS = {
     "planner": {
-        "model": "gemini-1.5-pro",
+        "model": "gemini-2.5-pro",
         "temperature": 0.3,
         "max_output_tokens": 4096,
     },
     "generator": {
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.5-flash",
         "temperature": 0.7,
         "max_output_tokens": 2048,
     },
     "quizzer": {
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.5-flash",
         "temperature": 0.2,
         "max_output_tokens": 1024,
     },
@@ -85,12 +85,12 @@ class InstructorClient:
             # Create a client for each role configuration
             for role, config in MODEL_CONFIGS.items():
                 model_name = config["model"]
-                # Use from_provider with vertexai prefix and VERTEXAI_TOOLS mode
+                # Use from_provider with vertexai prefix and GENAI_TOOLS mode
                 client = instructor.from_provider(
                     f"vertexai/{model_name}",
                     project=settings.PROJECT_ID,
                     location=settings.LOCATION,
-                    mode=instructor.Mode.VERTEXAI_TOOLS,
+                    mode=instructor.Mode.GENAI_TOOLS,
                     async_client=True,  # Enable async support
                 )
                 self._clients[role] = {

@@ -34,6 +34,7 @@ interface ConceptCardProps {
   onSkipNode?: (nodeId: string) => void;
   isRegenerating?: boolean;
   canSkip?: boolean;
+  isTransitioning?: boolean;
 }
 
 export function ConceptCard({
@@ -47,6 +48,7 @@ export function ConceptCard({
   onSkipNode,
   isRegenerating = false,
   canSkip = false,
+  isTransitioning = false,
   quizResult,
 }: ConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -99,7 +101,10 @@ export function ConceptCard({
   };
 
   const handleProceedToQuiz = () => {
-    onProceedToQuiz?.(node.id);
+    // Prevent transition if not in VIEWING_EXPLANATION state
+    if (node.status === 'VIEWING_EXPLANATION') {
+      onProceedToQuiz?.(node.id);
+    }
   };
 
   const handleSubmitQuiz = () => {
@@ -159,9 +164,10 @@ export function ConceptCard({
                   <div className="flex justify-end pt-4 border-t">
                     <button
                       onClick={handleProceedToQuiz}
-                      className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                      disabled={isTransitioning}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      I understand, proceed to quiz →
+                      {isTransitioning ? 'Transitioning...' : 'I understand, proceed to quiz →'}
                     </button>
                   </div>
                 </div>
