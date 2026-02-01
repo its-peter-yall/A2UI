@@ -33,6 +33,8 @@ export function ErrorState({
         'flex flex-col items-center justify-center p-8 text-center',
         className
       )}
+      role="alert"
+      aria-live="polite"
     >
       <div className="text-5xl mb-4 text-destructive">!</div>
       <h2 className="text-xl font-semibold mb-2">{title}</h2>
@@ -161,6 +163,9 @@ export function LoadingState({
         'flex flex-col items-center justify-center p-8 text-center',
         className
       )}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
     >
       <div className="animate-spin text-4xl mb-4">...</div>
       <p className="text-muted-foreground">{message}</p>
@@ -183,6 +188,9 @@ export function GeneratingState({
         'flex flex-col items-center justify-center p-8 text-center',
         className
       )}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
     >
       <div className="text-5xl mb-4 animate-bounce">*</div>
       <h2 className="text-xl font-semibold mb-2">

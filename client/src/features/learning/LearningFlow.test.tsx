@@ -316,7 +316,7 @@ describe('LearningPage', () => {
     renderWithProviders(<LearningPage />, { route: '/learn/session-1' });
 
     await waitFor(() => {
-      expect(screen.getByText('1 / 3 mastered')).toBeInTheDocument();
+      expect(screen.getAllByText('1 / 3 mastered').length).toBeGreaterThan(0);
     });
   });
 

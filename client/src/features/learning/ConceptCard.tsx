@@ -165,7 +165,8 @@ export function ConceptCard({
               {node.status === 'IN_QUIZ' && node.quiz && (
                 <div className="space-y-4">
                   <p className="font-medium text-lg">{node.quiz.question_text}</p>
-                  <div className="space-y-2">
+                  <fieldset className="space-y-2" role="radiogroup">
+                    <legend className="sr-only">Quiz options</legend>
                     {node.quiz.options.map((option) => (
                       <label
                         key={option.id}
@@ -190,7 +191,7 @@ export function ConceptCard({
                         <span>{option.text}</span>
                       </label>
                     ))}
-                  </div>
+                  </fieldset>
                   <div className="flex justify-end pt-4 border-t">
                     <button
                       onClick={handleSubmitQuiz}
