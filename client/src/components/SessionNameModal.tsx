@@ -1,5 +1,5 @@
 // SessionNameModal.tsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 
 interface SessionNameModalProps {
@@ -19,16 +19,35 @@ export function SessionNameModal({
     onSave,
     onClose,
 }: SessionNameModalProps) {
-    const [name, setName] = useState(initialName);
-
-    // Reset name when modal opens
-    useEffect(() => {
-        if (isOpen) {
-            setName(initialName);
-        }
-    }, [isOpen, initialName]);
-
     if (!isOpen) return null;
+
+    return (
+        <SessionNameModalContent
+            title={title}
+            submitLabel={submitLabel}
+            initialName={initialName}
+            onSave={onSave}
+            onClose={onClose}
+        />
+    );
+}
+
+interface SessionNameModalContentProps {
+    title: string;
+    submitLabel: string;
+    initialName: string;
+    onSave: (name: string) => void;
+    onClose: () => void;
+}
+
+function SessionNameModalContent({
+    title,
+    submitLabel,
+    initialName,
+    onSave,
+    onClose,
+}: SessionNameModalContentProps) {
+    const [name, setName] = useState(initialName);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

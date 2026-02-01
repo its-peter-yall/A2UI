@@ -9,17 +9,24 @@
 // @see: client/src/lib/learningApi.ts - API functions
 // @note: Requires sessionId prop or generates new course from query
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useCallback } from 'react';
-import {
-  generateCourse,
-  getLearningSession,
-} from '@/lib/learningApi';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
-import { useLearningMutations } from './useLearningMutations';
+import { generateCourse, getLearningSession } from '@/lib/learningApi';
 import { ConceptCard } from './ConceptCard';
-import { ProgressBar } from './ProgressBar';
+import { LearningErrorBoundary } from './LearningErrorBoundary';
 import { MasteryCelebration } from './animations/MasteryCelebration';
+import { ProgressBar } from './ProgressBar';
+import {
+  EmptyState,
+  ErrorState,
+  GeneratingState,
+  LoadingState,
+  NotFoundState,
+} from './ErrorStates';
+import { ToastContainer, useErrorToast } from './useErrorToast';
+import { useLearningMutations } from './useLearningMutations';
 
 interface LearningPathContainerProps {
   /** Existing session ID to load */
@@ -32,6 +39,13 @@ interface LearningPathContainerProps {
   onCourseGenerated?: (session: LearningSessionWithNodes) => void;
 }
 
+type CelebrationState = {
+  active: boolean;
+  nodeId?: string;
+  topicTitle?: string;
+  isCourseComplete: boolean;
+};
+
 export function LearningPathContainer({
   sessionId,
   query,
@@ -43,34 +57,42 @@ export function LearningPathContainer({
     undefined
   );
   const activeSessionId = sessionId ?? generatedSessionId;
+  const activeSessionKey = activeSessionId ?? 'new';
+  const { toasts, showError, dismissToast } = useErrorToast();
 
   // Track quiz results for feedback display
-  const [quizResults, setQuizResults] = useState<Record<string, QuizSubmitResponse>>({});
+  const [quizResultsBySession, setQuizResultsBySession] = useState<
+    Record<string, Record<string, QuizSubmitResponse>>
+  >({});
+  const quizResults = quizResultsBySession[activeSessionKey] ?? {};
   
   // Track celebration state
-  const [celebration, setCelebration] = useState<{
-    active: boolean;
-    topicTitle?: string;
-    isCourseComplete: boolean;
-  }>({
+  const [celebrationBySession, setCelebrationBySession] = useState<
+    Record<string, CelebrationState>
+  >({});
+  const celebration = celebrationBySession[activeSessionKey] ?? {
     active: false,
     isCourseComplete: false,
-  });
-
-  useEffect(() => {
-    setQuizResults({});
-    setCelebration({ active: false, isCourseComplete: false });
-  }, [activeSessionId]);
+  };
 
   // Fetch existing session
   const {
     data: session,
     isLoading: isLoadingSession,
+    isError: isSessionError,
     error: sessionError,
+    refetch: refetchSession,
   } = useQuery({
     queryKey: ['learningSession', activeSessionId],
-    queryFn: () => getLearningSession(activeSessionId!),
+    queryFn: () => getLearningSession(activeSessionId ?? ''),
     enabled: !!activeSessionId,
+    retry: (failureCount, error) => {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
 
   // Generate new course mutation
@@ -84,21 +106,28 @@ export function LearningPathContainer({
   });
 
   const handleQuizResult = (result: QuizSubmitResponse) => {
-    setQuizResults((prev) => ({
+    setQuizResultsBySession((prev) => ({
       ...prev,
-      [result.node_id]: result,
+      [activeSessionKey]: {
+        ...(prev[activeSessionKey] ?? {}),
+        [result.node_id]: result,
+      },
     }));
   };
 
   const handleRetryNeeded = (nodeId: string, result: QuizSubmitResponse) => {
-    setQuizResults((prev) => ({
+    setQuizResultsBySession((prev) => ({
       ...prev,
-      [nodeId]: result,
+      [activeSessionKey]: {
+        ...(prev[activeSessionKey] ?? {}),
+        [nodeId]: result,
+      },
     }));
   };
 
   const handleMutationError = (error: Error, context: string) => {
     console.error(`Mutation error (${context}):`, error);
+    showError(`Failed to ${context}. Please try again.`);
   };
 
   const {
@@ -108,6 +137,7 @@ export function LearningPathContainer({
     continueToNext,
     regenerate,
     isAnyLoading,
+    isRegenerating,
   } = useLearningMutations({
     sessionId: activeSessionId ?? '',
     onQuizResult: handleQuizResult,
@@ -117,11 +147,15 @@ export function LearningPathContainer({
         .filter((n) => n.id !== nodeId)
         .every((n) => n.status === 'COMPLETED');
       
-      setCelebration({
-        active: true,
-        topicTitle: node?.title,
-        isCourseComplete: allOtherCompleted || false,
-      });
+      setCelebrationBySession((prev) => ({
+        ...prev,
+        [activeSessionKey]: {
+          active: true,
+          nodeId,
+          topicTitle: node?.title,
+          isCourseComplete: allOtherCompleted || false,
+        },
+      }));
     },
     onRetryNeeded: handleRetryNeeded,
     onError: handleMutationError,
@@ -154,13 +188,16 @@ export function LearningPathContainer({
 
   // Handle celebration completion
   const handleCelebrationComplete = () => {
-    const completedTopicTitle = celebration.topicTitle;
-    setCelebration({ active: false, isCourseComplete: false });
+    const completedNodeId = celebration.nodeId;
+    setCelebrationBySession((prev) => ({
+      ...prev,
+      [activeSessionKey]: { active: false, isCourseComplete: false },
+    }));
     
     // Auto-scroll to next node after celebration
-    if (completedTopicTitle) {
+    if (completedNodeId) {
       const masteredNode = session?.nodes.find(
-        (n) => n.title === completedTopicTitle
+        (n) => n.id === completedNodeId
       );
       if (masteredNode) {
         const nodeIndex = session?.nodes.findIndex(
@@ -198,107 +235,187 @@ export function LearningPathContainer({
     generateMutation.isPending ||
     (shouldGenerate && !generateMutation.data && !generateMutation.isError);
 
-  // Loading state
-  if (isLoadingSession || isGenerating) {
+  if (isGenerating) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-        <p className="text-muted-foreground">
-          {isGenerating ? 'Generating your learning path...' : 'Loading session...'}
-        </p>
-      </div>
+      <>
+        <GeneratingState />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
     );
   }
 
-  // Error state
+  if (isLoadingSession) {
+    return (
+      <>
+        <LoadingState message="Loading your learning session..." />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
   const error = sessionError || generateMutation.error;
   if (error) {
+    const isNotFound =
+      isSessionError &&
+      axios.isAxiosError(error) &&
+      error.response?.status === 404;
+
+    if (isNotFound) {
+      return (
+        <>
+          <NotFoundState type="session" />
+          <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+        </>
+      );
+    }
+
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <div className="text-destructive text-lg">
-          Failed to load learning path
-        </div>
-        <p className="text-muted-foreground text-sm">
-          {error instanceof Error ? error.message : 'Unknown error'}
-        </p>
-        <button
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md"
-          onClick={() => {
+      <>
+        <ErrorState
+          title="Failed to load session"
+          message="We couldn't load your learning session. Please try again."
+          onRetry={() => {
             if (activeSessionId) {
-              queryClient.invalidateQueries({
-                queryKey: ['learningSession', activeSessionId],
-              });
-            } else if (query) {
+              refetchSession();
+              return;
+            }
+            if (query) {
               generateMutation.mutate({ query, user_id: userId });
             }
           }}
-        >
-          Retry
-        </button>
-      </div>
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
     );
   }
 
-  // No data state
   if (!session) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <p className="text-muted-foreground">No learning session found</p>
-      </div>
+      <>
+        <NotFoundState type="session" />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
+  if (session.nodes.length === 0) {
+    return (
+      <>
+        <EmptyState
+          title="No topics yet"
+          message="This learning path doesn't have any topics."
+          action={
+            query
+              ? {
+                  label: 'Generate Topics',
+                  onClick: () =>
+                    generateMutation.mutate({ query, user_id: userId }),
+                }
+              : undefined
+          }
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
+    );
+  }
+
+  const allNodesError = session.nodes.every((node) => node.status === 'ERROR');
+  if (allNodesError) {
+    return (
+      <>
+        <ErrorState
+          title="Generation failed"
+          message="All topics failed to generate. Please try again."
+          onRetry={() => {
+            if (activeSessionId) {
+              refetchSession();
+              return;
+            }
+            if (query) {
+              generateMutation.mutate({ query, user_id: userId });
+            }
+          }}
+          showHomeLink
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </>
     );
   }
 
   // Render learning path
   return (
-    <div className="flex flex-col gap-6 p-4 max-w-3xl mx-auto">
-      {/* Header */}
-      <header className="text-center">
-        <h1 className="text-2xl font-bold">{session.course_title}</h1>
-        <p className="text-muted-foreground mt-1">
-          {session.completed_nodes} of {session.total_nodes} completed
-        </p>
-      </header>
+    <>
+      <LearningErrorBoundary
+        onError={(boundaryError: Error) => {
+          console.error('Learning component crashed:', boundaryError);
+        }}
+      >
+        <div className="flex flex-col gap-6 p-4 max-w-3xl mx-auto">
+          {/* Header */}
+          <header className="text-center">
+            <h1 className="text-2xl font-bold">{session.course_title}</h1>
+            <p className="text-muted-foreground mt-1">
+              {session.completed_nodes} of {session.total_nodes} completed
+            </p>
+          </header>
 
-      {/* Progress bar using specialized component */}
-      <ProgressBar
-        nodes={session.nodes}
-        currentNodeId={activeNodeId}
-        onNodeClick={scrollToNode}
-      />
+          {/* Progress bar using specialized component */}
+          <ProgressBar
+            nodes={session.nodes}
+            currentNodeId={activeNodeId}
+            onNodeClick={scrollToNode}
+          />
 
-      {/* Mastery celebration overlay */}
-      <MasteryCelebration
-        active={celebration.active}
-        topicTitle={celebration.topicTitle}
-        isCourseComplete={celebration.isCourseComplete}
-        onComplete={handleCelebrationComplete}
-      />
+          {/* Mastery celebration overlay */}
+          <MasteryCelebration
+            active={celebration.active}
+            topicTitle={celebration.topicTitle}
+            isCourseComplete={celebration.isCourseComplete}
+            onComplete={handleCelebrationComplete}
+          />
 
-      {/* Nodes list with ConceptCard components */}
-      <div className="flex flex-col gap-4">
-        {session.nodes.map((node) => (
-          <div key={node.id} id={`node-${node.id}`} tabIndex={-1}>
-            <ConceptCard
-              node={node}
-              isActive={node.id === activeNodeId}
-              quizResult={quizResults[node.id]}
-              onProceedToQuiz={proceedToQuiz}
-              onQuizSubmit={submitAnswer}
-              onRetryQuiz={retry}
-              onContinueToNext={handleContinueToNext}
-              onRegenerate={regenerate}
-            />
+          {/* Nodes list with ConceptCard components */}
+          <div className="flex flex-col gap-4">
+            {session.nodes.map((node, index) => {
+              const nextNode = session.nodes[index + 1];
+              return (
+                <div key={node.id} id={`node-${node.id}`} tabIndex={-1}>
+                  <ConceptCard
+                    node={node}
+                    isActive={node.id === activeNodeId}
+                    quizResult={quizResults[node.id]}
+                    onProceedToQuiz={proceedToQuiz}
+                    onQuizSubmit={submitAnswer}
+                    onRetryQuiz={retry}
+                    onContinueToNext={handleContinueToNext}
+                    onRegenerate={regenerate}
+                    isRegenerating={isRegenerating}
+                    canSkip={Boolean(nextNode)}
+                    onSkipNode={(nodeId) => {
+                      const nodeIndex = session.nodes.findIndex(
+                        (currentNode) => currentNode.id === nodeId
+                      );
+                      const upcomingNode = session.nodes[nodeIndex + 1];
+                      if (upcomingNode) {
+                        scrollToNode(upcomingNode.id);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
 
-      {/* Loading overlay for mutations */}
-      {isAnyLoading && (
-        <div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-          <span className="text-sm text-muted-foreground">Updating...</span>
+          {/* Loading overlay for mutations */}
+          {isAnyLoading && (
+            <div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+              <span className="text-sm text-muted-foreground">Updating...</span>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </LearningErrorBoundary>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }

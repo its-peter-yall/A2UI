@@ -124,15 +124,12 @@ class LearningManager:
                     node_id TEXT NOT NULL,
                     attempt_number INTEGER NOT NULL,
                     selected_option_id TEXT NOT NULL,
-                    correct_option_id TEXT NOT NULL,
-                    explanation TEXT NOT NULL,
                     is_correct INTEGER NOT NULL,
                     score_percent INTEGER NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (node_id)
                         REFERENCES concept_nodes(id)
-                        ON DELETE CASCADE,
-                    UNIQUE(node_id, attempt_number)
+                        ON DELETE CASCADE
                 )
                 """
             )
@@ -641,201 +638,6 @@ class LearningManager:
         finally:
             conn.close()
 
-    def submit_quiz(
-        self,
-        node_id: str,
-        selected_option_id: str,
-    ) -> Dict[str, Any]:
-        """Submit a quiz answer atomically with all state transitions.
-
-        This method handles the entire quiz submission flow in a single
-        transaction: record attempt, update node status, and unlock next
-        node if mastered. This ensures atomicity - either all operations
-        succeed or none do.
-
-        Args:
-            node_id: The concept node identifier
-            selected_option_id: The selected option (A, B, C, or D)
-
-        Returns:
-            Dict with attempt details, is_mastered, and next_node_unlocked flag
-
-        Raises:
-            ValueError: If node not found, not in IN_QUIZ state, or has no quiz
-        """
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-
-            # Verify node exists and is in IN_QUIZ state
-            node = self._get_node_by_id(node_id, conn)
-            if not node:
-                raise ValueError(f"Concept node not found: {node_id}")
-
-            current_status = NodeStatus(node["status"])
-            if current_status != NodeStatus.IN_QUIZ:
-                raise ValueError(
-                    f"Node must be in IN_QUIZ state to submit. "
-                    f"Current: {current_status.value}"
-                )
-
-            # Get quiz data for this node
-            quiz = self.get_quiz_for_node(node_id)
-            if quiz is None:
-                raise ValueError(f"No quiz found for node: {node_id}")
-
-            # Find correct and selected options
-            correct_option = None
-            selected_option = None
-            for opt in quiz.options:
-                if opt.is_correct:
-                    correct_option = opt
-                if opt.id == selected_option_id:
-                    selected_option = opt
-
-            if selected_option is None:
-                raise ValueError(f"Invalid option id: {selected_option_id}")
-
-            is_correct = selected_option.is_correct
-            score_percent = 100 if is_correct else 0
-            is_mastered = is_correct
-
-            # Get next attempt number
-            cursor.execute(
-                """
-                SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next_attempt
-                FROM quiz_attempts
-                WHERE node_id = ?
-                """,
-                (node_id,),
-            )
-            attempt_number = cursor.fetchone()["next_attempt"]
-
-            # Record attempt with stored correct_option_id and explanation
-            attempt_id = str(uuid.uuid4())
-            now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(
-                """
-                INSERT INTO quiz_attempts (
-                    id, node_id, attempt_number, selected_option_id,
-                    correct_option_id, explanation, is_correct, score_percent, created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    attempt_id,
-                    node_id,
-                    attempt_number,
-                    selected_option_id,
-                    correct_option.id,
-                    selected_option.explanation,
-                    1 if is_correct else 0,
-                    score_percent,
-                    now,
-                ),
-            )
-
-            # Transition to SHOWING_FEEDBACK
-            now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(
-                """
-                UPDATE concept_nodes
-                SET status = ?, updated_at = ?
-                WHERE id = ? AND status = ?
-                """,
-                (
-                    NodeStatus.SHOWING_FEEDBACK.value,
-                    now,
-                    node_id,
-                    NodeStatus.IN_QUIZ.value,
-                ),
-            )
-            if cursor.rowcount == 0:
-                raise ValueError("Node status changed during update; retry")
-
-            next_node_unlocked = False
-            final_status = NodeStatus.SHOWING_FEEDBACK
-
-            # If mastered, transition to COMPLETED and unlock next node
-            if is_mastered:
-                cursor.execute(
-                    """
-                    UPDATE concept_nodes
-                    SET status = ?, updated_at = ?
-                    WHERE id = ? AND status = ?
-                    """,
-                    (
-                        NodeStatus.COMPLETED.value,
-                        now,
-                        node_id,
-                        NodeStatus.SHOWING_FEEDBACK.value,
-                    ),
-                )
-                if cursor.rowcount == 0:
-                    raise ValueError("Node status changed during completion update")
-
-                final_status = NodeStatus.COMPLETED
-
-                # Unlock next node if exists and is LOCKED
-                cursor.execute(
-                    """
-                    SELECT id, status
-                    FROM concept_nodes
-                    WHERE learning_session_id = ?
-                      AND sequence_index = ?
-                    """,
-                    (node["learning_session_id"], node["sequence_index"] + 1),
-                )
-                next_row = cursor.fetchone()
-                if next_row and NodeStatus(next_row["status"]) == NodeStatus.LOCKED:
-                    cursor.execute(
-                        """
-                        UPDATE concept_nodes
-                        SET status = ?, updated_at = ?
-                        WHERE id = ? AND status = ?
-                        """,
-                        (
-                            NodeStatus.VIEWING_EXPLANATION.value,
-                            now,
-                            next_row["id"],
-                            NodeStatus.LOCKED.value,
-                        ),
-                    )
-                    if cursor.rowcount > 0:
-                        next_node_unlocked = True
-
-            conn.commit()
-
-            logger.info(
-                f"Quiz submitted: node={node_id}, "
-                f"attempt={attempt_number}, correct={is_correct}, "
-                f"mastered={is_mastered}, next_unlocked={next_node_unlocked}"
-            )
-
-            return {
-                "id": attempt_id,
-                "node_id": node_id,
-                "attempt_number": attempt_number,
-                "selected_option_id": selected_option_id,
-                "correct_option_id": correct_option.id,
-                "explanation": selected_option.explanation,
-                "is_correct": is_correct,
-                "score_percent": score_percent,
-                "is_mastered": is_mastered,
-                "next_node_unlocked": next_node_unlocked,
-                "final_status": final_status,
-                "created_at": now,
-            }
-        except sqlite3.Error as e:
-            conn.rollback()
-            logger.error(f"Error in submit_quiz transaction: {e}")
-            raise
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
     def create_quiz_attempt(
         self,
         node_id: str,
@@ -896,17 +698,15 @@ class LearningManager:
                 """
                 INSERT INTO quiz_attempts (
                     id, node_id, attempt_number, selected_option_id,
-                    correct_option_id, explanation, is_correct, score_percent, created_at
+                    is_correct, score_percent, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     attempt_id,
                     node_id,
                     attempt_number,
                     selected_option_id,
-                    correct_option.id,
-                    selected_option.explanation,
                     1 if is_correct else 0,
                     score_percent,
                     now,
@@ -951,19 +751,12 @@ class LearningManager:
         try:
             cursor = conn.cursor()
 
-            # Get quiz data for this node to extract correct_option_id and explanations
-            quiz = self.get_quiz_for_node(node_id)
-
-            # Validate node has a quiz (required for attempt history)
-            if quiz is None:
-                raise ValueError(f"No quiz found for node: {node_id}")
-
             # Get all attempts ordered by attempt_number
             cursor.execute(
                 """
                 SELECT
                     id, node_id, attempt_number, selected_option_id,
-                    correct_option_id, explanation, is_correct, score_percent, created_at
+                    is_correct, score_percent, created_at
                 FROM quiz_attempts
                 WHERE node_id = ?
                 ORDER BY attempt_number ASC
@@ -991,11 +784,7 @@ class LearningManager:
                         "selected_option_id": row["selected_option_id"],
                         "is_correct": bool(row["is_correct"]),
                         "score_percent": score,
-                        "correct_option_id": row["correct_option_id"],
-                        "explanation": row["explanation"],
-                        "is_mastered": score == 100,
                         "created_at": row["created_at"],
-                        "updated_at": row["created_at"],
                     }
                 )
 

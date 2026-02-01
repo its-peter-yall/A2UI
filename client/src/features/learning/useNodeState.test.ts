@@ -15,11 +15,15 @@ const mockNode = (status: NodeStatus): ConceptNode => ({
   title: 'Test Node',
   content_markdown: '# Test Content\n\nThis is test content.',
   status,
+  error_message: null,
+  retry_available: false,
   quiz: {
     question_text: 'Test question?',
     options: [
       { id: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' },
       { id: 'B', text: 'Option B', is_correct: true, explanation: 'Correct' },
+      { id: 'C', text: 'Option C', is_correct: false, explanation: 'Wrong' },
+      { id: 'D', text: 'Option D', is_correct: false, explanation: 'Wrong' },
     ],
     difficulty: 'medium',
   },

@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SessionSidebar } from './SessionSidebar';
 import type { Session } from '@/types/api';
-import React from 'react';
 
 // Mock Lucide icons to avoid render issues
 vi.mock('lucide-react', () => ({

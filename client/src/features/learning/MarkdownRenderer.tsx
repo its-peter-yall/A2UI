@@ -1,13 +1,18 @@
 // MarkdownRenderer.tsx
 // Renders markdown content for concept explanations
 
-// Simple wrapper around markdown rendering with consistent styling.
-// Handles code blocks, lists, headings, and inline formatting.
+// Longer description (2-4 lines):
+// - Wraps react-markdown with shared styling for learning content.
+// - Enables GFM features like tables and task lists.
+// - Sanitizes HTML to prevent unsafe rendering.
 
-// @see: Uses prose classes from Tailwind Typography plugin
-// @note: Sanitizes HTML by default for security
+// @see: client/src/components/MessageBubble.tsx - Markdown rendering setup
+// @note: Only allow raw HTML when sanitized
 
 import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 
 interface MarkdownRendererProps {
@@ -29,7 +34,12 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
         className
       )}
     >
-      <ReactMarkdown>{content}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw, rehypeSanitize]}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }

@@ -1,8 +1,10 @@
 // learning.ts
 // TypeScript interfaces for retrieval-based learning features
 
-// Mirrors backend Pydantic schemas for learning sessions, nodes,
-// quizzes, and API responses. Used by React Query hooks and components.
+// Longer description (2-4 lines):
+// - Mirrors backend Pydantic schemas for sessions, nodes, and quizzes.
+// - Powers React Query cache typing and component props.
+// - Keeps request/response payloads aligned with API contracts.
 
 // @see: server/schemas/learning.py - Backend schema definitions
 // @note: NodeStatus values must match backend enum exactly
@@ -37,9 +39,11 @@ export interface ConceptNode {
   title: string;
   content_markdown: string;
   status: NodeStatus;
+  error_message: string | null;
+  retry_available: boolean;
   quiz: QuizCard | null;
   created_at: string;
-  updated_at: string;
+  updated_at: string | null;
 }
 
 export interface ConceptNodeWithVisibility extends ConceptNode {
@@ -55,7 +59,7 @@ export interface LearningSession {
   total_nodes: number;
   completed_nodes: number;
   created_at: string;
-  updated_at: string;
+  updated_at: string | null;
 }
 
 export interface LearningSessionWithNodes extends LearningSession {
@@ -69,7 +73,11 @@ export interface QuizAttempt {
   selected_option_id: string;
   is_correct: boolean;
   score_percent: number;
+  correct_option_id: string;
+  explanation: string;
+  is_mastered: boolean;
   created_at: string;
+  updated_at: string | null;
 }
 
 export interface QuizAttemptHistory {

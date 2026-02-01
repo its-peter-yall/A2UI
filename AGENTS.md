@@ -3,109 +3,106 @@
 This file orients agentic coding assistants working in this repo.
 Follow the commands and style rules below; match local patterns when editing.
 
-## Repo layout
+## Spec-Based Development
+
+**ALL work must reference these specification documents:**
+
+| Document | Purpose |
+|----------|---------|
+| `conductor/product.md` | Vision, purpose, target audience, core capabilities, technical architecture |
+| `conductor/product-guidelines.md` | Visual identity (Cyber Yellow #FFD400), UX principles, component standards |
+| `conductor/tech-stack.md` | Technology choices: React 19, FastAPI, Vertex AI, SQLite, Tailwind 4.x |
+| `conductor/workflow.md` | TDD workflow, quality gates, commit guidelines, definition of done |
+| `conductor/code_styleguides/general.md` | Cross-language principles: readability, consistency, simplicity |
+| `conductor/code_styleguides/typescript.md` | Google TS Style Guide: `const` default, named exports, single quotes |
+| `conductor/code_styleguides/python.md` | Google Python Style Guide: 80-char lines, 4-space indent, docstrings |
+| `conductor/code_styleguides/html-css.md` | Google HTML/CSS Guide: 2-space indent, lowercase, alphabetize CSS |
+
+**Rule**: Before implementing any feature, read the relevant spec documents above.
+
+## Repo Layout
 - `client/`: Vite + React + TypeScript frontend
 - `server/`: FastAPI backend (Pydantic models, REST routers)
-- `conductor/`: internal guidelines and product docs
+- `conductor/`: Internal guidelines and product docs (the specs)
 
-## Build, lint, and test
+## Build, Lint, and Test
+
 ### Client (AgUI/client)
-- Install deps: `npm install`
-- Dev server: `npm run dev` (Vite, http://localhost:5173)
-- Build: `npm run build` (tsc -b + vite build)
-- Lint: `npm run lint` (eslint .)
-- Test (all): `npm run test` (vitest)
-- Test single file: `npm run test -- src/lib/api.test.ts`
-- Test name filter: `npm run test -- -t "QueryProvider"`
-- Run once (no watch): `npm run test -- --run`
+```bash
+cd client
+npm install          # Install deps
+npm run dev          # Dev server (http://localhost:5173)
+npm run build        # Build (tsc -b + vite build)
+npm run lint         # ESLint
+npm run test         # Vitest (add -- --run for single run)
+npm run test -- src/lib/api.test.ts    # Test single file
+npm run test -- -t "QueryProvider"     # Test name filter
+```
 
 ### Server (AgUI/server)
-- Create venv (if needed): `python -m venv .venv`
-- Activate (Windows): `\.venv\Scripts\activate`
-- Activate (macOS/Linux): `source .venv/bin/activate`
-- Install deps: `pip install -r requirements.txt`
-- Run API: `python -m uvicorn server.main:app --reload --port 8000`
-- Test (all): `python -m unittest`
-- Test module: `python -m unittest server.tests.test_chat`
-- Test case: `python -m unittest server.tests.test_chat.ChatSessionTests`
-- Test single: `python -m unittest server.tests.test_chat.ChatSessionTests.test_invalid_session_id_returns_404`
-
-### Env configuration
-- Backend uses `.env` values; see `server/.env.example`
-- Client reads `VITE_API_URL` (defaults to `http://localhost:8000`)
-
-### Command examples (copy/paste)
 ```bash
-cd AgUI/client
-npm install
-npm run dev
-```
-```bash
-cd AgUI/server
+cd server
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt
 python -m uvicorn server.main:app --reload --port 8000
+python -m unittest                    # All tests
+python -m unittest server.tests.test_chat.ChatSessionTests.test_invalid_session_id_returns_404  # Single test
 ```
 
-## TypeScript config notes
-- Strict mode is on (`strict: true` in `client/tsconfig.app.json`)
-- Unused locals/params are errors (`noUnusedLocals`, `noUnusedParameters`)
+### Env Configuration
+- Backend: `.env` values (see `server/.env.example`)
+- Client: `VITE_API_URL` (defaults to `http://localhost:8000`)
+- Vertex AI: `PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, `LOCATION`
+
+## TypeScript Config Notes
+- Strict mode: `strict: true` in `client/tsconfig.app.json`
+- Unused locals/params are errors
 - Path alias: `@/*` -> `client/src/*`
-- `allowImportingTsExtensions` is enabled; prefer explicit extensions only when needed
+- `allowImportingTsExtensions` enabled
 
-## Code style (project rules)
-### General (from `conductor/code_styleguides/general.md`)
-- Readability first; avoid cleverness
-- Follow existing patterns in nearby files
-- Prefer simple, maintainable solutions
-- Document why decisions were made when non-obvious
+## Quick Reference: Code Style
 
-### TypeScript/React (from `conductor/code_styleguides/typescript.md` + codebase)
-- Use ES modules; avoid `namespace`
-- Use `const` by default; never use `var`
-- Prefer named exports for new modules; keep default exports where already used
-- Use single quotes; be consistent with semicolons within a file
-- Avoid `any`, `as`, and non-null assertions unless justified
-- Prefer optional params/fields (`?`) over `| undefined`
-- Use `T[]` for simple arrays; `Array<T>` for unions
-- Keep component names `UpperCamelCase`; hooks start with `use`
-- Types/interfaces in `UpperCamelCase`; constants in `CONSTANT_CASE`
-- Use type-only imports (`import type { Foo } from ...`) when possible
-- Tests use Vitest; keep tests in `*.test.ts(x)` under `client/src`
+### TypeScript/React (per `conductor/code_styleguides/typescript.md`)
+- Use `const` by default; never `var`
+- Named exports preferred; keep existing default exports
+- Single quotes; explicit semicolons
+- Avoid `any`, `as`, non-null assertions
+- Optional params (`?`) preferred over `| undefined`
+- `T[]` for simple arrays, `Array<T>` for unions
+- `UpperCamelCase` for components/types, `CONSTANT_CASE` for constants
+- Hooks start with `use`
+- Type-only imports: `import type { Foo } from ...`
 
-### HTML/CSS (from `conductor/code_styleguides/html-css.md` + codebase)
+### Python/FastAPI (per `conductor/code_styleguides/python.md`)
+- 4-space indentation, 80-character lines
+- Import grouping: stdlib → third-party → local (`server.*`)
+- `snake_case` functions/vars, `PascalCase` classes
+- No mutable default args; use `None` + fallback
+- Type hints for public APIs; `Optional[T]` for nullable
+- Docstrings with summary + Args/Returns/Raises
+- F-strings preferred; no bare `except:`
+- Pydantic: `Field` constraints, `ConfigDict(from_attributes=True)`
+
+### HTML/CSS (per `conductor/code_styleguides/html-css.md`)
 - 2-space indentation; no tabs
-- Lowercase element names, attributes, selectors, and properties
-- Prefer class selectors; avoid IDs for styling
-- Use meaningful kebab-case class names when custom CSS is needed
-- Use shorthand properties and omit units for zero
-- Use double quotes for HTML attributes; single quotes for CSS strings
-- Alphabetize CSS declarations within a rule
-- Tailwind is available; use `cn()` from `client/src/lib/utils.ts` for class merging
-- Keep CSS rules grouped and consistent with `client/src/index.css`
+- Lowercase: elements, attributes, selectors, properties
+- Class selectors preferred; avoid ID selectors for styling
+- Meaningful kebab-case class names
+- Shorthand properties; omit units for zero
+- Double quotes HTML attributes; single quotes CSS strings
+- Alphabetize CSS declarations within rules
+- Tailwind available; use `cn()` from `client/src/lib/utils.ts`
 
-### Python/FastAPI (from `conductor/code_styleguides/python.md` + codebase)
-- 4-space indentation, 80-char lines
-- Imports grouped: stdlib, third-party, local (`server.*`)
-- Use `snake_case` for functions/vars, `PascalCase` for classes
-- Avoid mutable default args; use `None` + fallback
-- Add type hints for public APIs; prefer `Optional[T]` for nullable
-- Use docstrings with summary + Args/Returns/Raises when public
-- Use f-strings; avoid bare `except:`
-- Pydantic models use `Field` constraints and `ConfigDict(from_attributes=True)`
+### Error Handling and Logging
+- API routers: try/except → log → `HTTPException` with status codes
+- Re-raise `HTTPException` untouched; wrap only unexpected exceptions
+- Module-level: `logger = logging.getLogger(__name__)`
+- Client API calls through `client/src/lib/api.ts` Axios instance
+- Let Axios throw; handle at call sites or via interceptors
 
-### Error handling and logging
-- API routers wrap logic in try/except, log errors, and raise `HTTPException` with status codes
-- Re-raise `HTTPException` untouched; only wrap unexpected exceptions
-- Use module-level `logger = logging.getLogger(__name__)`
-- Client API calls go through `client/src/lib/api.ts` Axios instance
-- Let Axios throw; handle errors at call sites or via interceptors
-
-### Formatting and imports
-- Match the local file style before making broad formatting changes
-- Keep import order: stdlib -> third-party -> local; separate with blank lines in Python
-- In TS/TSX, group imports as external, internal, relative
-- Prefer explicit return types for exported functions when unclear
-
-### Import ordering examples
+### Import Ordering
 ```ts
 import { StrictMode } from 'react'
 import type { Session } from '@/types/api'
@@ -121,62 +118,71 @@ from fastapi import APIRouter, HTTPException, status
 from server.database.persistence import session_manager
 ```
 
-## Testing notes
-- Client tests: Vitest + Testing Library (`@testing-library/react`)
-- Server tests: stdlib `unittest` in `server/tests`
-- Keep tests small and deterministic; avoid network calls in unit tests
+## Testing Notes
+- Client: Vitest + Testing Library (`@testing-library/react`)
+- Server: stdlib `unittest` in `server/tests`
+- Keep tests small, deterministic; mock external dependencies
+- Target: >80% code coverage per `conductor/workflow.md`
 
-## Conventions to preserve
-- API routes live in `server/routers`; schemas in `server/schemas`
-- Use `APIRouter` with `summary`/`description` metadata
+## Conventions to Preserve
+- API routes in `server/routers`; schemas in `server/schemas`
+- `APIRouter` with `summary`/`description` metadata
 - Pydantic response models in router decorators are the contract
 - Client uses React Query provider in `client/src/providers/QueryProvider.tsx`
-- Keep axios base URL tied to `VITE_API_URL` fallback
+- Axios base URL tied to `VITE_API_URL` fallback
 
-## Data model notes
-- Message roles are 'user' or 'model' (see `server/schemas/session.py`)
-- Timestamps are ISO strings in API responses
-- Session list endpoints support `limit` and `offset`
-- `get_session_messages` accepts optional `limit` (None => full history)
+## Data Model Notes
+- Message roles: 'user' or 'model' (see `server/schemas/session.py`)
+- Timestamps: ISO strings in API responses
+- Session list endpoints: support `limit` and `offset`
+- `get_session_messages`: optional `limit` (None = full history)
 
-## AGENT BEHAVIOUR
+## AGENT BEHAVIOUR (Spec-Driven)
 
-### Research-First Principle
+### Research-First Principle (per `conductor/workflow.md`)
 - **ALWAYS web-search before implementing** unfamiliar libraries, APIs, or patterns
 - **NEVER assume** library behavior — verify with official documentation
-- **Search first** when encountering: new npm packages, Python libraries, framework features, or external APIs
-- Use `librarian` agent for documentation lookup, `explore` agent for codebase patterns
+- **Search first** when encountering: new npm packages, Python libraries, framework features
+- Use `librarian` agent for docs, `explore` agent for codebase patterns
 
-### SWE Best Practices
-- **Write tests BEFORE or WITH code**, not after — TDD when appropriate
-- **Verify with diagnostics**: Run `lsp_diagnostics` before marking tasks complete
+### SWE Best Practices (per `conductor/workflow.md`)
+- **Write tests BEFORE or WITH code**, not after — TDD required
+- **Verify with diagnostics**: Run diagnostics before marking tasks complete
 - **Build & test**: Always run build/test commands after implementation
-- **Type safety first**: Never suppress type errors with `as any`, `@ts-ignore`
+- **Type safety first**: Never suppress errors with `as any`, `@ts-ignore`
 - **Error handling**: Never leave empty catch blocks `catch(e) {}`
 - **Minimal changes**: Fix bugs without refactoring unrelated code
 
-### Never Be Lazy
-- **Don't skip verification** — always run diagnostics, build, and tests
-- **Don't guess** — search for patterns, ask clarification questions when ambiguous
-- **Don't partial-ship** — task is complete ONLY when all criteria met
-- **Don't assume knowledge** — read the relevant code before modifying
-- **Don't skip tests** — verify functionality, not just compilation
+### Quality Gates (per `conductor/workflow.md`)
+Before marking any task complete, verify:
+- [ ] All tests pass
+- [ ] Code coverage >80%
+- [ ] Code follows style guides in `conductor/code_styleguides/`
+- [ ] Public functions documented (docstrings/JSDoc)
+- [ ] Type safety enforced
+- [ ] No linting errors
+- [ ] Documentation updated if needed
 
-### Certainty Before Conclusion
-- **NEVER declare complete** without 100% confidence
-- **Verify every requirement** from the original request is addressed
-- **Check for regressions**: Run relevant tests before claiming fix
-- **Run diagnostics**: Ensure no new errors introduced
-- **If uncertain, ask**: Better to clarify than ship broken code
+### Task Workflow (per `conductor/workflow.md`)
+1. **Read specs**: Check `conductor/product.md`, `conductor/tech-stack.md`, relevant style guides
+2. **Select task**: Choose next task from `plan.md`
+3. **Mark in progress**: Change `[ ]` to `[~]` in `plan.md`
+4. **Red phase**: Write failing tests first
+5. **Green phase**: Implement to pass tests
+6. **Refactor**: Improve clarity with passing tests as safety net
+7. **Verify coverage**: >80% for new code
+8. **Document deviations**: If implementation differs from stack, STOP and update `tech-stack.md`
+9. **Commit**: Clear message per `conductor/workflow.md` commit format
 
-### Productivity & Intelligence
-- **Parallel execution**: Use background agents for independent tasks (explore, librarian, document-writer)
-- **Delegate visual work**: Always use `frontend-ui-ux-engineer` agent for styling/layout changes
-- **Consult Oracle** for: architecture decisions, 2+ failed fix attempts, complex debugging
-- **Use todo tracking**: Mark in_progress → completed in real-time
-- **Batch small tasks**: Group related edits, run diagnostics once
-- **Think before code**: Understand the problem, then implement
-- **Learn from failures**: Document what failed, consult Oracle after 3 attempts
+### Definition of Done (per `conductor/workflow.md`)
+A task is complete when:
+1. All code implemented to specification
+2. Unit tests written and passing (>80% coverage)
+3. Documentation complete
+4. Code passes linting/static analysis
+5. Works on mobile (if applicable)
+6. Implementation notes added to `plan.md`
+7. Changes committed with proper message
 
 ### Delegation Guidelines
 | Domain | Delegate To | When |
@@ -189,27 +195,16 @@ from server.database.persistence import session_manager
 | Hard debugging | `oracle` | After 2+ failed fix attempts |
 
 ### Use Sub-Agents to Extend Sessions
-- **Use suitable and available sub-agents whenever possible** to extend the current session by conserving the context window
-- Sub-agents are crucial for **long-running tasks** that involve multiple files, complex exploration, or extensive modifications
-- Launching sub-agents allows:
-  - Fresh context windows for each subtask
-  - Parallel execution of independent operations
-  - Better focus on specific domains (visual, documentation, debugging)
-- Delegate appropriately using the guidelines above — don't try to handle everything in a single session
-
-### Evidence Requirements
-Task is NOT complete without:
-- [ ] `lsp_diagnostics` clean on changed files
-- [ ] Build passes (if applicable)
-- [ ] Tests pass (or explicit note of pre-existing failures)
-- [ ] User's original request fully addressed
+- Use suitable sub-agents to conserve context window
+- Launch sub-agents for: long-running tasks, multi-file changes, complex exploration
+- Benefits: Fresh context per subtask, parallel execution, domain focus
 
 ### File Header Requirements
-**MANDATORY for every code file created or updated:**
+**MANDATORY** for `.ts`, `.tsx`, `.py`, `.pyi`, `.js`, `.jsx`:
 
 ```typescript
 // {FILE_NAME}
-// {Brief 1-line description of what this file does}
+// {Brief 1-line description}
 
 // Longer description (2-4 lines):
 // - What problem does this solve?
@@ -220,43 +215,37 @@ Task is NOT complete without:
 // @note: {Important caveats or gotchas}
 ```
 
-**Example (TypeScript):**
-```typescript
-// api.ts
-// Axios client configuration with interceptors for auth and error handling
-
-// Configures base URL, timeout (5min for document processing),
-// and adds auth token to all requests. Error interceptor logs
-// and rejects promises for consistent error handling across app.
-
-// @see: types/api.ts - Type definitions for API responses
-// @note: Always use 127.0.0.1, never localhost (IPv6 issues)
-```
-
-**Example (Python):**
-```python
-# rag_engine.py
-# Hybrid RAG engine combining vector search and graph traversal
-
-# Implements query analysis to determine intent (factual/conceptual),
-# performs hybrid search (vector + graph), and synthesizes responses
-# using retrieved context. Supports configurable similarity thresholds.
-
-# @see: schemas/query.py - Query schema definitions
-# @note: 2-hop graph traversal limits may need tuning for large graphs
-```
-
 **Enforcement:**
-- File headers are REQUIRED for: `.ts`, `.tsx`, `.py`, `.pyi`, `.js`, `.jsx`
-- Existing files without headers: Add when modifying significantly (>30% changes)
 - New files: ALWAYS add header before first write
-- Configuration files (tsconfig.json, pyproject.toml): Optional but encouraged
+- Existing files: Add header when modifying >30%
+- Config files: Optional but encouraged
 
-## Cursor/Copilot rules
-- No `.cursor/rules`, `.cursorrules`, or `.github/copilot-instructions.md` files found in this repo
+## Product Context
+
+### Visual Identity (per `conductor/product-guidelines.md`)
+- **Cyber Yellow (`#FFD400`)**: Primary actions, accents, brand
+- **Dark Backgrounds**: Deep grays/blacks for reduced eye strain
+- **Typography**: Inter (UI), JetBrains Mono (code)
+- **Glassmorphism**: Light usage for cards/panels
+- **Rounded Corners**: 8px-12px consistently
+
+### UX Principles (per `conductor/product-guidelines.md`)
+- **Minimalism**: Remove UI elements not contributing to chat/session management
+- **Persistence**: Instant session switching, preserved draft content
+- **Clarity**: Distinct visual cues for model states (thinking, generating, error)
+- **Responsiveness**: Sidebar toggle on smaller viewports
+
+### Component Standards (per `conductor/product-guidelines.md`)
+- **Message Bubbles**: User (distinct bg, right-aligned), AI (subtle bg, left-aligned, Markdown)
+- **Input Area**: Auto-expanding textarea, Cyber Yellow send button, model toggles
+- **Session Sidebar**: Clean list with active indicators, "New Session" button, rename/delete menus
 
 ## References
-- `conductor/code_styleguides/general.md`
-- `conductor/code_styleguides/html-css.md`
-- `conductor/code_styleguides/python.md`
-- `conductor/code_styleguides/typescript.md`
+- `conductor/product.md` - Product vision and architecture
+- `conductor/product-guidelines.md` - UI/UX standards
+- `conductor/tech-stack.md` - Technology specifications
+- `conductor/workflow.md` - Development workflow and quality gates
+- `conductor/code_styleguides/general.md` - General principles
+- `conductor/code_styleguides/typescript.md` - TypeScript/React rules
+- `conductor/code_styleguides/python.md` - Python/FastAPI rules
+- `conductor/code_styleguides/html-css.md` - HTML/CSS rules

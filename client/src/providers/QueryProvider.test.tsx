@@ -7,7 +7,7 @@ const ClientChecker = () => {
     try {
         const client = useQueryClient();
         return <div>Client exists: {client ? 'true' : 'false'}</div>;
-    } catch (e) {
+    } catch {
         return <div>Client exists: false</div>;
     }
 };

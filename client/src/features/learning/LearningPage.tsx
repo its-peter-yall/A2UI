@@ -25,8 +25,7 @@ import { cn } from '@/lib/utils';
 export function LearningPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
-  const [showCompletion, setShowCompletion] = useState(false);
-  const [hasShownCompletion, setHasShownCompletion] = useState(false);
+  const [dismissedSessionId, setDismissedSessionId] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
@@ -55,24 +54,20 @@ export function LearningPage() {
     session.nodes.length > 0 &&
     session.nodes.every((n) => n.status === 'COMPLETED');
 
-  // Show completion celebration (only once per session)
-  useEffect(() => {
-    if (isComplete && !hasShownCompletion) {
-      // Save current focus for restoration
-      previousFocusRef.current = document.activeElement as HTMLElement;
-      setShowCompletion(true);
-      setHasShownCompletion(true);
-    }
-  }, [isComplete, hasShownCompletion]);
+  const showCompletion = Boolean(
+    sessionId && isComplete && dismissedSessionId !== sessionId
+  );
 
   // Focus management for modal
   useEffect(() => {
     if (showCompletion && modalRef.current) {
-      // Focus the modal when it opens
+      if (!previousFocusRef.current) {
+        previousFocusRef.current = document.activeElement as HTMLElement;
+      }
       modalRef.current.focus();
     } else if (!showCompletion && previousFocusRef.current) {
-      // Restore focus when modal closes
       previousFocusRef.current.focus();
+      previousFocusRef.current = null;
     }
   }, [showCompletion]);
 
@@ -80,12 +75,12 @@ export function LearningPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && showCompletion) {
-        setShowCompletion(false);
+        setDismissedSessionId(sessionId ?? null);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showCompletion]);
+  }, [sessionId, showCompletion]);
 
   // Handle progress bar node click - scroll to node
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -101,8 +96,8 @@ export function LearningPage() {
   }, [prefersReducedMotion]);
 
   const closeCompletionModal = useCallback(() => {
-    setShowCompletion(false);
-  }, []);
+    setDismissedSessionId(sessionId ?? null);
+  }, [sessionId]);
 
   if (!sessionId) {
     return (

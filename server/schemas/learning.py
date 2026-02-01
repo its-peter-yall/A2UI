@@ -257,3 +257,63 @@ class QuizResult(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         description="Submission timestamp",
     )
+
+
+class QuizAttemptBase(BaseModel):
+    """Base fields for quiz attempts."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    node_id: str = Field(..., description="Concept node identifier")
+    selected_option_id: str = Field(
+        ...,
+        description="Selected option identifier (A, B, C, or D)",
+        pattern=r"^[A-D]$",
+    )
+
+
+class QuizAttemptCreate(QuizAttemptBase):
+    """Schema for creating a quiz attempt."""
+
+    pass
+
+
+class QuizAttemptResponse(ResponseBase, TimestampMixin, QuizAttemptBase):
+    """Response schema for quiz attempts with result details."""
+
+    attempt_number: int = Field(..., description="Attempt number (1-indexed)", ge=1)
+    is_correct: bool = Field(..., description="Whether the selected answer was correct")
+    score_percent: int = Field(
+        ...,
+        description="Score as percentage (0 or 100 for single-question quiz)",
+        ge=0,
+        le=100,
+    )
+    correct_option_id: str = Field(
+        ...,
+        description="The correct option identifier",
+        pattern=r"^[A-D]$",
+    )
+    explanation: str = Field(
+        ...,
+        description="Explanation for the selected answer",
+    )
+    is_mastered: bool = Field(
+        ...,
+        description="Whether 100% score was achieved (can proceed)",
+    )
+
+
+class QuizAttemptHistory(BaseModel):
+    """History of all quiz attempts for a node."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    node_id: str = Field(..., description="Concept node identifier")
+    total_attempts: int = Field(..., description="Total number of attempts", ge=0)
+    is_mastered: bool = Field(..., description="Whether quiz is mastered (100%)")
+    best_score: int = Field(..., description="Best score achieved", ge=0, le=100)
+    attempts: List[QuizAttemptResponse] = Field(
+        default_factory=list,
+        description="List of all attempts in order",
+    )

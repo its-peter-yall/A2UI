@@ -93,11 +93,11 @@ export const contentSwapVariants: Variants = {
 export const optionResultVariants: Variants = {
   initial: {
     scale: 1,
-    backgroundColor: 'var(--card)',
+    backgroundColor: 'hsl(var(--card))',
   },
   correct: {
     scale: 1.02,
-    backgroundColor: 'var(--success-bg)',
+    backgroundColor: 'hsl(142 71% 45% / 0.2)',
     transition: {
       duration: TIMING.normal,
       delay: 0.1,
@@ -105,7 +105,7 @@ export const optionResultVariants: Variants = {
   },
   incorrect: {
     scale: 0.98,
-    backgroundColor: 'var(--error-bg)',
+    backgroundColor: 'hsl(var(--destructive) / 0.2)',
     transition: {
       duration: TIMING.normal,
       delay: 0.1,
@@ -142,11 +142,11 @@ export const masteryCelebrationVariants: Variants = {
 export const progressStepVariants: Variants = {
   incomplete: {
     scale: 1,
-    backgroundColor: 'var(--muted)',
+    backgroundColor: 'hsl(var(--muted))',
   },
   complete: {
     scale: [1, 1.3, 1],
-    backgroundColor: 'var(--success)',
+    backgroundColor: 'hsl(142 71% 45%)',
     transition: {
       scale: {
         duration: TIMING.slow,

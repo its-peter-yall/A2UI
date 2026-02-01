@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api';
-import type { Message, LocalMessage } from '@/types/api';
+import type { LocalMessage } from '@/types/api';
 import { useState } from 'react';
 
 // Hardcoded for now, but should come from config
@@ -53,7 +53,7 @@ export function useChat(sessionId: string | null) {
 
             setLocalMessages([userMsg, loadingMsg]);
         },
-        onSuccess: (data) => {
+        onSuccess: () => {
             // Invalidate query to refetch real messages
             queryClient.invalidateQueries({ queryKey: ['messages', sessionId] });
             // Clear local messages

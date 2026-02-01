@@ -42,7 +42,8 @@ export function AnimatedCard({
   const isCelebrating =
     previousStatus === 'SHOWING_FEEDBACK' && status === 'COMPLETED';
 
-  const variants = prefersReducedMotion()
+  const shouldReduceMotion = prefersReducedMotion();
+  const variants = shouldReduceMotion
     ? reducedMotionVariants
     : isUnlocking
     ? unlockVariants
@@ -50,13 +51,17 @@ export function AnimatedCard({
     ? masteryCelebrationVariants
     : undefined;
 
-  const animate = isUnlocking
+  const animate = shouldReduceMotion
+    ? 'visible'
+    : isUnlocking
     ? 'unlocked'
     : isCelebrating
     ? 'celebrating'
     : 'visible';
 
-  const initial = isUnlocking
+  const initial = shouldReduceMotion
+    ? false
+    : isUnlocking
     ? 'locked'
     : isCelebrating
     ? 'initial'
@@ -89,16 +94,15 @@ export function ContentTransition({
   contentKey,
   children,
 }: ContentTransitionProps) {
-  const variants = prefersReducedMotion()
-    ? reducedMotionVariants
-    : contentSwapVariants;
+  const shouldReduceMotion = prefersReducedMotion();
+  const variants = shouldReduceMotion ? reducedMotionVariants : contentSwapVariants;
 
   return (
     <AnimatePresence mode="wait">
       <motion.div
         key={contentKey}
         variants={variants}
-        initial="enter"
+        initial={shouldReduceMotion ? false : 'enter'}
         animate="visible"
         exit="exit"
       >
@@ -147,9 +151,9 @@ export function UnlockPulse({ isUnlocking, children }: UnlockPulseProps) {
         isUnlocking
           ? {
               boxShadow: [
-                '0 0 0 0 rgba(var(--primary-rgb), 0)',
-                '0 0 20px 4px rgba(var(--primary-rgb), 0.4)',
-                '0 0 0 0 rgba(var(--primary-rgb), 0)',
+                '0 0 0 0 hsl(var(--primary) / 0)',
+                '0 0 20px 4px hsl(var(--primary) / 0.4)',
+                '0 0 0 0 hsl(var(--primary) / 0)',
               ],
             }
           : {}

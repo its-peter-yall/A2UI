@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useChat } from './useChat';
-import { QueryProvider } from '@/providers/QueryProvider';
-import React, { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import * as api from '@/lib/api';
+import type { LocalMessage, SendMessageResponse } from '@/types/api';
 
 // Mock API
 vi.mock('@/lib/api', async () => {
@@ -37,20 +37,36 @@ describe('useChat', () => {
     });
 
     it('should handle sending message', async () => {
-        const mockResponse = {
+        const assistantMsg: LocalMessage = {
+            id: '2',
+            role: 'assistant',
+            content: 'Hi there',
             session_id: 'session-1',
-            message: { id: '2', role: 'assistant', content: 'Hi there', session_id: 'session-1' },
-            thinking_content: undefined
+            timestamp: new Date().toISOString(),
         };
-        const userMsg = { id: '1', role: 'user', content: 'Hello', session_id: 'session-1' };
+        const mockResponse: SendMessageResponse = {
+            session_id: 'session-1',
+            message: assistantMsg,
+            thinking_content: undefined,
+        };
+        const userMsg: LocalMessage = {
+            id: '1',
+            role: 'user',
+            content: 'Hello',
+            session_id: 'session-1',
+            timestamp: new Date().toISOString(),
+        };
         
-        let sessionMessages: any[] = [];
+        let sessionMessages: LocalMessage[] = [];
         
-        (api.getSession as any).mockImplementation(async () => ({ messages: sessionMessages }));
+        const getSessionMock = api.getSession as ReturnType<typeof vi.fn>;
+        const sendMessageMock = api.sendMessage as ReturnType<typeof vi.fn>;
         
-        (api.sendMessage as any).mockImplementation(async () => {
+        getSessionMock.mockImplementation(async () => ({ messages: sessionMessages }));
+        
+        sendMessageMock.mockImplementation(async () => {
              // Simulate backend update (User msg + Assistant msg)
-             sessionMessages = [userMsg, mockResponse.message];
+             sessionMessages = [userMsg, assistantMsg];
              return mockResponse;
         });
 

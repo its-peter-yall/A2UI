@@ -11,11 +11,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Type, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from server.utils.instructor_client import instructor_client
 
@@ -96,20 +97,33 @@ class BaseAgent(ABC):
         # Prepare messages
         messages = [{"role": "user", "content": user_message}]
 
-        try:
-            response = await instructor_client.create_structured(
-                role=self._role,
-                response_model=response_model,
-                messages=messages,
-                system_prompt=full_system_prompt,
-                **kwargs,
-            )
-            logger.info(f"{self.__class__.__name__} generated structured response")
-            return response
-
-        except Exception as e:
-            logger.error(f"{self.__class__.__name__} generation failed: {e}")
-            raise
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            try:
+                response = await instructor_client.create_structured(
+                    role=self._role,
+                    response_model=response_model,
+                    messages=messages,
+                    system_prompt=full_system_prompt,
+                    **kwargs,
+                )
+                logger.info(f"{self.__class__.__name__} generated structured response")
+                return response
+            except ValidationError as e:
+                if attempt == max_attempts:
+                    logger.error(
+                        f"{self.__class__.__name__} validation failed after "
+                        f"retries: {e}"
+                    )
+                    raise
+                logger.warning(
+                    f"{self.__class__.__name__} validation failed "
+                    f"(attempt {attempt}); retrying"
+                )
+                await asyncio.sleep(0.5 * attempt)
+            except Exception as e:
+                logger.error(f"{self.__class__.__name__} generation failed: {e}")
+                raise
 
     def _build_system_prompt(self, context: Optional[dict[str, Any]] = None) -> str:
         """

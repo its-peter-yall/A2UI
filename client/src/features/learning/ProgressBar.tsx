@@ -14,7 +14,6 @@
 // - Screen reader announcements for progress changes
 // - Visual contrast ratios maintained for all states
 
-import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { ConceptNode, NodeStatus } from '@/types/learning';
 import { motion } from 'framer-motion';
@@ -27,17 +26,6 @@ interface ProgressBarProps {
   className?: string;
 }
 
-/**
- * Hook to store previous value of a prop or state.
- */
-function usePrevious<T>(value: T): T | undefined {
-  const ref = useRef<T | undefined>(undefined);
-  useEffect(() => {
-    ref.current = value;
-  }, [value]);
-  return ref.current;
-}
-
 export function ProgressBar({
   nodes,
   currentNodeId,
@@ -46,13 +34,6 @@ export function ProgressBar({
 }: ProgressBarProps) {
   const completedCount = nodes.filter((n) => n.status === 'COMPLETED').length;
   const progressPercent = nodes.length > 0 ? (completedCount / nodes.length) * 100 : 0;
-
-  // Track previous statuses to detect "just completed" moments
-  const previousNodes = usePrevious(nodes);
-  const previousStatuses = previousNodes?.reduce((acc, node) => {
-    acc[node.id] = node.status;
-    return acc;
-  }, {} as Record<string, NodeStatus>);
 
   return (
     <div className={cn('w-full', className)}>
@@ -93,10 +74,7 @@ export function ProgressBar({
             const isCurrent = node.id === currentNodeId;
             const isLocked = node.status === 'LOCKED';
             const canClick = !isLocked && onNodeClick;
-            
-            const justCompleted = 
-              node.status === 'COMPLETED' && 
-              previousStatuses?.[node.id] !== 'COMPLETED';
+            const isCompleted = node.status === 'COMPLETED';
 
             return (
               <li key={node.id} className="flex-1">
@@ -114,7 +92,7 @@ export function ProgressBar({
                   title={`${node.title} (${formatStatus(node.status)})`}
                   variants={progressStepVariants}
                   initial="incomplete"
-                  animate={justCompleted ? 'complete' : node.status === 'COMPLETED' ? 'complete' : 'incomplete'}
+                  animate={isCompleted ? 'complete' : 'incomplete'}
                   className={cn(
                     'w-full h-2 rounded-full transition-colors duration-200',
                     getStepColor(node.status),

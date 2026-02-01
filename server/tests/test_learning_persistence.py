@@ -284,3 +284,178 @@ class TestLearningManager(unittest.TestCase):
             self.assertEqual(cursor.fetchone()[0], 0)
         finally:
             conn.close()
+
+
+class TestQuizAttempts(unittest.TestCase):
+    """Tests for quiz attempt tracking and mastery functionality."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_node_with_quiz(self) -> str:
+        """Helper to create a session with a node that has a quiz."""
+        session = self.manager.create_learning_session(
+            query="Test query", course_title="Test Course", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Test Node",
+            content_markdown="Test content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+        return node["id"]
+
+    def test_create_quiz_attempt_correct_answer(self) -> None:
+        """Recording a correct answer should return is_correct=True and is_mastered=True."""
+        node_id = self._create_node_with_quiz()
+        result = self.manager.create_quiz_attempt(node_id, "A")  # A is correct
+
+        self.assertEqual(result["node_id"], node_id)
+        self.assertEqual(result["attempt_number"], 1)
+        self.assertEqual(result["selected_option_id"], "A")
+        self.assertTrue(result["is_correct"])
+        self.assertEqual(result["score_percent"], 100)
+        self.assertEqual(result["correct_option_id"], "A")
+        self.assertTrue(result["is_mastered"])
+        self.assertIn("2 + 2 equals 4", result["explanation"])
+
+    def test_create_quiz_attempt_incorrect_answer(self) -> None:
+        """Recording an incorrect answer should return is_correct=False and is_mastered=False."""
+        node_id = self._create_node_with_quiz()
+        result = self.manager.create_quiz_attempt(node_id, "B")  # B is incorrect
+
+        self.assertEqual(result["attempt_number"], 1)
+        self.assertEqual(result["selected_option_id"], "B")
+        self.assertFalse(result["is_correct"])
+        self.assertEqual(result["score_percent"], 0)
+        self.assertEqual(result["correct_option_id"], "A")
+        self.assertFalse(result["is_mastered"])
+        self.assertIn("does not equal 5", result["explanation"])
+
+    def test_create_quiz_attempt_invalid_option(self) -> None:
+        """Submitting an invalid option ID should raise ValueError."""
+        node_id = self._create_node_with_quiz()
+        with self.assertRaises(ValueError) as ctx:
+            self.manager.create_quiz_attempt(node_id, "Z")
+        self.assertIn("Invalid option id", str(ctx.exception))
+
+    def test_create_quiz_attempt_no_quiz(self) -> None:
+        """Submitting to a node without a quiz should raise ValueError."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="No Quiz Node",
+            content_markdown="Content",
+            status=NodeStatus.VIEWING_EXPLANATION,
+            quiz=None,
+        )
+        with self.assertRaises(ValueError) as ctx:
+            self.manager.create_quiz_attempt(node["id"], "A")
+        self.assertIn("No quiz found", str(ctx.exception))
+
+    def test_create_multiple_attempts_increments_number(self) -> None:
+        """Multiple attempts should have incrementing attempt numbers."""
+        node_id = self._create_node_with_quiz()
+
+        result1 = self.manager.create_quiz_attempt(node_id, "B")  # wrong
+        result2 = self.manager.create_quiz_attempt(node_id, "C")  # wrong
+        result3 = self.manager.create_quiz_attempt(node_id, "A")  # correct
+
+        self.assertEqual(result1["attempt_number"], 1)
+        self.assertEqual(result2["attempt_number"], 2)
+        self.assertEqual(result3["attempt_number"], 3)
+
+    def test_get_quiz_attempts_empty(self) -> None:
+        """Getting attempts for a node with no attempts should return empty list."""
+        node_id = self._create_node_with_quiz()
+        history = self.manager.get_quiz_attempts(node_id)
+
+        self.assertEqual(history["node_id"], node_id)
+        self.assertEqual(history["total_attempts"], 0)
+        self.assertFalse(history["is_mastered"])
+        self.assertEqual(history["best_score"], 0)
+        self.assertEqual(history["attempts"], [])
+
+    def test_get_quiz_attempts_multiple(self) -> None:
+        """Getting attempts should return all attempts in order with correct stats."""
+        node_id = self._create_node_with_quiz()
+
+        self.manager.create_quiz_attempt(node_id, "B")  # wrong - 0%
+        self.manager.create_quiz_attempt(node_id, "C")  # wrong - 0%
+        self.manager.create_quiz_attempt(node_id, "A")  # correct - 100%
+
+        history = self.manager.get_quiz_attempts(node_id)
+
+        self.assertEqual(history["total_attempts"], 3)
+        self.assertTrue(history["is_mastered"])
+        self.assertEqual(history["best_score"], 100)
+        self.assertEqual(len(history["attempts"]), 3)
+
+        # Verify order
+        self.assertEqual(history["attempts"][0]["attempt_number"], 1)
+        self.assertEqual(history["attempts"][1]["attempt_number"], 2)
+        self.assertEqual(history["attempts"][2]["attempt_number"], 3)
+
+        # Verify correctness
+        self.assertFalse(history["attempts"][0]["is_correct"])
+        self.assertFalse(history["attempts"][1]["is_correct"])
+        self.assertTrue(history["attempts"][2]["is_correct"])
+
+    def test_check_mastery_not_mastered(self) -> None:
+        """check_mastery should return False when no attempt scored 100%."""
+        node_id = self._create_node_with_quiz()
+
+        # No attempts yet
+        self.assertFalse(self.manager.check_mastery(node_id))
+
+        # Wrong attempt
+        self.manager.create_quiz_attempt(node_id, "B")
+        self.assertFalse(self.manager.check_mastery(node_id))
+
+    def test_check_mastery_mastered(self) -> None:
+        """check_mastery should return True after a correct attempt."""
+        node_id = self._create_node_with_quiz()
+
+        self.manager.create_quiz_attempt(node_id, "B")  # wrong
+        self.assertFalse(self.manager.check_mastery(node_id))
+
+        self.manager.create_quiz_attempt(node_id, "A")  # correct
+        self.assertTrue(self.manager.check_mastery(node_id))
+
+    def test_quiz_attempts_cascade_delete(self) -> None:
+        """Quiz attempts should be deleted when the node is deleted."""
+        node_id = self._create_node_with_quiz()
+        self.manager.create_quiz_attempt(node_id, "A")
+        self.manager.create_quiz_attempt(node_id, "B")
+
+        # Verify attempts exist
+        history = self.manager.get_quiz_attempts(node_id)
+        self.assertEqual(history["total_attempts"], 2)
+
+        # Delete the node via session deletion
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM concept_nodes WHERE id = ?", (node_id,))
+            conn.commit()
+
+            # Verify attempts are gone
+            cursor.execute(
+                "SELECT COUNT(*) FROM quiz_attempts WHERE node_id = ?",
+                (node_id,),
+            )
+            self.assertEqual(cursor.fetchone()[0], 0)
+        finally:
+            conn.close()

@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import type { ConceptNode, NodeStatus, QuizSubmitResponse } from '@/types/learning';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { QuizFeedback } from './QuizFeedback';
+import { useQuizFeedback } from './useQuizFeedback';
 import {
   AnimatedCard,
   ContentTransition,
@@ -29,6 +30,9 @@ interface ConceptCardProps {
   onRetryQuiz?: (nodeId: string) => void;
   onContinueToNext?: (nodeId: string) => void;
   onRegenerate?: (nodeId: string) => void;
+  onSkipNode?: (nodeId: string) => void;
+  isRegenerating?: boolean;
+  canSkip?: boolean;
 }
 
 export function ConceptCard({
@@ -39,6 +43,9 @@ export function ConceptCard({
   onRetryQuiz,
   onContinueToNext,
   onRegenerate,
+  onSkipNode,
+  isRegenerating = false,
+  canSkip = false,
   quizResult,
 }: ConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -57,6 +64,14 @@ export function ConceptCard({
   const isUnlocking =
     previousStatus === 'LOCKED' && node.status === 'VIEWING_EXPLANATION';
 
+  const { result: feedbackResult, attemptCount } = useQuizFeedback({
+    nodeId: node.id,
+    latestResult: quizResult,
+    enabled: node.status === 'SHOWING_FEEDBACK',
+    quiz: node.quiz,
+    nodeStatus: node.status,
+  });
+
   // Status-based styling
   const statusStyles: Record<NodeStatus, string> = {
     LOCKED: 'opacity-50 bg-muted cursor-not-allowed',
@@ -74,7 +89,7 @@ export function ConceptCard({
     IN_QUIZ: '❓',
     SHOWING_FEEDBACK: '📊',
     COMPLETED: '✅',
-    ERROR: '⚠️',
+    ERROR: '!',
   };
 
   const handleProceedToQuiz = () => {
@@ -193,14 +208,14 @@ export function ConceptCard({
                 </div>
               )}
 
-              {node.status === 'SHOWING_FEEDBACK' && node.quiz && quizResult && (
+              {node.status === 'SHOWING_FEEDBACK' && node.quiz && feedbackResult && (
                 <QuizFeedback
                   quiz={node.quiz}
-                  result={quizResult}
-                  attemptCount={quizResult.attempt_number}
+                  result={feedbackResult}
+                  attemptCount={attemptCount}
                   onRetry={handleRetry}
                   onContinue={
-                    quizResult.next_node_unlocked
+                    feedbackResult.next_node_unlocked
                       ? () => onContinueToNext?.(node.id)
                       : undefined
                   }
@@ -228,16 +243,48 @@ export function ConceptCard({
               {/* ERROR state */}
               {node.status === 'ERROR' && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-destructive">
-                    <span className="text-xl">⚠️</span>
-                    <span className="font-medium">Failed to generate content</span>
+                  <div className="flex items-start gap-3 text-destructive">
+                    <span className="text-2xl">!</span>
+                    <div>
+                      <span className="font-medium">Content generation failed</span>
+                      <p className="text-sm text-muted-foreground">
+                        This topic couldn't be generated. You can retry or skip
+                        to continue.
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => onRegenerate?.(node.id)}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                  >
-                    Retry Generation
-                  </button>
+                  {node.error_message && (
+                    <p className="text-xs text-muted-foreground">
+                      {node.error_message}
+                    </p>
+                  )}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => onRegenerate?.(node.id)}
+                      disabled={isRegenerating}
+                      className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    >
+                      {isRegenerating ? 'Regenerating...' : 'Retry Generation'}
+                    </button>
+                    {canSkip && (
+                      <button
+                        onClick={() => onSkipNode?.(node.id)}
+                        className="px-4 py-2 border rounded-md hover:bg-muted transition-colors"
+                      >
+                        Skip for Now
+                      </button>
+                    )}
+                  </div>
+                  {node.content_markdown && (
+                    <details className="mt-4">
+                      <summary className="cursor-pointer text-sm text-muted-foreground">
+                        Show partial content (may be incomplete)
+                      </summary>
+                      <div className="mt-2 p-4 bg-muted/50 rounded border border-dashed">
+                        <MarkdownRenderer content={node.content_markdown} />
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
             </div>

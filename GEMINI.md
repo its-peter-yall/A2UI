@@ -6,22 +6,20 @@
 
 ## Project Overview
 
-AgUI is a FastAPI backend with a React + TypeScript frontend. The backend
-integrates with Vertex AI (Gemini) to generate chat responses.
+AgUI is a standalone "Pure Chat" application — a lightweight counterpart to AURA-CHAT that explicitly excludes RAG and Knowledge Graph functionality. It provides a React frontend with session sidebar and chat interface, backed by a FastAPI server for session persistence and direct Vertex AI (Gemini) integration.
 
-## Vertex AI Configuration
+## Quick Reference
 
-Env vars are defined in `server/.env.example`:
+### Vertex AI Configuration (from `server/.env.example`)
 ```bash
 PROJECT_ID=your-project-id-here
 GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
 LOCATION=us-central1
 ```
 
-Default model is `gemini-2.0-flash-001` (see `server/schemas/chat.py`).
+Default model: `gemini-2.0-flash-001` (see `server/schemas/chat.py`)
 
-## Key Files
-
+### Key Files
 | Component | Path |
 |-----------|------|
 | Vertex client | `server/utils/vertex_client.py` |
@@ -34,131 +32,135 @@ Default model is `gemini-2.0-flash-001` (see `server/schemas/chat.py`).
 | Query provider | `client/src/providers/QueryProvider.tsx` |
 | Chat feature | `client/src/features/chat/` |
 
-**See also**: `AGENTS.md` for comprehensive project documentation, build commands, and code style guidelines.
-
-## Development
+### Dev Commands
 ```bash
-cd AgUI/client
-npm run dev
-```
-```bash
-cd AgUI/server
-python -m uvicorn server.main:app --reload --port 8000
+cd AgUI/client && npm run dev
+cd AgUI/server && python -m uvicorn server.main:app --reload --port 8000
 ```
 
-## Notes
+### Tech Stack (from `conductor/tech-stack.md`)
+- **Frontend:** React 19, Vite, Tailwind 4.x, TanStack Query v5, Axios
+- **Backend:** FastAPI, Uvicorn, Google Vertex AI SDK (`google-cloud-aiplatform`), Pydantic v2
+- **Persistence:** SQLite (local file-based)
+- **Default Model:** `gemini-2.0-flash-001`
+
+### Notes
 - Client base URL uses `VITE_API_URL` with fallback `http://localhost:8000`
 - Server health endpoint exposes Vertex connection status at `/health`
 
-## AGENT BEHAVIOUR
+## Spec-Based Development
+
+**CRITICAL**: Always reference these conductor/ specifications before implementing:
+
+1. **`conductor/product.md`** — Vision, purpose, target audience, core capabilities, technical architecture
+2. **`conductor/product-guidelines.md`** — Visual identity (Cyber Yellow #FFD400), UX principles, component standards
+3. **`conductor/tech-stack.md`** — Technology stack and development tools
+4. **`conductor/workflow.md`** — TDD workflow, quality gates, commit guidelines
+5. **`conductor/code_styleguides/`** — Language-specific style rules (TS, Python, HTML/CSS)
+
+## Agent Behaviour
 
 ### Research-First Principle
 - **ALWAYS web-search before implementing** unfamiliar libraries, APIs, or patterns
 - **NEVER assume** library behavior — verify with official documentation
-- **Search first** when encountering: new npm packages, Python libraries, framework features, or external APIs
-- Use `librarian` agent for documentation lookup, `explore` agent for codebase patterns
 
-### SWE Best Practices
-- **Write tests BEFORE or WITH code**, not after — TDD when appropriate
-- **Verify with diagnostics**: Run `lsp_diagnostics` before marking tasks complete
-- **Build & test**: Always run build/test commands after implementation
-- **Type safety first**: Never suppress type errors with `as any`, `@ts-ignore`
-- **Error handling**: Never leave empty catch blocks `catch(e) {}`
-- **Minimal changes**: Fix bugs without refactoring unrelated code
+### TDD Workflow (per `conductor/workflow.md`)
+1. Write failing tests (Red phase)
+2. Implement to pass tests (Green phase)
+3. Refactor with passing tests as safety net
+4. Verify >80% coverage
 
-### Never Be Lazy
-- **Don't skip verification** — always run diagnostics, build, and tests
-- **Don't guess** — search for patterns, ask clarification questions when ambiguous
-- **Don't partial-ship** — task is complete ONLY when all criteria met
-- **Don't assume knowledge** — read the relevant code before modifying
-- **Don't skip tests** — verify functionality, not just compilation
-
-### Certainty Before Conclusion
-- **NEVER declare complete** without 100% confidence
-- **Verify every requirement** from the original request is addressed
-- **Check for regressions**: Run relevant tests before claiming fix
-- **Run diagnostics**: Ensure no new errors introduced
-- **If uncertain, ask**: Better to clarify than ship broken code
-
-### Productivity & Intelligence
-- **Parallel execution**: Use background agents for independent tasks (explore, librarian, document-writer)
-- **Delegate visual work**: Always use `frontend-ui-ux-engineer` agent for styling/layout changes
-- **Consult Oracle** for: architecture decisions, 2+ failed fix attempts, complex debugging
-- **Use todo tracking**: Mark in_progress → completed in real-time
-- **Batch small tasks**: Group related edits, run diagnostics once
-- **Think before code**: Understand the problem, then implement
-- **Learn from failures**: Document what failed, consult Oracle after 3 attempts
+### Quality Gates (per `conductor/workflow.md`)
+- All tests pass
+- Coverage >80%
+- Follows style guides in `conductor/code_styleguides/`
+- Type safety enforced
+- No linting errors
 
 ### Delegation Guidelines
 | Domain | Delegate To | When |
 |--------|-------------|------|
-| Visual/UI changes | `frontend-ui-ux-engineer` | Styling, layout, animations |
+| Visual/UI | `frontend-ui-ux-engineer` | Styling, layout, animations |
 | External docs | `librarian` | Library API, official docs |
 | Codebase patterns | `explore` | Finding existing implementations |
-| Architecture review | `oracle` | Multi-system tradeoffs, design |
-| Documentation | `document-writer` | READMEs, guides, AGENTS.md |
-| Hard debugging | `oracle` | After 2+ failed fix attempts |
-
-### Use Sub-Agents to Extend Sessions
-- **Use suitable and available sub-agents whenever possible** to extend the current session by conserving the context window
-- Sub-agents are crucial for **long-running tasks** that involve multiple files, complex exploration, or extensive modifications
-- Launching sub-agents allows:
-  - Fresh context windows for each subtask
-  - Parallel execution of independent operations
-  - Better focus on specific domains (visual, documentation, debugging)
-- Delegate appropriately using the guidelines above — don't try to handle everything in a single session
+| Architecture | `oracle` | Multi-system tradeoffs |
+| Documentation | `document-writer` | READMEs, guides |
+| Hard debugging | `oracle` | After 2+ failed attempts |
 
 ### Evidence Requirements
-Task is NOT complete without:
-- [ ] `lsp_diagnostics` clean on changed files
-- [ ] Build passes (if applicable)
-- [ ] Tests pass (or explicit note of pre-existing failures)
-- [ ] User's original request fully addressed
+Task complete only when:
+- [ ] `lsp_diagnostics` clean
+- [ ] Build passes
+- [ ] Tests pass
+- [ ] Coverage >80%
+- [ ] User request fully addressed
 
-### File Header Requirements
-**MANDATORY for every code file created or updated:**
-
+### File Headers (Required)
 ```typescript
 // {FILE_NAME}
-// {Brief 1-line description of what this file does}
+// {Brief 1-line description}
 
-// Longer description (2-4 lines):
-// - What problem does this solve?
-// - What are the key functions/classes?
-// - Any important context for future maintainers
+// What problem does this solve?
+// Key functions/classes?
+// Context for future maintainers?
 
 // @see: {Related files}
-// @note: {Important caveats or gotchas}
+// @note: {Caveats or gotchas}
 ```
 
-**Example (TypeScript):**
-```typescript
-// api.ts
-// Axios client configuration with interceptors for auth and error handling
+## Code Style Quick Ref
 
-// Configures base URL, timeout (5min for document processing),
-// and adds auth token to all requests. Error interceptor logs
-// and rejects promises for consistent error handling across app.
+### TypeScript (from `conductor/code_styleguides/typescript.md`)
+- `const` by default; never `var`
+- Named exports preferred
+- Single quotes; explicit semicolons
+- Avoid `any`, `as`, non-null assertions
+- `UpperCamelCase` components/types
 
-// @see: types/api.ts - Type definitions for API responses
-// @note: Always use 127.0.0.1, never localhost (IPv6 issues)
-```
+### Python (from `conductor/code_styleguides/python.md`)
+- 4-space indent, 80-char lines
+- `snake_case` functions, `PascalCase` classes
+- Docstrings: summary + Args/Returns/Raises
+- No mutable default args
+- Type hints for public APIs
 
-**Example (Python):**
-```python
-# rag_engine.py
-# Hybrid RAG engine combining vector search and graph traversal
+### HTML/CSS (from `conductor/code_styleguides/html-css.md`)
+- 2-space indent, lowercase
+- Class selectors preferred
+- Alphabetize CSS declarations
+- Use `cn()` from `client/src/lib/utils.ts` for Tailwind merging
 
-# Implements query analysis to determine intent (factual/conceptual),
-# performs hybrid search (vector + graph), and synthesizes responses
-# using retrieved context. Supports configurable similarity thresholds.
+## Product Guidelines (from `conductor/product-guidelines.md`)
 
-# @see: schemas/query.py - Query schema definitions
-# @note: 2-hop graph traversal limits may need tuning for large graphs
-```
+### Visual Identity
+- **Cyber Yellow (`#FFD400`)**: Primary actions, accents
+- **Dark Backgrounds**: Deep grays/blacks
+- **Typography**: Inter (UI), JetBrains Mono (code)
+- **Rounding**: 8px-12px consistently
 
-**Enforcement:**
-- File headers are REQUIRED for: `.ts`, `.tsx`, `.py`, `.pyi`, `.js`, `.jsx`
-- Existing files without headers: Add when modifying significantly (>30% changes)
-- New files: ALWAYS add header before first write
-- Configuration files (tsconfig.json, pyproject.toml): Optional but encouraged
+### UX Principles
+- Minimalism: Remove non-essential UI elements
+- Persistence: Instant session switching, draft preservation
+- Clarity: Visual cues for model states
+- Responsiveness: Sidebar toggle on mobile
+
+### Component Standards
+- **Message Bubbles**: User (distinct bg, right-aligned), AI (subtle bg, left-aligned, Markdown)
+- **Input Area**: Auto-expanding textarea, Cyber Yellow send button, model toggles
+- **Session Sidebar**: Clean list with active indicators, "New Session" button, rename/delete menus
+
+## Full Documentation
+
+**See `AGENTS.md`** for comprehensive documentation including:
+- Complete build, lint, and test commands
+- Detailed code style rules
+- Full workflow and quality gates
+- Testing requirements and conventions
+- Data model notes
+
+**See conductor/ specifications for:**
+- Product vision (`conductor/product.md`)
+- UI/UX standards (`conductor/product-guidelines.md`)
+- Tech stack details (`conductor/tech-stack.md`)
+- Development workflow (`conductor/workflow.md`)
+- Language style guides (`conductor/code_styleguides/`)

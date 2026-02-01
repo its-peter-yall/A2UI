@@ -74,6 +74,8 @@ function createMockNode(overrides: Partial<ConceptNode> = {}): ConceptNode {
     title: 'Test Topic',
     content_markdown: '# Test content',
     status: 'VIEWING_EXPLANATION',
+    error_message: null,
+    retry_available: false,
     quiz: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

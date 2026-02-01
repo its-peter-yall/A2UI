@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useChat } from './useChat';
 import { InputArea } from './InputArea';
 import { SessionSidebar } from '@/components/SessionSidebar';
@@ -9,32 +10,20 @@ import * as api from '@/lib/api';
 import type { Session } from '@/types/api';
 
 export function ChatPage() {
+    const queryClient = useQueryClient();
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-    const [sessions, setSessions] = useState<Session[]>([]);
     const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
     const [sessionToRename, setSessionToRename] = useState<Session | null>(null);
     const [isCreatingSession, setIsCreatingSession] = useState(false);
 
     // Chat Logic
-    const { messages, isLoading: isChatLoading, sendMessage, isSending } = useChat(currentSessionId);
+    const { messages, sendMessage, isSending } = useChat(currentSessionId);
 
-    // Fetch Sessions (Simple approach for now, could be React Query)
-    const loadSessions = async () => {
-        try {
-            const data = await api.getSessions();
-            setSessions(data);
-            if (!currentSessionId && data.length > 0) {
-                // setCurrentSessionId(data[0].id); // Optional: Auto-select first
-            }
-        } catch (err) {
-            console.error("Failed to load sessions", err);
-        }
-    };
-
-    useEffect(() => {
-        loadSessions();
-    }, []);
+    const { data: sessions = [] } = useQuery({
+        queryKey: ['sessions'],
+        queryFn: api.getSessions,
+    });
 
     // Handlers
     const handleCreateSessionClick = () => {
@@ -45,8 +34,11 @@ export function ChatPage() {
 
     const handleCreateSessionWithName = async (title: string) => {
         try {
-            const newSession = await api.createSession({ title });
-            setSessions([newSession, ...sessions]);
+            const newSession = await api.createSession({ title, user_id: 'user' });
+            queryClient.setQueryData<Session[]>(['sessions'], (prev = []) => [
+                newSession,
+                ...prev,
+            ]);
             setCurrentSessionId(newSession.id);
             setIsRenameModalOpen(false);
             setIsCreatingSession(false);
@@ -58,7 +50,9 @@ export function ChatPage() {
     const handleDeleteSession = async (id: string) => {
         try {
             await api.deleteSession(id);
-            setSessions(sessions.filter(s => s.id !== id));
+            queryClient.setQueryData<Session[]>(['sessions'], (prev = []) =>
+                prev.filter((session) => session.id !== id)
+            );
             if (currentSessionId === id) {
                 setCurrentSessionId(null);
             }
@@ -75,7 +69,9 @@ export function ChatPage() {
         if (!sessionToRename) return;
         try {
             const updated = await api.updateSession(sessionToRename.id, title);
-            setSessions(sessions.map(s => s.id === updated.id ? updated : s));
+            queryClient.setQueryData<Session[]>(['sessions'], (prev = []) =>
+                prev.map((session) => (session.id === updated.id ? updated : session))
+            );
             setIsRenameModalOpen(false);
             setSessionToRename(null);
         } catch (err) {
@@ -86,7 +82,9 @@ export function ChatPage() {
     const handlePinSession = async (sessionId: string, isPinned: boolean) => {
         try {
             const updated = await api.pinSession(sessionId, isPinned);
-            setSessions(sessions.map(s => s.id === updated.id ? updated : s));
+            queryClient.setQueryData<Session[]>(['sessions'], (prev = []) =>
+                prev.map((session) => (session.id === updated.id ? updated : session))
+            );
         } catch (err) {
             console.error("Failed to pin session", err);
         }
