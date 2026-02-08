@@ -12,9 +12,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from server.utils.vertex_client import init_vertex, get_vertex_status
 from server.utils.instructor_client import instructor_client
-from server.database.persistence import session_manager
 from server.database.learning_persistence import learning_manager
-from server.routers import sessions_router, chat_router, learning_router
+from server.routers import learning_router
 import logging
 
 # Configure logging
@@ -32,8 +31,6 @@ async def lifespan(app: FastAPI):
 
     # Initialize database
     try:
-        session_manager.init_db()
-        logger.info("Database initialized successfully.")
         learning_manager.init_learning_tables()
         logger.info("Learning tables initialized successfully.")
     except Exception as e:
@@ -97,6 +94,4 @@ async def health():
 
 
 # Include routers
-app.include_router(sessions_router)
-app.include_router(chat_router)
 app.include_router(learning_router)

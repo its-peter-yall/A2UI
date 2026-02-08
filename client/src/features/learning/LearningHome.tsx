@@ -34,15 +34,6 @@ export function LearningHome() {
           </Link>
           <nav className="flex items-center gap-4" aria-label="Main navigation">
             <Link
-              to="/"
-              className={cn(
-                'text-sm text-muted-foreground hover:text-foreground transition-colors',
-                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1'
-              )}
-            >
-              Chat
-            </Link>
-            <Link
               to="/learn"
               className={cn(
                 'text-sm font-medium text-primary',

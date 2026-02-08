@@ -127,12 +127,8 @@ describe('LearningHome', () => {
     expect(screen.getByText('Mastery Required')).toBeInTheDocument();
   });
 
-  it('has navigation links to chat and learn', () => {
+  it('has navigation link to learn', () => {
     renderWithProviders(<LearningHome />, { route: '/learn' });
-    expect(screen.getByRole('link', { name: /chat/i })).toHaveAttribute(
-      'href',
-      '/'
-    );
     expect(screen.getByRole('link', { name: /learn/i })).toHaveAttribute(
       'href',
       '/learn'
@@ -370,10 +366,6 @@ describe('LearningPage', () => {
       expect(screen.getByRole('link', { name: /new topic/i })).toHaveAttribute(
         'href',
         '/learn'
-      );
-      expect(screen.getByRole('link', { name: /chat/i })).toHaveAttribute(
-        'href',
-        '/'
       );
     });
   });

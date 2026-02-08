@@ -144,15 +144,6 @@ export function LearningPage() {
               >
                 New Topic
               </Link>
-              <Link
-                to="/"
-                className={cn(
-                  'text-sm text-muted-foreground hover:text-foreground transition-colors',
-                  'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1'
-                )}
-              >
-                Chat
-              </Link>
             </nav>
           </div>
 

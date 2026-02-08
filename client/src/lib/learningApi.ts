@@ -8,7 +8,6 @@
 // @note: All endpoints require backend server running on port 8000
 
 import axios from 'axios';
-import { api } from './api';
 import type {
   ConceptNode,
   ConceptNodeWithVisibility,
@@ -21,14 +20,43 @@ import type {
   NodeStatus,
 } from '../types/learning';
 
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Standard API client
+const api = axios.create({
+  baseURL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000, // 30s timeout
+});
+
+// Response interceptor for consistent error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API Request Failed:', error.config?.url, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
+
 // Create a longer timeout client for course generation (can take 30-60s)
 const learningApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 120000, // 2 minutes for course generation
 });
+
+// Response interceptor for learning API
+learningApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('Learning API Request Failed:', error.config?.url, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 // --- Learning Session ---
 
