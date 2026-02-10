@@ -248,6 +248,18 @@ export function LearningPathContainer({
   // Keyboard navigation handler
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if user is typing in an input or textarea
+      const target = event.target as HTMLElement;
+      const isInput =
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+      
+      // Also ignore if modifier keys are pressed (e.g. Alt+Left for browser back)
+      if (isInput || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
         goToPrev();
