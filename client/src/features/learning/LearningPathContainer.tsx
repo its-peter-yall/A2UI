@@ -245,6 +245,22 @@ export function LearningPathContainer({
     goToSlide(carouselState.currentIndex - 1);
   }, [goToSlide, carouselState.currentIndex]);
 
+  // Keyboard navigation handler
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goToPrev();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goToNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [goToNext, goToPrev]);
+
   // Get current slide node
   const currentSlideNode = session?.nodes[carouselState.currentIndex];
   const canGoNext = session ? carouselState.currentIndex < session.nodes.length - 1 : false;
