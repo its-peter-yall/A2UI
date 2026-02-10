@@ -85,8 +85,9 @@ export function LearningPathContainer({
     direction: 0,
   };
 
-  // Track initialized sessions to avoid cascading renders
+  // Track initialized sessions and previous active node to prevent aggressive auto-advancing
   const initializedSessionsRef = useRef<Set<string>>(new Set());
+  const previousActiveNodeIndexRef = useRef<number>(-1);
 
   // Fetch existing session
   const {
@@ -192,6 +193,8 @@ export function LearningPathContainer({
       // Check if we haven't initialized this session yet
       if (!initializedSessionsRef.current.has(activeSessionKey)) {
         initializedSessionsRef.current.add(activeSessionKey);
+        previousActiveNodeIndexRef.current = activeNodeIndex;
+        
         // Schedule state update in a microtask to avoid synchronous setState in effect
         queueMicrotask(() => {
           setCarouselStateBySession((prev) => ({
@@ -199,8 +202,11 @@ export function LearningPathContainer({
             [activeSessionKey]: { currentIndex: activeNodeIndex, direction: 0 },
           }));
         });
-      } else if (carouselState.currentIndex !== activeNodeIndex) {
-        // Auto-advance carousel when active node changes (e.g., after continueToNext)
+      } else if (activeNodeIndex !== previousActiveNodeIndexRef.current) {
+        // Only auto-advance if the active node index has ACTUALLY changed
+        // This prevents locking the user to the active node during manual navigation
+        previousActiveNodeIndexRef.current = activeNodeIndex;
+        
         queueMicrotask(() => {
           const direction = activeNodeIndex > carouselState.currentIndex ? 1 : -1;
           setCarouselStateBySession((prev) => ({
