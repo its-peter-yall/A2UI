@@ -9,9 +9,10 @@
 // @see: client/src/lib/learningApi.ts - API functions
 // @note: Requires sessionId prop or generates new course from query
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
 import { generateCourse, getLearningSession } from '@/lib/learningApi';
 import { ConceptCard } from './ConceptCard';
@@ -74,6 +75,18 @@ export function LearningPathContainer({
     active: false,
     isCourseComplete: false,
   };
+
+  // Carousel state: track current slide index and navigation direction
+  const [carouselStateBySession, setCarouselStateBySession] = useState<
+    Record<string, { currentIndex: number; direction: number }>
+  >({});
+  const carouselState = carouselStateBySession[activeSessionKey] ?? {
+    currentIndex: 0,
+    direction: 0,
+  };
+
+  // Track initialized sessions to avoid cascading renders
+  const initializedSessionsRef = useRef<Set<string>>(new Set());
 
   // Fetch existing session
   const {
@@ -166,10 +179,64 @@ export function LearningPathContainer({
     onError: handleMutationError,
   });
 
-  // Find active node (first non-completed, non-locked for sequential flow)
-  const activeNodeId = session?.nodes.find(
+  // Find the index of the active node (first non-completed, non-locked)
+  const activeNodeIndex = session?.nodes.findIndex(
     (n) => n.status !== 'LOCKED' && n.status !== 'COMPLETED'
-  )?.id;
+  ) ?? -1;
+  const activeNodeId = activeNodeIndex >= 0 ? session?.nodes[activeNodeIndex]?.id : undefined;
+
+  // Initialize carousel index to active node when session loads/changes
+  // Also auto-advance when active node changes (e.g., after completing a topic)
+  useEffect(() => {
+    if (session && activeNodeIndex >= 0) {
+      // Check if we haven't initialized this session yet
+      if (!initializedSessionsRef.current.has(activeSessionKey)) {
+        initializedSessionsRef.current.add(activeSessionKey);
+        // Schedule state update in a microtask to avoid synchronous setState in effect
+        queueMicrotask(() => {
+          setCarouselStateBySession((prev) => ({
+            ...prev,
+            [activeSessionKey]: { currentIndex: activeNodeIndex, direction: 0 },
+          }));
+        });
+      } else if (carouselState.currentIndex !== activeNodeIndex) {
+        // Auto-advance carousel when active node changes (e.g., after continueToNext)
+        queueMicrotask(() => {
+          const direction = activeNodeIndex > carouselState.currentIndex ? 1 : -1;
+          setCarouselStateBySession((prev) => ({
+            ...prev,
+            [activeSessionKey]: { currentIndex: activeNodeIndex, direction },
+          }));
+        });
+      }
+    }
+  }, [session, activeNodeIndex, activeSessionKey, carouselState.currentIndex]);
+
+  // Carousel navigation functions
+  const goToSlide = useCallback((index: number) => {
+    if (!session) return;
+    const clampedIndex = Math.max(0, Math.min(index, session.nodes.length - 1));
+    const currentIndex = carouselState.currentIndex;
+    const direction = clampedIndex > currentIndex ? 1 : clampedIndex < currentIndex ? -1 : 0;
+
+    setCarouselStateBySession((prev) => ({
+      ...prev,
+      [activeSessionKey]: { currentIndex: clampedIndex, direction },
+    }));
+  }, [session, carouselState.currentIndex, activeSessionKey]);
+
+  const goToNext = useCallback(() => {
+    goToSlide(carouselState.currentIndex + 1);
+  }, [goToSlide, carouselState.currentIndex]);
+
+  const goToPrev = useCallback(() => {
+    goToSlide(carouselState.currentIndex - 1);
+  }, [goToSlide, carouselState.currentIndex]);
+
+  // Get current slide node
+  const currentSlideNode = session?.nodes[carouselState.currentIndex];
+  const canGoNext = session ? carouselState.currentIndex < session.nodes.length - 1 : false;
+  const canGoPrev = carouselState.currentIndex > 0;
 
   // Handle continue to next (manual button click, not auto-scroll)
   const handleContinueToNext = useCallback((nodeId: string) => {
@@ -179,17 +246,6 @@ export function LearningPathContainer({
       continueToNext(nodeId, nextNode.id);
     }
   }, [session?.nodes, continueToNext]);
-
-  // Handle auto-scroll to node
-  const scrollToNode = useCallback((nodeId: string) => {
-    const element = document.getElementById(`node-${nodeId}`);
-    if (element) {
-      element.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }
-  }, []);
 
   // Handle celebration completion
   const handleCelebrationComplete = () => {
@@ -352,8 +408,13 @@ export function LearningPathContainer({
           {/* Progress bar using specialized component */}
           <ProgressBar
             nodes={session.nodes}
-            currentNodeId={activeNodeId}
-            onNodeClick={scrollToNode}
+            currentNodeId={currentSlideNode?.id}
+            onNodeClick={(nodeId) => {
+              const index = session.nodes.findIndex((n) => n.id === nodeId);
+              if (index >= 0) {
+                goToSlide(index);
+              }
+            }}
           />
 
           {/* Mastery celebration overlay */}
@@ -364,37 +425,73 @@ export function LearningPathContainer({
             onComplete={handleCelebrationComplete}
           />
 
-          {/* Nodes list with ConceptCard components */}
-          <div className="flex flex-col gap-4">
-            {session.nodes.map((node, index) => {
-              const nextNode = session.nodes[index + 1];
-              return (
-                <div key={node.id} id={`node-${node.id}`} tabIndex={-1}>
-                  <ConceptCard
-                    node={node}
-                    isActive={node.id === activeNodeId}
-                    quizResult={quizResults[node.id]}
-                    onProceedToQuiz={proceedToQuiz}
-                    onQuizSubmit={submitAnswer}
-                    onRetryQuiz={retry}
-                    onContinueToNext={handleContinueToNext}
-                    onRegenerate={regenerate}
-                    isRegenerating={isRegenerating}
-                    isTransitioning={isTransitioning}
-                    canSkip={Boolean(nextNode)}
-                    onSkipNode={(nodeId) => {
-                      const nodeIndex = session.nodes.findIndex(
-                        (currentNode) => currentNode.id === nodeId
-                      );
-                      const upcomingNode = session.nodes[nodeIndex + 1];
-                      if (upcomingNode) {
-                        scrollToNode(upcomingNode.id);
-                      }
-                    }}
-                  />
-                </div>
-              );
-            })}
+          {/* Carousel container with single ConceptCard */}
+          <div
+            className="relative"
+            role="region"
+            aria-roledescription="carousel"
+            aria-label="Learning path carousel"
+          >
+            {/* Slide counter */}
+            <div className="flex justify-center mb-4 text-sm text-muted-foreground">
+              <span>
+                Topic {carouselState.currentIndex + 1} of {session.nodes.length}
+              </span>
+            </div>
+
+            {/* Single ConceptCard based on active index */}
+            {currentSlideNode && (
+              <div
+                key={currentSlideNode.id}
+                id={`node-${currentSlideNode.id}`}
+                tabIndex={-1}
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
+              >
+                <ConceptCard
+                  node={currentSlideNode}
+                  isActive={currentSlideNode.id === activeNodeId}
+                  quizResult={quizResults[currentSlideNode.id]}
+                  onProceedToQuiz={proceedToQuiz}
+                  onQuizSubmit={submitAnswer}
+                  onRetryQuiz={retry}
+                  onContinueToNext={handleContinueToNext}
+                  onRegenerate={regenerate}
+                  isRegenerating={isRegenerating}
+                  isTransitioning={isTransitioning}
+                  canSkip={canGoNext}
+                  onSkipNode={() => {
+                    if (canGoNext) {
+                      goToNext();
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Navigation buttons */}
+            <div className="flex justify-between items-center mt-6 gap-4">
+              <button
+                onClick={goToPrev}
+                disabled={!canGoPrev}
+                className="flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Previous topic"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Previous</span>
+              </button>
+
+              <button
+                onClick={goToNext}
+                disabled={!canGoNext}
+                className="flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Next topic"
+              >
+                <span>Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Loading overlay for mutations */}
