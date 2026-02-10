@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { ChevronLeft } from 'lucide-react';
 import type { ConceptNode, NodeStatus, QuizSubmitResponse } from '@/types/learning';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { QuizFeedback } from './QuizFeedback';
@@ -32,8 +33,10 @@ interface ConceptCardProps {
   onContinueToNext?: (nodeId: string) => void;
   onRegenerate?: (nodeId: string) => void;
   onSkipNode?: (nodeId: string) => void;
+  onPrevious?: () => void;
   isRegenerating?: boolean;
   canSkip?: boolean;
+  canPrevious?: boolean;
   isTransitioning?: boolean;
 }
 
@@ -46,8 +49,10 @@ export function ConceptCard({
   onContinueToNext,
   onRegenerate,
   onSkipNode,
+  onPrevious,
   isRegenerating = false,
   canSkip = false,
+  canPrevious = false,
   isTransitioning = false,
   quizResult,
 }: ConceptCardProps) {
@@ -119,6 +124,20 @@ export function ConceptCard({
     onRetryQuiz?.(node.id);
   };
 
+  const renderPreviousButton = () => (
+    <button
+      onClick={onPrevious}
+      disabled={!canPrevious}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors text-sm font-medium",
+        !canPrevious && "opacity-0 pointer-events-none"
+      )}
+    >
+      <ChevronLeft className="w-4 h-4" />
+      <span>Previous</span>
+    </button>
+  );
+
   return (
     <UnlockPulse isUnlocking={isUnlocking}>
       <AnimatedCard
@@ -161,7 +180,8 @@ export function ConceptCard({
               {node.status === 'VIEWING_EXPLANATION' && (
                 <div className="space-y-4">
                   <MarkdownRenderer content={node.content_markdown} />
-                  <div className="flex justify-end pt-4 border-t">
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    {renderPreviousButton()}
                     <button
                       onClick={handleProceedToQuiz}
                       disabled={isTransitioning}
@@ -204,7 +224,8 @@ export function ConceptCard({
                       </label>
                     ))}
                   </fieldset>
-                  <div className="flex justify-end pt-4 border-t">
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    {renderPreviousButton()}
                     <button
                       onClick={handleSubmitQuiz}
                       disabled={!selectedOption}
@@ -230,7 +251,7 @@ export function ConceptCard({
                       attemptCount={attemptCount}
                       onRetry={handleRetry}
                       onContinue={
-                        feedbackResult.next_node_unlocked
+                        feedbackResult.is_mastered
                           ? () => onContinueToNext?.(node.id)
                           : undefined
                       }
@@ -271,6 +292,20 @@ export function ConceptCard({
                       <MarkdownRenderer content={node.content_markdown} />
                     </div>
                   </details>
+                  <div className="flex justify-between items-center pt-4 border-t">
+                    {renderPreviousButton()}
+                    {canSkip ? (
+                      <button
+                        onClick={() => onSkipNode?.(node.id)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors text-sm font-medium"
+                      >
+                        <span>Next</span>
+                        <ChevronLeft className="w-4 h-4 rotate-180" />
+                      </button>
+                    ) : (
+                      <div /> /* Spacer */
+                    )}
+                  </div>
                 </div>
               )}
 

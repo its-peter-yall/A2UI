@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
+import React from 'react';
 import { cn } from '@/lib/utils';
 
 interface MarkdownRendererProps {
@@ -24,19 +25,37 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
   return (
     <div
       className={cn(
-        'prose prose-sm dark:prose-invert max-w-none',
-        'prose-headings:font-semibold prose-headings:text-foreground',
-        'prose-p:text-muted-foreground prose-p:leading-relaxed',
-        'prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded',
-        'prose-pre:bg-muted prose-pre:border',
+        'prose max-w-none text-[15px] leading-relaxed font-medium',
+        'dark:prose-invert',
+        // Body Text
+        'prose-p:text-foreground',
+        // Headings: Cyber Yellow (Primary)
+        'prose-headings:text-primary',
+        // Strong / Bold: Cyber Yellow (Primary)
+        'prose-strong:text-primary',
+        // Links: Cyber Yellow (Primary)
+        'prose-a:text-primary hover:prose-a:text-primary/80',
+        // Code
+        'prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none',
+        // Lists
         'prose-ul:text-muted-foreground prose-ol:text-muted-foreground',
-        'prose-strong:text-foreground',
+        // Pre / Block Code
+        'prose-pre:bg-muted prose-pre:border prose-pre:border-border',
         className
       )}
     >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeSanitize]}
+        components={{
+            code({ className, children, ...props }: React.HTMLAttributes<HTMLElement>) {
+                return (
+                    <code className={className} {...props}>
+                        {children}
+                    </code>
+                );
+            }
+        }}
       >
         {content}
       </ReactMarkdown>

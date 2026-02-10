@@ -18,7 +18,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { LearningPathContainer } from './LearningPathContainer';
-import { ProgressBar } from './ProgressBar';
 import { getLearningSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
 
@@ -42,11 +41,6 @@ export function LearningPage() {
     // Refetch to sync progress bar with LearningPathContainer
     refetchInterval: 2000,
   });
-
-  // Find current active node
-  const activeNode = session?.nodes.find(
-    (n) => n.status !== 'LOCKED' && n.status !== 'COMPLETED'
-  );
 
   // Check for course completion
   const isComplete =
@@ -81,19 +75,6 @@ export function LearningPage() {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sessionId, showCompletion]);
-
-  // Handle progress bar node click - scroll to node
-  const handleNodeClick = useCallback((nodeId: string) => {
-    const element = document.getElementById(`node-${nodeId}`);
-    if (element) {
-      element.scrollIntoView({
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
-        block: 'center',
-      });
-      // Focus the node for keyboard users
-      element.focus();
-    }
-  }, [prefersReducedMotion]);
 
   const closeCompletionModal = useCallback(() => {
     setDismissedSessionId(sessionId ?? null);
@@ -146,15 +127,6 @@ export function LearningPage() {
               </Link>
             </nav>
           </div>
-
-          {/* Progress bar */}
-          {session && (
-            <ProgressBar
-              nodes={session.nodes}
-              currentNodeId={activeNode?.id}
-              onNodeClick={handleNodeClick}
-            />
-          )}
         </div>
       </header>
 

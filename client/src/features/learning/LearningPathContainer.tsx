@@ -12,7 +12,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
 import { generateCourse, getLearningSession } from '@/lib/learningApi';
@@ -282,9 +281,10 @@ export function LearningPathContainer({
   const handleContinueToNext = useCallback((nodeId: string) => {
     const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
     const nextNode = session?.nodes[nodeIndex + 1];
-    if (nextNode) {
-      continueToNext(nodeId, nextNode.id);
-    }
+    
+    // Always call continueToNext to complete the current node
+    // Pass nextNode.id only if it exists
+    continueToNext(nodeId, nextNode?.id);
   }, [session?.nodes, continueToNext]);
 
   // Handle celebration completion
@@ -436,7 +436,7 @@ export function LearningPathContainer({
           console.error('Learning component crashed:', boundaryError);
         }}
       >
-        <div className="flex flex-col gap-6 p-4 max-w-3xl mx-auto">
+        <div className="flex flex-col gap-6 p-4 max-w-4xl mx-auto">
           {/* Header */}
           <header className="text-center">
             <h1 className="text-2xl font-bold">{session.course_title}</h1>
@@ -520,33 +520,12 @@ export function LearningPathContainer({
                           goToNext();
                         }
                       }}
+                      onPrevious={goToPrev}
+                      canPrevious={canGoPrev}
                     />
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
-
-            {/* Navigation buttons */}
-            <div className="flex justify-between items-center mt-6 gap-4">
-              <button
-                onClick={goToPrev}
-                disabled={!canGoPrev}
-                className="flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Previous topic"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Previous</span>
-              </button>
-
-              <button
-                onClick={goToNext}
-                disabled={!canGoNext}
-                className="flex items-center gap-2 px-4 py-2 rounded-md border border-border bg-background hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Next topic"
-              >
-                <span>Next</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
             </div>
           </div>
 

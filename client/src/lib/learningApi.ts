@@ -46,7 +46,7 @@ const learningApi = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 120000, // 2 minutes for course generation
+  timeout: 300000, // 5 minutes for course generation
 });
 
 // Response interceptor for learning API

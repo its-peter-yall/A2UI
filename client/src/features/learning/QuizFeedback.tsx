@@ -137,7 +137,7 @@ export function QuizFeedback({
             onClick={onContinue}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
-            Continue to Next Topic →
+            {result.next_node_unlocked ? 'Continue to Next Topic →' : 'Complete Course 🎉'}
           </button>
         )}
         {is_mastered && !onContinue && (
