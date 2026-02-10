@@ -13,12 +13,18 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
 import { generateCourse, getLearningSession } from '@/lib/learningApi';
 import { ConceptCard } from './ConceptCard';
 import { LearningErrorBoundary } from './LearningErrorBoundary';
 import { MasteryCelebration } from './animations/MasteryCelebration';
 import { ProgressBar } from './ProgressBar';
+import {
+  carouselSlideVariants,
+  carouselSlideReducedMotionVariants,
+  prefersReducedMotion,
+} from './animations';
 import {
   EmptyState,
   ErrorState,
@@ -445,36 +451,52 @@ export function LearningPathContainer({
               </span>
             </div>
 
-            {/* Single ConceptCard based on active index */}
-            {currentSlideNode && (
-              <div
-                key={currentSlideNode.id}
-                id={`node-${currentSlideNode.id}`}
-                tabIndex={-1}
-                role="group"
-                aria-roledescription="slide"
-                aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
+            {/* Single ConceptCard with direction-aware slide animation */}
+            <div className="relative overflow-hidden">
+              <AnimatePresence
+                mode="wait"
+                custom={carouselState.direction}
+                initial={false}
               >
-                <ConceptCard
-                  node={currentSlideNode}
-                  isActive={currentSlideNode.id === activeNodeId}
-                  quizResult={quizResults[currentSlideNode.id]}
-                  onProceedToQuiz={proceedToQuiz}
-                  onQuizSubmit={submitAnswer}
-                  onRetryQuiz={retry}
-                  onContinueToNext={handleContinueToNext}
-                  onRegenerate={regenerate}
-                  isRegenerating={isRegenerating}
-                  isTransitioning={isTransitioning}
-                  canSkip={canGoNext}
-                  onSkipNode={() => {
-                    if (canGoNext) {
-                      goToNext();
-                    }
-                  }}
-                />
-              </div>
-            )}
+                {currentSlideNode && (
+                  <motion.div
+                    key={currentSlideNode.id}
+                    id={`node-${currentSlideNode.id}`}
+                    tabIndex={-1}
+                    role="group"
+                    aria-roledescription="slide"
+                    aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
+                    custom={carouselState.direction}
+                    variants={prefersReducedMotion()
+                      ? carouselSlideReducedMotionVariants
+                      : carouselSlideVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    className="w-full"
+                  >
+                    <ConceptCard
+                      node={currentSlideNode}
+                      isActive={currentSlideNode.id === activeNodeId}
+                      quizResult={quizResults[currentSlideNode.id]}
+                      onProceedToQuiz={proceedToQuiz}
+                      onQuizSubmit={submitAnswer}
+                      onRetryQuiz={retry}
+                      onContinueToNext={handleContinueToNext}
+                      onRegenerate={regenerate}
+                      isRegenerating={isRegenerating}
+                      isTransitioning={isTransitioning}
+                      canSkip={canGoNext}
+                      onSkipNode={() => {
+                        if (canGoNext) {
+                          goToNext();
+                        }
+                      }}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             {/* Navigation buttons */}
             <div className="flex justify-between items-center mt-6 gap-4">

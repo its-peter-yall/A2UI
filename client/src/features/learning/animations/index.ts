@@ -203,6 +203,61 @@ export const reducedMotionVariants: Variants = {
 };
 
 // ============================================================
+// Carousel slide animations (direction-aware)
+// ============================================================
+
+/**
+ * Carousel slide variants for direction-aware sliding transitions.
+ * Uses the `custom` prop to determine slide direction:
+ * - direction > 0: next slide (enter from right, exit to left)
+ * - direction < 0: previous slide (enter from left, exit to right)
+ * - direction = 0: initial mount (no animation)
+ */
+export const carouselSlideVariants: Variants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? '100%' : direction < 0 ? '-100%' : 0,
+    opacity: direction === 0 ? 1 : 0,
+    scale: direction === 0 ? 1 : 0.95,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    transition: {
+      type: 'spring',
+      stiffness: 300,
+      damping: 30,
+    },
+  },
+  exit: (direction: number) => ({
+    x: direction > 0 ? '-100%' : '100%',
+    opacity: 0,
+    scale: 0.95,
+    transition: {
+      type: 'spring',
+      stiffness: 300,
+      damping: 30,
+    },
+  }),
+};
+
+/**
+ * Reduced motion variant for carousel slides.
+ * Simple fade without horizontal movement.
+ */
+export const carouselSlideReducedMotionVariants: Variants = {
+  enter: { opacity: 0 },
+  center: {
+    opacity: 1,
+    transition: { duration: TIMING.fast },
+  },
+  exit: {
+    opacity: 0,
+    transition: { duration: TIMING.fast },
+  },
+};
+
+// ============================================================
 // Component Exports
 // ============================================================
 export { Confetti } from './Confetti';
