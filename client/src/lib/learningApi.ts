@@ -1,11 +1,80 @@
+/**
+ * ============================================================================
+ * FILE: learningApi.ts
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Provides typed API client functions for all learning feature endpoints,
+ * including session management, concept node operations, quiz submissions,
+ * and content regeneration. Uses axios with configured interceptors for
+ * consistent error handling and timeout behavior across all learning requests.
+ * 
+ * KEY COMPONENTS:
+ * - api: Standard axios instance with 30-second timeout for quick operations
+ * - learningApi: Extended axios instance with 5-minute timeout for course generation
+ * - generateCourse(): Creates new learning session with AI-generated content
+ * - getLearningSession(): Retrieves session with all concept nodes
+ * - getConceptNode(): Gets single node with visibility flags
+ * - transitionNode(): Moves node to new status (VIEWING -> QUIZ -> COMPLETED)
+ * - submitQuiz(): Submits quiz answer and returns feedback/scoring
+ * - retryQuiz(): Resets quiz for another attempt
+ * - getQuizAttempts(): Retrieves quiz attempt history for a node
+ * - regenerateNode(): Regenerates content for a failed/error node
+ * 
+ * DEPENDENCIES:
+ * - axios: HTTP client for API requests with interceptors
+ * - ../types/learning: TypeScript interfaces mirroring backend Pydantic schemas
+ * - VITE_API_URL: Environment variable for backend base URL
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * import { 
+ *   generateCourse, 
+ *   getLearningSession, 
+ *   submitQuiz 
+ * } from '@/lib/learningApi';
+ * 
+ * // Create new learning session
+ * const session = await generateCourse({ 
+ *   query: 'Explain quantum computing basics',
+ *   userId: 'user-123'
+ * });
+ * 
+ * // Fetch existing session
+ * const session = await getLearningSession('session-uuid');
+ * 
+ * // Submit quiz answer
+ * const result = await submitQuiz('node-uuid', {
+ *   selected_option_id: 'A'
+ * });
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Response interceptors log all API errors with URL and response data
+ * - Returns rejected promises to let calling components handle UI states
+ * - Network errors bubble up with axios error message
+ * - Backend returns 404 for invalid session IDs
+ * 
+ * PERFORMANCE NOTES:
+ * - Standard API uses 30s timeout; suitable for quick reads/writes
+ * - learningApi uses 5-minute timeout for course generation (can be slow)
+ * - React Query recommended for caching GET requests (5-minute stale time)
+ * 
+ * RELATED FILES:
+ * - client/src/types/learning.ts: All TypeScript type definitions used here
+ * - server/routers/learning.py: Backend router with all endpoint definitions
+ * - server/schemas/learning.py: Pydantic schemas this client expects
+ * 
+ * NOTES:
+ * - All endpoints require backend server running on port 8000 (or VITE_API_URL)
+ * - NodeStatus values must match backend enum exactly (LOCKED, VIEWING_EXPLANATION, etc.)
+ * - Course generation can take 30-60 seconds; uses dedicated longer-timeout client
+ * - Interceptors provide consistent console logging for debugging API issues
+ * ============================================================================
+ */
+
 // learningApi.ts
 // API functions for retrieval-based learning features
-
-// Provides typed API calls for learning sessions, nodes, quizzes,
-// and state transitions. Uses shared axios instance from api.ts.
-
-// @see: client/src/types/learning.ts - Type definitions
-// @note: All endpoints require backend server running on port 8000
 
 import axios from 'axios';
 import type {

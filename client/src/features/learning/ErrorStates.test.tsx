@@ -1,3 +1,48 @@
+/**
+ * ============================================================================
+ * FILE: ErrorStates.test.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Unit tests for learning error and empty state components. Validates
+ * ErrorState, NotFoundState, EmptyState, LoadingState, and GeneratingState
+ * rendering with appropriate actions and callbacks.
+ * 
+ * KEY TESTS:
+ * - ErrorState: Renders with retry button and home link
+ * - NotFoundState: Renders type-specific not found message
+ * - EmptyState: Renders action button with callback
+ * - LoadingState: Renders default loading message
+ * - GeneratingState: Renders "Creating your learning path" message
+ * 
+ * DEPENDENCIES:
+ * - vitest: Testing framework
+ * - @testing-library/react: Component testing
+ * - react-router-dom: MemoryRouter for Link testing
+ * - client/src/features/learning/ErrorStates: Components
+ * 
+ * USAGE PATTERN:
+ * ```bash
+ * # Run ErrorStates tests
+ * npm run test -- src/features/learning/ErrorStates.test.tsx
+ * ```
+ * 
+ * TEST SETUP:
+ * - Uses MemoryRouter for Link-based states
+ * - Tests button clicks with fireEvent
+ * - Tests callback invocation with vi.fn()
+ * 
+ * RELATED FILES:
+ * - client/src/features/learning/ErrorStates.tsx
+ * 
+ * NOTES:
+ * - ErrorState: Generic error with retry + home navigation
+ * - NotFoundState: Type-specific (node/session)
+ * - EmptyState: Customizable action button
+ * - LoadingState/GeneratingState: Progress indicators
+ * ============================================================================
+ */
+
 // ErrorStates.test.tsx
 // Tests for learning error and empty state components
 

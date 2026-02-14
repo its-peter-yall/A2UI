@@ -1,13 +1,69 @@
-# learning.py
-# Pydantic schema models for retrieval-based learning features
+"""
+=============================================================================
+FILE: learning.py
+=============================================================================
 
-# Longer description (2-4 lines):
-# - Defines enums and structured models for learning sessions and concept nodes.
-# - Captures planner output (CourseOutline) and quiz payload structures.
-# - Provides request/response schemas for session and quiz operations.
+PURPOSE:
+Defines Pydantic v2 schemas for the adaptive learning system, including
+learning sessions, concept nodes, and retrieval-based quiz mechanics with
+progressive state management.
 
-# @see: server/database/learning_persistence.py - Persistence layer for learning data
-# @note: Quiz payloads stored as JSON should conform to QuizCard structure
+KEY COMPONENTS:
+- NodeStatus: Enum tracking learner progress through nodes (LOCKED → COMPLETED)
+- QuizOption/QuizCard: Structured quiz content with validation (4 options, 1 correct)
+- CourseOutline/TopicNode: Planner agent output defining course structure
+- ConceptNodeResponse: Full concept node with quiz, status, and error handling
+- LearningSessionResponse: Session metadata with progress tracking
+- QuizAttemptResponse: Quiz submission results with mastery determination
+
+DEPENDENCIES:
+- pydantic: Schema validation, BaseModel, Field, field_validator
+- server.schemas.common: ResponseBase, TimestampMixin mixins
+
+USAGE PATTERN:
+```python
+from server.schemas.learning import (
+    NodeStatus, QuizCard, CourseOutline, ConceptNodeResponse,
+    LearningSessionResponse, QuizSubmission, QuizAttemptResponse
+)
+
+# Create a quiz card with validation
+quiz = QuizCard(
+    question_text="What is 2+2?",
+    options=[
+        QuizOption(id="A", text="3", is_correct=False, explanation="Incorrect"),
+        QuizOption(id="B", text="4", is_correct=True, explanation="Correct!"),
+        QuizOption(id="C", text="5", is_correct=False, explanation="Incorrect"),
+        QuizOption(id="D", text="6", is_correct=False, explanation="Incorrect"),
+    ],
+    difficulty="easy"
+)
+
+# Submit quiz answer
+submission = QuizSubmission(node_id="node-123", selected_option_id="B")
+```
+
+ERROR HANDLING:
+- field_validator raises ValueError for invalid quiz options (not exactly 4, not exactly 1 correct, invalid IDs)
+- ValueError raised for CourseOutline with <5 or >7 topics, or non-contiguous indices
+- Pydantic validation errors propagate as HTTP 422 in API routers
+
+PERFORMANCE NOTES:
+- QuizCard validation runs on every schema instantiation (O(n) where n=4)
+- No database queries in schema layer - pure in-memory validation
+
+RELATED FILES:
+- server/database/learning_persistence.py: Persistence layer for learning data
+- server/services/course_orchestrator.py: Business logic consuming these schemas
+- server/routers/learning.py: REST endpoints using these schemas
+
+NOTES:
+- Quiz payloads stored as JSON in DB should conform to QuizCard structure
+- Node status flow: LOCKED → VIEWING_EXPLANATION → IN_QUIZ → SHOWING_FEEDBACK → COMPLETED
+- ERROR state indicates generation failure, not user error
+- is_mastered only true when 100% score achieved on quiz
+=============================================================================
+"""
 
 from __future__ import annotations
 

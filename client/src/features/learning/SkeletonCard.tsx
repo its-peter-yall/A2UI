@@ -1,11 +1,50 @@
-// SkeletonCard.tsx
-// Skeleton loader for concept cards during generation
-
-// Shows animated placeholder content while a node is being generated.
-// Matches the layout of ConceptCard for smooth transitions.
-
-// @see: client/src/features/learning/ConceptCard.tsx - Target layout
-// @note: Uses Tailwind animate-pulse for loading effect
+/**
+ * ============================================================================
+ * FILE: SkeletonCard.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Skeleton loader component that displays animated placeholder content while
+ * a concept node is being generated. Provides visual feedback during the
+ * scatter-gather process and matches the layout of ConceptCard for smooth
+ * transitions when content loads.
+ * 
+ * KEY COMPONENTS:
+ * - SkeletonCard: Single card skeleton matching ConceptCard layout
+ * - SkeletonPath: Multiple skeleton cards in a column (for loading states)
+ * 
+ * DEPENDENCIES:
+ * - @/lib/utils: cn() utility for conditional className composition
+ * - tailwindcss: animate-pulse utility for loading animation
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Single skeleton for one node
+ * <SkeletonCard />
+ * 
+ * // Multiple skeletons for loading state
+ * <SkeletonPath count={5} />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Pure presentation component; no error handling needed
+ * 
+ * PERFORMANCE NOTES:
+ * - Uses CSS-only animation (animate-pulse) for performance
+ * - aria-busy="true" announces loading state to screen readers
+ * - Hidden text "Loading content..." for screen reader context
+ * 
+ * RELATED FILES:
+ * - ConceptCard.tsx: Target layout that skeleton matches
+ * - ErrorStates.tsx: GeneratingState component for initial generation loading
+ * 
+ * NOTES:
+ * - Layout mirrors ConceptCard: header, body, footer sections
+ * - Header: icon placeholder, title lines, sequence number
+ * - Body: multiple paragraph lines with varying widths
+ * - Footer: button placeholder
+ * ============================================================================
+ */
 
 import { cn } from '@/lib/utils';
 

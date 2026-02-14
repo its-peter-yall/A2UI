@@ -1,18 +1,52 @@
-// LearningPage.tsx
-// Main learning page with routing, progress, and navigation
-
-// Page component that displays the learning path for a session.
-// Handles routing via sessionId param, shows progress bar,
-// and celebrates course completion.
-
-// @see: client/src/features/learning/LearningPathContainer.tsx
-// @note: Route: /learn/:sessionId
-
-// Best practices applied:
-// - prefers-reduced-motion for celebration animation
-// - Non-blocking modal (user can dismiss immediately)
-// - Focus management for accessibility
-// - Keyboard accessible navigation
+/**
+ * ============================================================================
+ * FILE: LearningPage.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Main learning page component that displays an interactive learning path for
+ * a specific session. Handles session routing via URL parameters, displays real-time
+ * progress tracking, and celebrates course completion with an accessible modal.
+ * 
+ * KEY COMPONENTS:
+ * - LearningPage: Main page wrapper with header navigation and completion modal
+ * - Completion Modal: Accessible overlay celebrating course mastery with animation
+ * - Progress Integration: Syncs with LearningPathContainer via refetch for progress bar
+ * 
+ * DEPENDENCIES:
+ * - react-router-dom: URL parameter parsing and navigation
+ * - @tanstack/react-query: Session data fetching with auto-refresh
+ * - framer-motion: Celebration animation (respects prefers-reduced-motion)
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Route: /learn/:sessionId
+ * // When sessionId is missing, shows "Start Learning" button to /learn
+ * // When all nodes are COMPLETED, shows celebration modal
+ * 
+ * <LearningPage />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Missing sessionId: Renders "No session ID provided" with navigation link
+ * - Session not found: Redirect handled by LearningPathContainer error states
+ * 
+ * PERFORMANCE NOTES:
+ * - Session refetch interval (2s) ensures progress bar stays in sync
+ * - Modal focus management preserves keyboard focus state
+ * - Animation disabled for users with prefers-reduced-motion
+ * 
+ * RELATED FILES:
+ * - LearningPathContainer.tsx: Renders the actual learning path carousel
+ * - ProgressBar.tsx: Displays completion progress (synced via refetch)
+ * - MasteryCelebration.tsx: Animation component for completion
+ * 
+ * NOTES:
+ * - Route: /learn/:sessionId
+ * - Best practices: prefers-reduced-motion, non-blocking modal, focus management
+ * - Keyboard accessible: Escape key dismisses completion modal
+ * ============================================================================
+ */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';

@@ -1,18 +1,55 @@
-// ProgressBar.tsx
-// Progress indicator for learning path completion
-
-// Shows visual progress through the sequential learning flow.
-// Each step represents a node: locked, active, or completed (mastered).
-// Clicking completed steps scrolls to them; locked steps are disabled.
-
-// @see: client/src/types/learning.ts - NodeStatus enum
-// @note: Respects sequential flow - cannot jump to locked nodes
-
-// Best practices applied:
-// - Accessibility with aria-current, aria-label, role="navigation"
-// - aria-disabled for locked steps (not just disabled attribute)
-// - Screen reader announcements for progress changes
-// - Visual contrast ratios maintained for all states
+/**
+ * ============================================================================
+ * FILE: ProgressBar.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Visual progress indicator showing the user's advancement through the learning
+ * path. Displays overall completion percentage and individual step indicators
+ * that reflect each node's status (locked, active, or completed). Clicking
+ * completed steps navigates to them in the carousel.
+ * 
+ * KEY COMPONENTS:
+ * - ProgressBar: Main progress bar with animated fill and step indicators
+ * - Progress Fill: Animated bar showing overall completion percentage
+ * - Step Indicators: Clickable dots representing each node
+ * - Legend: Color key for mastered/in-progress/locked states
+ * 
+ * DEPENDENCIES:
+ * - @/lib/utils: cn() utility for conditional className
+ * - @/types/learning: ConceptNode, NodeStatus types
+ * - framer-motion: progressStepVariants for step animations
+ * - animations: Step animation variants and preferences
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * <ProgressBar
+ *   nodes={session.nodes}
+ *   currentNodeId={currentSlideNode?.id}
+ *   onNodeClick={(nodeId) => goToSlide(nodes.findIndex(n => n.id === nodeId))}
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Pure presentation component; errors handled by parent
+ * - Empty nodes array shows 0% progress
+ * 
+ * PERFORMANCE NOTES:
+ * - Framer Motion spring animation for smooth progress fill
+ * - Step colors computed via switch for performance
+ * - aria-disabled used for locked steps (not disabled attribute)
+ * 
+ * RELATED FILES:
+ * - LearningPathContainer.tsx: Parent that renders ProgressBar
+ * - @/types/learning.ts: NodeStatus enum and ConceptNode type
+ * 
+ * NOTES:
+ * - Step colors: Green (COMPLETED), Primary (active), Gray (LOCKED), Red (ERROR)
+ * - Sequential flow: Cannot jump to locked nodes
+ * - Accessibility: aria-current="step" for active, aria-label for screen readers
+ * - Visual legend hidden from screen readers (decorative)
+ * ============================================================================
+ */
 
 import { cn } from '@/lib/utils';
 import type { ConceptNode, NodeStatus } from '@/types/learning';

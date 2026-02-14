@@ -1,24 +1,95 @@
+/**
+ * ============================================================================
+ * FILE: useLearningMutations.ts
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Central React Query mutations hook that handles all learning state
+ * transitions with optimistic updates, automatic rollback on error, and
+ * mastery-based progression. Provides a clean API for the sequential
+ * learning flow: VIEWING_EXPLANATION → IN_QUIZ → SHOWING_FEEDBACK →
+ * (retry or COMPLETED). Manages cache invalidation and provides both raw
+ * mutations and convenience wrapper functions.
+ * 
+ * KEY COMPONENTS:
+ * - useLearningMutations: Main hook returning mutation functions and states
+ * - proceedToQuiz: Transition from VIEWING_EXPLANATION to IN_QUIZ
+ * - submitAnswer: Submit quiz answer, triggers SHOWING_FEEDBACK
+ * - retry: Retry quiz after incorrect (SHOWING_FEEDBACK → IN_QUIZ)
+ * - continueToNext: Mark as complete and unlock next node
+ * - regenerate: Retry failed content generation (ERROR → VIEWING_EXPLANATION)
+ * - Optimistic updates: Instant UI feedback via onMutate handlers
+ * - Callbacks: onQuizResult, onMasteryAchieved, onRetryNeeded, onError
+ * 
+ * DEPENDENCIES:
+ * - @tanstack/react-query: useMutation, useQueryClient
+ * - @/lib/learningApi: transitionNode, submitQuiz, retryQuiz, regenerateNode
+ * - @/types/learning: NodeStatus, QuizSubmitResponse, LearningSessionWithNodes
+ * - @/features/learning/optimisticUpdates: optimisticStatusUpdate, optimisticMasteryUpdate
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * import { useLearningMutations } from '@/features/learning/useLearningMutations';
+ * 
+ * // In LearningPathContainer or ConceptCard:
+ * const {
+ *   proceedToQuiz,
+ *   submitAnswer,
+ *   retry,
+ *   continueToNext,
+ *   isAnyLoading,
+ * } = useLearningMutations({
+ *   sessionId: session.id,
+ *   onMasteryAchieved: (nodeId) => {
+ *     setShowCelebration(true);
+ *   },
+ *   onRetryNeeded: (nodeId, result) => {
+ *     showToast('Keep trying! You\'ll get it.');
+ *   },
+ *   onError: (error) => {
+ *     showErrorToast(error.message);
+ *   },
+ * });
+ * 
+ * // Usage in component:
+ * <Button
+ *   onClick={() => proceedToQuiz(node.id)}
+ *   disabled={isAnyLoading || !actions.canProceedToQuiz}
+ * >
+ *   I understand, proceed to quiz
+ * </Button>
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - onMutate returns rollback function; onError calls it for instant reversal
+ * - onSettled always invalidates queries to sync with server state
+ * - All mutations have error callbacks that propagate to onError prop
+ * - completeMasteryMutation handles dual transition (IN_QUIZ→FEEDBACK→COMPLETED)
+ * 
+ * PERFORMANCE NOTES:
+ * - queryClient.cancelQueries prevents race conditions during rapid clicks
+ * - Optimistic updates apply immediately (no network wait)
+ * - Cache invalidation happens after every mutation success/error
+ * - isAnyLoading combines all mutation states for global loading UI
+ * 
+ * RELATED FILES:
+ * - @/lib/learningApi: API functions called by mutations
+ * - optimisticUpdates.ts: optimisticStatusUpdate, optimisticMasteryUpdate helpers
+ * - learningQueryKeys: Query key factory for cache management
+ * - ConceptCard.tsx: Calls mutation functions based on node state
+ * - LearningPathContainer.tsx: Provides sessionId and handles callbacks
+ * 
+ * NOTES:
+ * - Mastery definition: 100% score required to unlock next topic
+ * - Mutation functions use .mutate() (async fire-and-forget), not await
+ * - isPending is TanStack Query v5 terminology (v4 used isLoading)
+ * - completeMasteryMutation handles both status transition AND next node unlock
+ * - All state transitions mirror server validation in learning_persistence.py
+ * ============================================================================
+ */
+
 // useLearningMutations.ts
 // React Query mutations for sequential learning flow
-
-// Provides mutations for all learning state transitions with cache
-// invalidation, optimistic updates, and mastery-based progression.
-//
-// Sequential Flow:
-//   VIEWING_EXPLANATION → (proceedToQuiz) → IN_QUIZ
-//   IN_QUIZ → (submitQuiz) → SHOWING_FEEDBACK
-//   SHOWING_FEEDBACK → (retryQuiz) → IN_QUIZ [if not mastered]
-//   SHOWING_FEEDBACK → (continueToNext) → next node unlocks [if mastered]
-//
-// Best Practices Applied (TanStack Query v5):
-// - Cancel queries in onMutate to prevent race conditions
-// - Snapshot previous data for rollback
-// - Use isPending (not isLoading) for mutation states
-// - Invalidate queries in onSettled (both success and error)
-// - Return context from onMutate for rollback in onError
-
-// @see: client/src/lib/learningApi.ts - API functions
-// @note: Mastery = 100% score required to unlock next topic
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {

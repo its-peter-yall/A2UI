@@ -1,13 +1,75 @@
-# generator.py
-# Generator Agent for creating educational content with context injection
+"""
+=============================================================================
+FILE: generator.py
+=============================================================================
 
-# Implements the Generator Agent that creates engaging, pedagogically-sound
-# educational content for each topic in a learning path. Uses context injection
-# from adjacent topics to maintain narrative coherence across the course.
+PURPOSE:
+Generator Agent that creates engaging, pedagogically-sound educational content
+for each topic in a learning path. Uses context injection from adjacent topics
+(prev_summary, next_summary) to maintain narrative coherence across the course.
+This is the second agent in the content generation pipeline.
 
-# @see: server/agents/base.py - BaseAgent abstract class
-# @see: server/schemas/learning.py - TopicNode and response models
-# @note: Uses Gemini Flash for speed; higher temperature (0.7) for creativity
+KEY COMPONENTS:
+- GENERATOR_SYSTEM_PROMPT: Prompt defining content creation methodology (5E Model)
+- GeneratedContent: Pydantic model with content_markdown and key_takeaways
+- GeneratorAgent: Agent class for generating educational explanations
+- generate_explanation(): Main method with context injection for topic content
+- generator_agent: Singleton instance for application-wide use
+
+DEPENDENCIES:
+- server.agents.base.BaseAgent: Parent class providing generate() method
+- server.schemas.learning.TopicNode: Input model with title, summary, key_terms
+- 5E Pedagogical Model: Engage, Explore, Explain, Elaborate, Evaluate
+
+USAGE PATTERN:
+```python
+from server.agents.generator import generator_agent
+from server.schemas.learning import TopicNode
+
+# Generate content for a topic with adjacent context
+topic = TopicNode(
+    index=1,
+    title="Newton's Second Law",
+    summary_for_context="Quantifies relationship between force, mass, acceleration",
+    key_terms=["F=ma", "acceleration", "mass", "force"]
+)
+
+content = await generator_agent.generate_explanation(
+    topic=topic,
+    prev_summary="Inertia and the First Law of Motion",
+    next_summary="Action-Reaction pairs in the Third Law"
+)
+
+print(content.content_markdown)  # Markdown educational content
+print(content.key_takeaways)     # List of 3-5 key points
+```
+
+ERROR HANDLING:
+- Exception: Re-raised if generation fails after retry attempts
+- ValidationError: Handled internally with retry logic
+- Content length validation: Minimum 300 characters enforced via Pydantic
+
+PERFORMANCE NOTES:
+- Uses Gemini Flash model for speed in content generation
+- Higher temperature (0.7) for creative, engaging explanations
+- Target length: 300-500 words (2-3 minutes reading time)
+- Context injection enables narrative flow across topics
+- Includes reflection prompts (1-2) for active learning engagement
+
+RELATED FILES:
+- server/agents/base.py: BaseAgent providing inheritance and generate()
+- server/agents/planner.py: Produces TopicNodes consumed by Generator
+- server/schemas/learning.py: TopicNode, GeneratedContent models
+
+NOTES:
+- Content must bold all key terms on first introduction
+- Must include 3-5 key_takeaways for learner review
+- Previous topic context bridges from prior knowledge
+- Next topic context creates anticipation and foreshadowing
+- 5E model structure: Engage hook, Explore examples, Explain definitions,
+  Elaborate connections, Evaluate with reflection prompts
+=============================================================================
+"""
 
 from __future__ import annotations
 

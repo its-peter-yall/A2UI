@@ -1,17 +1,54 @@
-// LearningHome.tsx
-// Learning home page with topic input and feature overview
-
-// Entry point for the learning feature. Shows topic input
-// and explains the mastery-based learning approach.
-
-// @see: client/src/features/learning/TopicInput.tsx
-// @note: Route: /learn
-
-// Best practices applied:
-// - Semantic HTML structure with main, header, footer
-// - Accessible navigation with proper ARIA labels
-// - Step indicator follows accessibility patterns
-// - Mobile responsive design considerations
+/**
+ * ============================================================================
+ * FILE: LearningHome.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Entry point for the adaptive learning feature. Displays a welcoming homepage
+ * with a topic input form and explains the mastery-based learning approach.
+ * Users enter a topic to learn, which triggers course generation and navigates
+ * to the learning path.
+ * 
+ * KEY COMPONENTS:
+ * - LearningHome: Main page wrapper with hero section and feature overview
+ * - TopicInput: Form component for entering learning topics
+ * - Step Indicator: Visual 4-step process (Read, Quiz, Feedback, Master)
+ * - Feature Cards: Three cards explaining core learning principles
+ * 
+ * DEPENDENCIES:
+ * - react-router-dom: Link component for navigation to /learn routes
+ * - TopicInput: Child component for topic entry and course generation
+ * - @/lib/utils: cn() utility for conditional className composition
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Route: /learn (root of learning feature)
+ * // Shows topic input and explains learning methodology
+ * 
+ * <LearningHome />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Errors handled by TopicInput component (generation failures)
+ * - This component is a pure presentation layer
+ * 
+ * PERFORMANCE NOTES:
+ * - Minimal component with no data fetching
+ * - Semantic HTML structure for accessibility
+ * - Mobile responsive layout (single column on mobile, grid on desktop)
+ * 
+ * RELATED FILES:
+ * - TopicInput.tsx: Topic input form and course generation logic
+ * - LearningPage.tsx: Individual session page after topic submission
+ * - LearningPathContainer.tsx: Learning path rendering after generation
+ * 
+ * NOTES:
+ * - Route: /learn
+ * - Semantic HTML with proper ARIA labels
+ * - Step indicator follows accessibility patterns
+ * - Three feature cards explain: Sequential Learning, Retrieval Practice, Mastery Required
+ * ============================================================================
+ */
 
 import { Link } from 'react-router-dom';
 import { TopicInput } from './TopicInput';

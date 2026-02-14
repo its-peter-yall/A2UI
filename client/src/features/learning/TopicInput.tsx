@@ -1,17 +1,59 @@
-// TopicInput.tsx
-// Topic input form for starting a new learning session
-
-// Provides a search-like input for entering topics to learn.
-// Triggers course generation on submit and navigates to learning path.
-// Shows generation progress during the scatter-gather process.
-
-// @see: client/src/lib/learningApi.ts - generateCourse API
-// @note: Uses React Router for navigation after generation
-
-// Best practices applied:
-// - Navigation in onSuccess callback (TanStack Query pattern)
-// - Button disabled with isPending to prevent double-submission
-// - Accessible form with proper labels and ARIA attributes
+/**
+ * ============================================================================
+ * FILE: TopicInput.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Form component that allows users to enter a topic they want to learn.
+ * Triggers course generation on submit, shows loading progress during the
+ * scatter-gather process, and navigates to the generated learning path.
+ * 
+ * KEY COMPONENTS:
+ * - TopicInput: Main form with text input and submit button
+ * - Suggestion Chips: Clickable topic suggestions for quick starts
+ * - Loading State: Shows progress message while generating course
+ * - Error Display: Shows error message if generation fails
+ * 
+ * DEPENDENCIES:
+ * - react-router-dom: useNavigate for navigation after generation
+ * - @tanstack/react-query: useMutation for course generation
+ * - @/lib/utils: cn() utility for conditional className
+ * - @/lib/learningApi: generateCourse API function
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Basic usage on LearningHome page
+ * <TopicInput />
+ * 
+ * // With custom placeholder and user ID
+ * <TopicInput
+ *   placeholder="What do you want to master?"
+ *   userId="user-123"
+ *   className="mb-8"
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Generation failure: Shows error message with aria-live="polite"
+ * - Button disabled during loading to prevent double submission
+ * - Empty input prevented from submission
+ * 
+ * PERFORMANCE NOTES:
+ * - Navigation happens in onSuccess callback (TanStack Query best practice)
+ * - Button disabled with isPending prevents duplicate mutations
+ * - Loading message with progress hint during generation (which takes time)
+ * 
+ * RELATED FILES:
+ * - LearningHome.tsx: Parent component that renders TopicInput
+ * - @/lib/learningApi.ts: generateCourse API function
+ * - LearningPathContainer.tsx: Renders the generated learning path
+ * 
+ * NOTES:
+ * - Default suggestions: "Newton's Laws", "Photosynthesis", "Machine Learning Basics"
+ * - Navigation: /learn/:sessionId after successful generation
+ * - Best practice: Button disabled during isPending to prevent double-submission
+ * ============================================================================
+ */
 
 import { useState, useId } from 'react';
 import type { FormEvent } from 'react';

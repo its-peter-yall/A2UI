@@ -1,3 +1,55 @@
+"""
+=============================================================================
+FILE: test_generator_agent.py
+=============================================================================
+
+PURPOSE:
+Unit tests for GeneratorAgent class and system prompt. Validates agent role,
+educational content generation, system prompt structure, and generate_explanation()
+wiring to instructor client with context injection.
+
+KEY TESTS:
+- test_agent_role: Verifies GeneratorAgent has correct 'generator' role
+- test_system_prompt_contains_5e: Validates 5E pedagogical framework in prompt
+- test_generate_explanation_calls_instructor_client: Tests method wiring
+- test_context_injection_includes_prev_summary: Validates narrative bridging
+- test_first_topic_has_entry_point_message: Tests first topic handling
+
+DEPENDENCIES:
+- unittest: Python standard testing framework
+- unittest.mock: AsyncMock for mocking instructor client
+- server.agents.generator: GeneratorAgent implementation
+- server.schemas.learning: TopicNode, GeneratedContent schemas
+- pydantic: Data validation for GeneratedContent model
+
+USAGE PATTERN:
+```python
+# Run all generator agent tests
+python -m unittest server.tests.test_generator_agent
+
+# Run specific test class
+python -m unittest server.tests.test_generator_agent.TestGeneratorAgentRole
+
+# Run single test
+python -m unittest server.tests.test_generator_agent.TestGeneratorAgentRole.test_agent_role
+```
+
+TEST SETUP:
+- Uses unittest.mock AsyncMock to mock instructor_client.create_structured
+- No actual LLM calls - fully mock-based
+- Test fixtures create mock TopicNode and GeneratedContent objects
+
+RELATED FILES:
+- server/agents/generator.py - GeneratorAgent implementation
+- server/schemas/learning.py - TopicNode, GeneratedContent schemas
+
+NOTES:
+- Generates 2-3 minute (300-500 word) educational content
+- Uses 5E model: Engage, Explore, Explain, Elaborate, Evaluate
+- Context injection for narrative continuity between topics
+=============================================================================
+"""
+
 # test_generator_agent.py
 # Unit tests for the Generator Agent
 

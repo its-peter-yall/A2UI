@@ -1,3 +1,47 @@
+/**
+ * ============================================================================
+ * FILE: MasteryCelebration.test.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Unit tests for MasteryCelebration component. Validates celebration
+ * rendering with topic mastery and course completion messages, plus
+ * callback triggering after animation duration.
+ * 
+ * KEY TESTS:
+ * - Shows "Topic Mastered!" with topic title
+ * - Shows "Course Complete!" when isCourseComplete
+ * - Calls onComplete after animation (2500ms)
+ * - Does not render when inactive (active=false)
+ * 
+ * DEPENDENCIES:
+ * - vitest: Testing framework
+ * - @testing-library/react: Component testing
+ * - client/src/features/learning/animations/MasteryCelebration: Component
+ * - client/src/features/learning/animations/Confetti: Confetti effect (mocked)
+ * 
+ * USAGE PATTERN:
+ * ```bash
+ * # Run mastery celebration tests
+ * npm run test -- src/features/learning/animations/MasteryCelebration.test.tsx
+ * ```
+ * 
+ * TEST SETUP:
+ * - Mocks Confetti component to avoid canvas warnings
+ * - Uses waitFor with extended timeout for animation timing
+ * - Tests both topic-level and course-level celebrations
+ * 
+ * RELATED FILES:
+ * - client/src/features/learning/animations/MasteryCelebration.tsx
+ * - client/src/features/learning/animations/Confetti.tsx
+ * 
+ * NOTES:
+ * - Staggered reveal: 200ms delay before message
+ * - Auto-dismiss after 2500ms total
+ * - Confetti canvas effect for visual celebration
+ * ============================================================================
+ */
+
 // client/src/features/learning/animations/MasteryCelebration.test.tsx
 // Tests for mastery celebration component
 

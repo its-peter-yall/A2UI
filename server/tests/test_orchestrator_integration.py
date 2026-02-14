@@ -1,3 +1,46 @@
+"""
+=============================================================================
+FILE: test_orchestrator_integration.py
+=============================================================================
+
+PURPOSE:
+Integration tests for CourseOrchestrator with live dependencies. Provides
+end-to-end course generation test against real Vertex AI and database.
+
+KEY TESTS:
+- test_generate_course_end_to_end: Full course generation with live services
+
+DEPENDENCIES:
+- unittest: Python standard testing framework
+- server.services.course_orchestrator: CourseOrchestrator with live wiring
+
+USAGE PATTERN:
+```bash
+# Run integration tests (requires credentials)
+RUN_INTEGRATION_TESTS=1 python -m unittest server.tests.test_orchestrator_integration
+```
+
+TEST SETUP:
+- Skipped by default via @unittest.skipUnless
+- Requires RUN_INTEGRATION_TESTS=1 environment variable
+- Requires live Vertex AI credentials configured
+- Requires reachable SQLite database
+- Tests against real LLM responses
+
+RELATED FILES:
+- server/services/course_orchestrator.py - CourseOrchestrator implementation
+- server/agents/planner.py - PlannerAgent (live)
+- server/agents/generator.py - GeneratorAgent (live)
+- server/agents/quizzer.py - QuizzerAgent (live)
+
+NOTES:
+- SKIPPED by default - not run in CI/CD
+- Manual verification test for production readiness
+- Use sparingly - consumes API quota
+- Verify credentials before running
+=============================================================================
+"""
+
 # test_orchestrator_integration.py
 # Integration tests for CourseOrchestrator with live dependencies
 

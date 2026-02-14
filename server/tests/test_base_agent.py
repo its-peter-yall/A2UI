@@ -1,10 +1,52 @@
+"""
+=============================================================================
+FILE: test_base_agent.py
+=============================================================================
+
+PURPOSE:
+Unit tests for BaseAgent retry behavior. Validates that BaseAgent retries
+on Pydantic validation failures with proper delay handling.
+
+KEY TESTS:
+- test_generate_retries_on_validation_error: Validates retry on validation error
+
+DEPENDENCIES:
+- unittest: Python standard testing framework
+- unittest.mock: AsyncMock for mocking instructor client and sleep
+- pydantic: ValidationError for simulating validation failures
+- server.agents.base: BaseAgent implementation under test
+
+USAGE PATTERN:
+```python
+# Run base agent tests
+python -m unittest server.tests.test_base_agent
+
+# Run single test
+python -m unittest server.tests.test_base_agent.TestBaseAgentRetry.test_generate_retries_on_validation_error
+```
+
+TEST SETUP:
+- Creates dummy _DummyAgent and _DummyModel for testing
+- Mocks instructor_client.create_structured to raise ValidationError then succeed
+- Mocks asyncio.sleep to avoid test delays
+- Verifies retry occurs exactly once on validation failure
+
+RELATED FILES:
+- server/agents/base.py - BaseAgent implementation with retry logic
+
+NOTES:
+- BaseAgent uses tenacity for retry logic
+- Retry triggered on Pydantic ValidationError
+- Sleep mocked to keep tests fast
+=============================================================================
+"""
+
 # test_base_agent.py
 # Unit tests for BaseAgent retry behavior
 
-# Longer description (2-4 lines):
-# - Verifies BaseAgent retries on Pydantic validation failures.
-# - Uses a dummy agent and mocked instructor client responses.
-# - Ensures retry delay is awaited without slowing tests.
+# Verifies BaseAgent retries on Pydantic validation failures.
+# Uses a dummy agent and mocked instructor client responses.
+# Ensures retry delay is awaited without slowing tests.
 
 # @see: server/agents/base.py - BaseAgent implementation
 # @note: Asyncio sleep is mocked to keep tests fast

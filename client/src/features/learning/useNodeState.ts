@@ -1,11 +1,76 @@
+/**
+ * ============================================================================
+ * FILE: useNodeState.ts
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Provides a declarative interface for determining available user actions
+ * based on a concept node's current status. Enforces the sequential learning
+ * flow (LOCKED → VIEWING_EXPLANATION → IN_QUIZ → SHOWING_FEEDBACK → COMPLETED)
+ * and exports utility functions for state transition validation. Used by UI
+ * components to enable/disable buttons and determine which view to render.
+ * 
+ * KEY COMPONENTS:
+ * - useNodeState: Main hook returning status, actions, computed flags, currentView
+ * - NodeActions: Interface for action boolean flags (canView, canProceed, etc.)
+ * - NodeStateResult: Complete state object with all computed properties
+ * - isValidTransition(): Validates status-to-status transitions (mirrors server)
+ * - getNextStatus(): Returns expected next status for optimistic updates
+ * - ALLOWED_TRANSITIONS: State machine defining valid transitions
+ * 
+ * DEPENDENCIES:
+ * - @/types/learning: NodeStatus, ConceptNode, QuizSubmitResponse types
+ * - No external runtime dependencies (pure logic)
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * import { useNodeState } from '@/features/learning/useNodeState';
+ * 
+ * // In ConceptCard:
+ * const { status, actions, isLocked, isMastered, currentView } = useNodeState(node, quizResult);
+ * 
+ * // In render:
+ * {actions.canProceedToQuiz && (
+ *   <Button onClick={proceedToQuiz}>I understand, proceed to quiz</Button>
+ * )}
+ * 
+ * {actions.canRetryQuiz && (
+ *   <Button variant="outline" onClick={retryQuiz}>Try again</Button>
+ * )}
+ * 
+ * {actions.canContinueToNext && (
+ *   <Button onClick={continueToNext}>Continue to next topic</Button>
+ * )}
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Invalid status values default to 'locked' view (safe fallback)
+ * - isValidTransition returns false for unknown status pairs
+ * - getNextStatus returns null for terminal/error states
+ * 
+ * PERFORMANCE NOTES:
+ * - Pure function computation (no hooks other than return)
+ * - View mapping is a simple switch statement (O(1) lookup)
+ * - Actions computed once per render based on status + mastery
+ * 
+ * RELATED FILES:
+ * - @/types/learning: NodeStatus enum and related types
+ * - ConceptCard.tsx: Primary consumer for button enabling
+ * - LearningPathContainer.tsx: Uses currentView for rendering decisions
+ * - optimisticUpdates.ts: Uses isValidTransition and getNextStatus
+ * - server/schemas/learning.py: Server-side source of truth for transitions
+ * 
+ * NOTES:
+ * - Server is authoritative; this provides client-side UX guidance only
+ * - Sequential flow is strict: cannot skip from explanation to feedback
+ * - isMastered considers both quizResult (immediate) and status (persisted)
+ * - View mapping: locked|explanation|quiz|feedback|completed|error
+ * - State machine: Any state can go to ERROR; ERROR can regenerate
+ * ============================================================================
+ */
+
 // useNodeState.ts
 // Hook for determining available actions based on node status
-
-// Provides a declarative interface for node state and available actions.
-// Enforces sequential flow: explanation → quiz → feedback → (retry|complete)
-
-// @see: server/schemas/learning.py - NodeStatus enum definition
-// @note: Server is authoritative; this provides client-side UX guidance
 
 import type { NodeStatus, ConceptNode, QuizSubmitResponse } from '@/types/learning';
 

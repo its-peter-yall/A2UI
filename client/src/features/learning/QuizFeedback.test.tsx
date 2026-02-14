@@ -1,3 +1,49 @@
+/**
+ * ============================================================================
+ * FILE: QuizFeedback.test.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Unit tests for QuizFeedback component. Validates feedback display after
+ * quiz submission including correct/incorrect messaging, mastery badges,
+ * retry/continue buttons, and option explanations.
+ * 
+ * KEY TESTS:
+ * - Shows "Correct!" with "Mastered!" badge for correct answers
+ * - Shows "Incorrect" without badge for wrong answers
+ * - Shows "Try Again" button when not mastered
+ * - Shows "Continue" button when mastered
+ * - Displays all option explanations (both correct and incorrect)
+ * 
+ * DEPENDENCIES:
+ * - vitest: Testing framework
+ * - @testing-library/react: Component testing
+ * - client/src/features/learning/QuizFeedback: Component under test
+ * - client/src/types/learning: QuizCard, QuizSubmitResponse types
+ * 
+ * USAGE PATTERN:
+ * ```bash
+ * # Run QuizFeedback tests
+ * npm run test -- src/features/learning/QuizFeedback.test.tsx
+ * ```
+ * 
+ * TEST SETUP:
+ * - Creates mock QuizCard with 4 options
+ * - Creates mock QuizSubmitResponse for correct and incorrect cases
+ * - Tests button click handlers with fireEvent
+ * 
+ * RELATED FILES:
+ * - client/src/features/learning/QuizFeedback.tsx
+ * - client/src/types/learning.ts
+ * 
+ * NOTES:
+ * - Mastery requires 100% score (correct first try)
+ * - Explanations shown for ALL options (learning value)
+ * - onRetry callback for retry flow
+ * - onContinue callback for progression
+ * ============================================================================
+ */
+
 // QuizFeedback.test.tsx
 // Tests for QuizFeedback component
 

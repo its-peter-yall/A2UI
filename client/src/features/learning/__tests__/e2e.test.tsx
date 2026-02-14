@@ -1,3 +1,68 @@
+/**
+ * ============================================================================
+ * FILE: e2e.test.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * End-to-end integration tests for the learning feature. Tests complete
+ * user flows from topic input through mastery achievement, validating
+ * component integration and state transitions across the learning journey.
+ * 
+ * KEY TESTS:
+ * - Navigate from topic input to session page
+ * - Show explanation first, transition to quiz on proceed
+ * - Show retry flow when quiz answer incorrect
+ * - Unlock next node when quiz answer correct
+ * - Show error state when session fails to load
+ * - Show completion overlay when all nodes complete
+ * 
+ * DEPENDENCIES:
+ * - vitest: Testing framework
+ * - @testing-library/react: Component testing
+ * - @tanstack/react-query: Query client provider
+ * - react-router-dom: MemoryRouter for navigation
+ * - client/src/features/learning/LearningHome: Home/start page
+ * - client/src/features/learning/LearningPage: Session page
+ * - client/src/lib/learningApi: API functions (mocked)
+ * 
+ * USAGE PATTERN:
+ * ```bash
+ * # Run e2e tests
+ * npm run test -- src/features/learning/__tests__/e2e.test.tsx
+ * 
+ * # Run specific flow
+ * npm run test -- -t "navigates from topic input"
+ * ```
+ * 
+ * TEST SETUP:
+ * - Mocks entire @/lib/learningApi module
+ * - Uses MemoryRouter with defined routes
+ * - Creates mock sessions with nodes in various states
+ * - Tests complete user journeys end-to-end
+ * 
+ * RELATED FILES:
+ * - client/src/features/learning/LearningHome.tsx
+ * - client/src/features/learning/LearningPage.tsx
+ * - client/src/types/learning.ts
+ * 
+ * NOTES:
+ * - Uses mockNavigate from react-router-dom
+ * - Tests both success and error flows
+ * - Validates full component integration, not isolated units
+ * ============================================================================
+ */
+
+// e2e.test.tsx
+// End-to-end integration tests for the learning feature
+
+// Tests complete user flows: topic input, session creation, explanation viewing,
+// quiz progression, answer submission, and mastery achievement.
+// Verifies component integration and state transitions across the learning journey.
+
+// @see: client/src/features/learning/LearningHome.tsx
+// @see: client/src/features/learning/LearningPage.tsx
+// @note: Uses mocked API to avoid external dependencies
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

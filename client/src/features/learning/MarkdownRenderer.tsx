@@ -1,13 +1,61 @@
-// MarkdownRenderer.tsx
-// Renders markdown content for concept explanations
-
-// Longer description (2-4 lines):
-// - Wraps react-markdown with shared styling for learning content.
-// - Enables GFM features like tables and task lists.
-// - Sanitizes HTML to prevent unsafe rendering.
-
-// @see: client/src/components/MessageBubble.tsx - Markdown rendering setup
-// @note: Only allow raw HTML when sanitized
+/**
+ * ============================================================================
+ * FILE: MarkdownRenderer.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Renders markdown content as styled HTML for concept explanations in the
+ * learning path. Wraps react-markdown with custom styling, GitHub Flavored
+ * Markdown (GFM) support, and HTML sanitization for security. Provides
+ * consistent typography and colors aligned with the learning feature design.
+ * 
+ * KEY COMPONENTS:
+ * - MarkdownRenderer: Main wrapper with styled prose container
+ * - Custom Components: Code block rendering with syntax highlighting
+ * - Plugin Configuration: GFM, raw HTML, and sanitization plugins
+ * 
+ * DEPENDENCIES:
+ * - react-markdown: Core markdown parsing and rendering
+ * - rehype-raw: Plugin to render raw HTML in markdown
+ * - rehype-sanitize: Plugin to sanitize HTML and prevent XSS
+ * - remark-gfm: GitHub Flavored Markdown support (tables, task lists, etc.)
+ * - @/lib/utils: cn() utility for conditional className
+ * - tailwindcss/typography: prose classes for beautiful typography
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Basic usage
+ * <MarkdownRenderer content={node.content_markdown} />
+ * 
+ * // With custom className
+ * <MarkdownRenderer
+ *   content={node.content_markdown}
+ *   className="text-sm"
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - react-markdown handles malformed markdown gracefully
+ * - Sanitization removes potentially dangerous HTML
+ * - No error boundary needed (errors show as plain text)
+ * 
+ * PERFORMANCE NOTES:
+ * - Only re-renders when content prop changes
+ * - Plugins are stable references (not recreated each render)
+ * - Sanitization is lightweight but thorough
+ * 
+ * RELATED FILES:
+ * - ConceptCard.tsx: Main consumer of MarkdownRenderer
+ * - @/components/MessageBubble.tsx: Similar markdown rendering setup
+ * 
+ * NOTES:
+ * - Cyber Yellow (#FFD400) is used for primary accents (headings, links, code)
+ * - Dark mode support via dark:prose-invert
+ * - Tables and task lists supported via remark-gfm
+ * - Code inline styling: bg-primary/10, px-1, rounded
+ * - Pre blocks: bg-muted with border
+ * ============================================================================
+ */
 
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';

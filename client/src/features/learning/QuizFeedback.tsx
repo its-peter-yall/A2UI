@@ -1,11 +1,56 @@
-// QuizFeedback.tsx
-// Quiz result feedback component for SHOWING_FEEDBACK state
-
-// Displays detailed quiz results including selected answer, correct answer,
-// explanations for all options, and action buttons (retry/continue).
-
-// @see: client/src/types/learning.ts - QuizSubmitResponse type
-// @note: Rendered inside ConceptCard when status is SHOWING_FEEDBACK
+/**
+ * ============================================================================
+ * FILE: QuizFeedback.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Displays detailed quiz results after a user submits an answer. Shows whether
+ * the answer was correct/incorrect, displays the correct answer, provides
+ * explanations for all options, and offers action buttons to retry or continue.
+ * Rendered inside ConceptCard when node status is SHOWING_FEEDBACK.
+ * 
+ * KEY COMPONENTS:
+ * - QuizFeedback: Main component with result header and action buttons
+ * - Result Header: Shows correct/incorrect icon, attempt count, score percentage
+ * - Option Feedback: Each quiz option shows correct/incorrect state with explanation
+ * - Action Buttons: Retry (if not mastered) or Continue (if mastered)
+ * 
+ * DEPENDENCIES:
+ * - @/lib/utils: cn() utility for conditional className composition
+ * - @/types/learning: QuizCard, QuizSubmitResponse types for type safety
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Inside ConceptCard when status === SHOWING_FEEDBACK
+ * <QuizFeedback
+ *   quiz={node.quiz}
+ *   result={feedbackResult}
+ *   attemptCount={attemptCount}
+ *   onRetry={() => handleRetry()}
+ *   onContinue={feedbackResult.is_mastered ? () => onContinueToNext?.(node.id) : undefined}
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - This component assumes quiz and result are always provided
+ * - Error states handled by parent ConceptCard (LoadingState/ErrorState)
+ * 
+ * PERFORMANCE NOTES:
+ * - Lightweight component with minimal re-renders
+ * - Uses CSS transitions for hover states
+ * - Conditional rendering only includes relevant option feedback
+ * 
+ * RELATED FILES:
+ * - ConceptCard.tsx: Parent component that renders QuizFeedback
+ * - useQuizFeedback.ts: Hook that fetches and manages feedback data
+ * - @/types/learning.ts: QuizCard, QuizSubmitResponse type definitions
+ * 
+ * NOTES:
+ * - Shows "Mastered!" badge when is_mastery_achieved is true
+ * - Score percent shows user's current score (not cumulative)
+ * - "Continue to Next Topic" or "Complete Course" based on next_node_unlocked
+ * ============================================================================
+ */
 
 import { cn } from '@/lib/utils';
 import type { QuizCard, QuizSubmitResponse } from '@/types/learning';

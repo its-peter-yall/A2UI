@@ -1,11 +1,57 @@
-# vertex_client.py
-# Google Vertex AI SDK initialization and client management
+"""
+=============================================================================
+FILE: vertex_client.py
+=============================================================================
 
-# Handles the authentication and initialization of the Vertex AI SDK
-# using configuration from the global settings.
+PURPOSE:
+Initializes the Google Vertex AI SDK with project and location settings from
+the application config. Provides centralized initialization and status checking
+for the Vertex AI SDK used by the learning system's AI generation capabilities.
 
-# @see: config.py
-# @note: Requires GOOGLE_APPLICATION_CREDENTIALS to be set
+KEY COMPONENTS:
+- init_vertex(): One-time SDK initialization with project/location from settings
+- get_vertex_status(): Returns boolean indicating if Vertex AI initialized successfully
+- _is_initialized: Module-level state tracking for SDK initialization status
+
+DEPENDENCIES:
+- google.cloud.aiplatform: Google's SDK for interacting with Vertex AI services
+- server.config: Provides PROJECT_ID, LOCATION, and credential configuration
+
+USAGE PATTERN:
+```python
+from server.utils.vertex_client import init_vertex, get_vertex_status
+
+# Initialize once at application startup
+if init_vertex():
+    print("Vertex AI ready for model inference")
+
+# Check status anywhere in the application
+if get_vertex_status():
+    # Use Vertex AI for predictions
+    pass
+```
+
+ERROR HANDLING:
+- Raises Exception on SDK initialization failure (credential errors, network issues)
+- Returns False and logs warning if config validation fails
+- All errors are logged with descriptive messages
+
+PERFORMANCE NOTES:
+- Initialization is idempotent - subsequent calls after first success return immediately
+- Module-level state avoids re-initialization overhead
+- Should be called once during application startup (lifespan context)
+
+RELATED FILES:
+- server/config.py: Provides settings.PROJECT_ID and settings.LOCATION
+- server/main.py: Calls init_vertex() during FastAPI lifespan startup
+- server/utils/instructor_client.py: Uses Vertex AI as provider for Gemini models
+
+NOTES:
+- Requires GOOGLE_APPLICATION_CREDENTIALS environment variable or ADC
+- In ADC environments, credentials may be provided via workload identity
+- Validation checks both PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS
+=============================================================================
+"""
 
 from google.cloud import aiplatform
 from server.config import settings

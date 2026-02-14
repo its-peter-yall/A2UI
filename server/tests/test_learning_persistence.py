@@ -1,3 +1,60 @@
+"""
+=============================================================================
+FILE: test_learning_persistence.py
+=============================================================================
+
+PURPOSE:
+Unit tests for learning persistence layer (LearningManager). Validates
+CRUD operations with SQLite, ordering, status transitions, quiz payload
+retrieval, and foreign key cascade behavior.
+
+KEY TESTS:
+- test_create_learning_session: Session creation and defaults
+- test_get_session_nodes: Node ordering by sequence_index
+- test_update_node_status: Status transition persistence
+- test_update_node_content: Content and quiz update with error handling
+- test_get_quiz_for_node: Quiz retrieval and deserialization
+- test_cascade_delete: Foreign key cascade behavior
+- test_create_quiz_attempt_correct_answer: Mastery detection
+- test_check_mastery_mastered: 100% score = mastered
+
+DEPENDENCIES:
+- unittest: Python standard testing framework
+- tempfile: Temporary database file creation
+- pathlib: Path manipulation
+- server.database.learning_persistence: LearningManager under test
+- server.schemas.learning: NodeStatus, QuizCard, QuizDifficulty schemas
+
+USAGE PATTERN:
+```python
+# Run all persistence tests
+python -m unittest server.tests.test_learning_persistence
+
+# Run specific test class
+python -m unittest server.tests.test_learning_persistence.TestLearningManager
+
+# Run quiz attempts tests
+python -m unittest server.tests.test_learning_persistence.TestQuizAttempts
+```
+
+TEST SETUP:
+- Each test gets a dedicated temporary SQLite database file
+- setUp creates tables, tearDown cleans up temp files
+- Tests verify actual SQLite persistence and retrieval
+- Quiz attempt tests validate mastery logic
+
+RELATED FILES:
+- server/database/learning_persistence.py - LearningManager implementation
+- server/database/models.py - SQLAlchemy models (if used)
+
+NOTES:
+- SQLite with file-based storage for test isolation
+- Nodes ordered by sequence_index ASC
+- Cascade delete: session -> nodes -> quiz_attempts
+- Mastery: first 100% score attempt = mastered
+=============================================================================
+"""
+
 # test_learning_persistence.py
 # Unit tests for learning persistence layer operations
 

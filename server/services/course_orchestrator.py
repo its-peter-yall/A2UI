@@ -1,13 +1,76 @@
-# course_orchestrator.py
-# Scatter-Gather orchestrator for parallel course generation
+"""
+=============================================================================
+FILE: course_orchestrator.py
+=============================================================================
 
-# Implements the CourseOrchestrator that coordinates planner, generator, and
-# quizzer agents to create learning paths. Uses asyncio.gather for parallel
-# execution with partial failure handling and performance logging.
+PURPOSE:
+Coordinates the generation of adaptive learning paths using a Scatter-Gather
+pattern. The orchestrator manages planner, generator, and quizzer agents to
+produce complete courses with parallel topic processing and partial failure
+handling.
 
-# @see: server/agents/__init__.py - Agent implementations
-# @see: server/database/learning_persistence.py - Database persistence
-# @note: Uses return_exceptions=True to handle partial failures gracefully
+KEY COMPONENTS:
+- CourseOrchestrator: Main orchestrator class implementing the scatter-gather
+  pattern for parallel course generation
+- generate_course(): Entry point that coordinates the full course generation
+  flow (serial planning → parallel generation → result aggregation)
+- _generate_concept_unit(): Generates individual topic content (explanation +
+  quiz) with context injection from adjacent topics
+- _process_gather_results(): Handles partial failures by creating SkeletonCards
+  for failed nodes, enabling retry
+- regenerate_node(): Retries generation for a single failed node
+
+DEPENDENCIES:
+- asyncio: Parallel task execution using asyncio.gather()
+- logging: Structured performance and error logging
+- time.perf_counter(): High-resolution timing for metrics
+- server.agents: Planner, generator, and quizzer agents
+- server.database.learning_persistence: Learning session and node storage
+- server.schemas.learning: CourseOutline, TopicNode, QuizCard, NodeStatus
+
+USAGE PATTERN:
+```python
+from server.services.course_orchestrator import course_orchestrator
+
+# Generate a complete course
+result = await course_orchestrator.generate_course(
+    query="Learn Python async programming",
+    user_id="user123"
+)
+# Returns: {session: {...}, nodes: [...], metrics: {...}}
+
+# Regenerate a failed node
+updated_node = await course_orchestrator.regenerate_node(node_id="node-uuid")
+```
+
+ERROR HANDLING:
+- Uses return_exceptions=True in asyncio.gather() to prevent one failure
+  from canceling other parallel tasks
+- Failed concept units return SkeletonCards with error_message and retry_available=True
+- Partial failures are logged with structured metadata (topic_index, session_id)
+- Regeneration requires node to have status=ERROR and retry_available=True
+
+PERFORMANCE NOTES:
+- Serial planner step runs first (blocking), then parallel generation
+- Latency savings = estimated_serial_time - actual_parallel_time
+- Each node generates ~150-300ms; parallelization provides near-linear speedup
+- Structured logging includes planner_ms, parallel_ms, total_ms, latency_savings_ms
+
+RELATED FILES:
+- server/agents/planner_agent.py: Decomposes user query into CourseOutline
+- server/agents/generator_agent.py: Generates educational explanations
+- server/agents/quizzer_agent.py: Creates quiz questions for topics
+- server/database/learning_persistence.py: Persists sessions and nodes
+- server/schemas/learning.py: TopicNode, CourseOutline, NodeStatus definitions
+
+NOTES:
+- First node in course gets VIEWING_EXPLANATION status; others are LOCKED
+- Context injection passes prev_summary/next_summary to generator for
+  smooth topic transitions
+- SkeletonCards allow partial course completion even with failures
+- Regeneration determines adjacent node status to restore correct flow state
+=============================================================================
+"""
 
 from __future__ import annotations
 

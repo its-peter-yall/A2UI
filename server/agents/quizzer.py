@@ -1,13 +1,78 @@
-# quizzer.py
-# Quizzer Agent for generating retrieval-based assessment questions
+"""
+=============================================================================
+FILE: quizzer.py
+=============================================================================
 
-# Implements the Quizzer Agent that creates diagnostic quiz questions targeting
-# common misconceptions. Follows retrieval-based learning principles where
-# active recall strengthens memory. Uses misconception-based distractor design.
+PURPOSE:
+Quizzer Agent that generates retrieval-based assessment questions targeting
+common student misconceptions. Creates diagnostic quiz questions following
+research-backed principles where active recall strengthens memory. This is
+the final agent in the content generation pipeline.
 
-# @see: server/agents/base.py - BaseAgent abstract class
-# @see: server/schemas/learning.py - QuizCard, QuizOption models
-# @note: Uses low temperature (0.2) for strict JSON adherence
+KEY COMPONENTS:
+- QUIZZER_SYSTEM_PROMPT: Detailed prompt with distractor generation methodology
+- QuizzerAgent: Agent class for generating diagnostic assessments
+- generate_quiz(): Main method to create QuizCard from topic and content
+- _build_user_message(): Constructs prompt with topic details and content
+- _build_topic_context(): Merges topic metadata with additional context
+- quizzer_agent: Singleton instance for application-wide use
+
+DEPENDENCIES:
+- server.agents.base.BaseAgent: Parent class providing generate() method
+- server.schemas.learning.QuizCard: Response model with question and options
+- server.schemas.learning.TopicNode: Input model with title, summary, key_terms
+- Retrieval-Based Learning: Testing effect for memory strengthening
+
+USAGE PATTERN:
+```python
+from server.agents.quizzer import quizzer_agent
+from server.schemas.learning import TopicNode
+
+topic = TopicNode(
+    index=0,
+    title="Newton's First Law",
+    summary_for_context="Explains inertia principle",
+    key_terms=["inertia", "equilibrium", "net force"]
+)
+
+content = "# Newton's First Law\n\nInertia is..."
+
+quiz = await quizzer_agent.generate_quiz(topic=topic, content=content)
+
+print(quiz.question_text)  # "What is the key principle of Newton's First Law?"
+print(quiz.difficulty)     # "easy" | "medium" | "hard"
+print(len(quiz.options))   # 4 (exactly)
+
+# Access options
+correct = [opt for opt in quiz.options if opt.is_correct][0]
+print(correct.text)  # The correct answer
+```
+
+ERROR HANDLING:
+- Exception: Re-raised if generation fails after retry attempts
+- ValidationError: Handled internally with retry logic
+- Schema validation: Strict - exactly 4 options, exactly 1 correct answer
+
+PERFORMANCE NOTES:
+- Uses low temperature (0.2) for strict JSON adherence and consistency
+- Generates exactly 4 options per question (1 correct, 3 distractors)
+- Each distractor targets a specific misconception for diagnostic value
+- All options MUST have explanations for learning reinforcement
+- Difficulty calibrated: easy (recall), medium (application), hard (analysis)
+
+RELATED FILES:
+- server/agents/base.py: BaseAgent providing inheritance and generate()
+- server/agents/planner.py: Produces TopicNodes consumed by Quizzer
+- server/schemas/learning.py: QuizCard, QuizOption, TopicNode models
+
+NOTES:
+- Distractors must be plausible to students with misconceptions
+- Misconception-based design: each wrong answer reveals specific understanding gap
+- Explanations teach: "This is incorrect because [reason]. Correct is [correction]"
+- Chain-of-thought process built into prompt for question design
+- Questions force active recall, not passive recognition
+=============================================================================
+"""
 
 from __future__ import annotations
 

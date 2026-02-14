@@ -1,12 +1,66 @@
-// client/src/features/learning/animations/MasteryCelebration.tsx
-// Full mastery celebration overlay
+/**
+ * ============================================================================
+ * FILE: MasteryCelebration.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Full-screen celebration overlay that appears when a user achieves 100%
+ * mastery on a quiz topic. Combines a confetti particle burst with animated
+ * success messaging (emoji, title, subtitle) to provide positive reinforcement.
+ * Auto-dismisses after the animation completes to create a non-blocking,
+ * celebratory experience that rewards learning achievement.
+ * 
+ * KEY COMPONENTS:
+ * - MasteryCelebration: Main overlay component with confetti + messaging
+ * - Auto-dismiss logic: Automatically calls onComplete callback after duration
+ * - Reduced motion support: Shows static sparkle emoji instead of confetti
+ * - Course completion variant: Different emoji and message for full course mastery
+ * 
+ * DEPENDENCIES:
+ * - framer-motion: AnimatePresence for exit animations, motion for scaling
+ * - react: useEffect for auto-dismiss timeout management
+ * - @/features/learning/animations/Confetti: Particle celebration effect
+ * - @/features/learning/animations/index: prefersReducedMotion helper
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * import { MasteryCelebration } from './animations/MasteryCelebration';
+ * 
+ * // In ConceptCard or LearningPathContainer:
+ * <MasteryCelebration
+ *   active={showCelebration}
+ *   topicTitle={node.title}
+ *   isCourseComplete={isLastNode && isMastered}
+ *   onComplete={() => setShowCelebration(false)}
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - onComplete callback is optional; component works without it
+ * - Timeout is cleared on unmount to prevent memory leaks
+ * - Reduced motion uses 500ms delay (vs 3000ms full animation)
+ * 
+ * PERFORMANCE NOTES:
+ * - Full animation duration: 3000ms (3 seconds)
+ * - Confetti particle count: 100 for topic, 200 for course completion
+ * - Uses fixed positioning with z-50 to overlay all content
+ * - pointer-events-none allows clicking through the overlay
+ * 
+ * RELATED FILES:
+ * - Confetti.tsx: Canvas-based particle system for celebration effect
+ * - LearningPathContainer.tsx: Parent that triggers celebration on mastery
+ * - ConceptCard.tsx: Triggers celebration when SHOWING_FEEDBACK → COMPLETED
+ * 
+ * NOTES:
+ * - Accessibility: Respects prefers-reduced-motion; shows static sparkle instead
+ * - Non-blocking: User can theoretically click through (pointer-events-none)
+ * - Emoji selection: 🎉 for topic mastery, 🎓 for course completion
+ * - Auto-dismiss ensures celebration doesn't persist indefinitely
+ * ============================================================================
+ */
 
-// Combines confetti burst with success messaging.
-// Shows when user achieves 100% on a quiz.
-// Auto-dismisses after animation completes.
-
-// @see: client/src/features/learning/LearningPathContainer.tsx
-// @note: Doesn't block interaction; purely decorative
+// MasteryCelebration.tsx
+// Full mastery celebration overlay component
 
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -31,7 +85,7 @@ export function MasteryCelebration({
   onComplete,
 }: MasteryCelebrationProps) {
   const shouldReduceMotion = prefersReducedMotion();
-  const celebrationDuration = shouldReduceMotion ? 500 : 3000;
+  const celebrationDuration = shouldReduceMotion ? 500 : 1500;
 
   useEffect(() => {
     if (!active) {

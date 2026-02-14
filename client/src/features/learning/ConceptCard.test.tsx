@@ -1,3 +1,53 @@
+/**
+ * ============================================================================
+ * FILE: ConceptCard.test.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Unit tests for ConceptCard component. Validates rendering of all node
+ * states: locked, viewing explanation, in quiz, completed, and error.
+ * Tests callbacks, quiz display, and feedback loading states.
+ * 
+ * KEY TESTS:
+ * - LOCKED: Shows "complete previous topic" message
+ * - VIEWING_EXPLANATION: Shows content with proceed button
+ * - IN_QUIZ: Shows quiz options and submit button
+ * - COMPLETED: Shows "Topic Mastered" with review option
+ * - ERROR: Shows retry button and partial content toggle
+ * - SKIP: Shows skip button when canSkip is true
+ * - Feedback loading: Shows loading state while fetching attempts
+ * - Feedback error: Shows error state when attempts fail to load
+ * 
+ * DEPENDENCIES:
+ * - vitest: Testing framework
+ * - @testing-library/react: Component testing
+ * - @tanstack/react-query: Query client provider
+ * - client/src/features/learning/ConceptCard: Component
+ * - client/src/lib/learningApi: getQuizAttempts (mocked)
+ * 
+ * USAGE PATTERN:
+ * ```bash
+ * # Run ConceptCard tests
+ * npm run test -- src/features/learning/ConceptCard.test.tsx
+ * ```
+ * 
+ * TEST SETUP:
+ * - Creates mock ConceptNode with quiz
+ * - Mocks @/lib/learningApi.getQuizAttempts
+ * - Uses QueryClient provider wrapper
+ * - Tests with various node statuses
+ * 
+ * RELATED FILES:
+ * - client/src/features/learning/ConceptCard.tsx
+ * - client/src/types/learning.ts
+ * 
+ * NOTES:
+ * - onProceedToQuiz callback for VIEWING_EXPLANATION -> IN_QUIZ
+ * - onRegenerate callback for ERROR state
+ * - onSkipNode callback for skipping failed nodes
+ * ============================================================================
+ */
+
 // ConceptCard.test.tsx
 // Tests for ConceptCard component
 

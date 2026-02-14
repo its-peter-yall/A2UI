@@ -1,13 +1,71 @@
-// ErrorStates.tsx
-// Reusable error and empty state components for learning flows
-
-// Longer description (2-4 lines):
-// - Provides consistent UI for error, not found, loading, and empty states.
-// - Includes retry/home actions for recovery and navigation.
-// - Keeps lightweight styling aligned with learning feature patterns.
-
-// @see: client/src/features/learning/LearningPathContainer.tsx
-// @note: Uses Link for navigation back to learning home
+/**
+ * ============================================================================
+ * FILE: ErrorStates.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Collection of reusable UI components for displaying various state conditions
+ * in the learning feature: error states, not found states, loading states,
+ * generating states, and empty states. Provides consistent styling and
+ * recovery actions across the application.
+ * 
+ * KEY COMPONENTS:
+ * - ErrorState: Generic error with retry button and optional home link
+ * - NotFoundState: Resource not found (session/node/course) with navigation
+ * - EmptyState: No content available with optional action button
+ * - LoadingState: Generic loading spinner with message
+ * - GeneratingState: Course generation progress with animated indicator
+ * 
+ * DEPENDENCIES:
+ * - react-router-dom: Link for navigation back to learning home
+ * - @/lib/utils: cn() utility for conditional className composition
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Error with retry
+ * <ErrorState
+ *   title="Failed to load session"
+ *   message="Please try again."
+ *   onRetry={() => refetch()}
+ * />
+ * 
+ * // Not found (session, node, or course)
+ * <NotFoundState type="session" />
+ * 
+ * // Empty with action
+ * <EmptyState
+ *   title="No topics yet"
+ *   action={{ label: 'Generate', onClick: () => generate() }}
+ * />
+ * 
+ * // Loading
+ * <LoadingState message="Loading your session..." />
+ * 
+ * // Generating
+ * <GeneratingState topicCount={5} />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Pure presentation components; no error handling needed
+ * - All components are accessible (role="alert", aria-live, aria-busy)
+ * 
+ * PERFORMANCE NOTES:
+ * - Lightweight components with minimal re-renders
+ * - GeneratingState uses CSS animations (animate-pulse, animate-bounce)
+ * - All components support className override for custom styling
+ * 
+ * RELATED FILES:
+ * - LearningPathContainer.tsx: Main consumer of error states
+ * - LearningErrorBoundary.tsx: Error boundary that may show ErrorState
+ * 
+ * NOTES:
+ * - ErrorState: Default showHomeLink=true, can be disabled
+ * - NotFoundState: Three types with tailored messages
+ * - EmptyState: action is optional (button only shown if provided)
+ * - LoadingState: Uses ellipsis animation (not spinner)
+ * - GeneratingState: Animated bouncing asterisk with progress dots
+ * ============================================================================
+ */
 
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';

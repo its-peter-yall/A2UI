@@ -1,13 +1,69 @@
-// LearningPathContainer.tsx
-// Smart container for the learning path feature
-
-// Longer description (2-4 lines):
-// - Loads learning sessions, orchestrates mutations, and tracks quiz results.
-// - Handles generation, error recovery, and sequential flow transitions.
-// - Renders the learning path list with active state and progress.
-
-// @see: client/src/lib/learningApi.ts - API functions
-// @note: Requires sessionId prop or generates new course from query
+/**
+ * ============================================================================
+ * FILE: LearningPathContainer.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Smart container component that orchestrates the entire learning path experience.
+ * Handles session loading, course generation mutations, carousel navigation between
+ * nodes, quiz result tracking, and celebration animations. The central hub that
+ * connects all learning feature components together.
+ * 
+ * KEY COMPONENTS:
+ * - LearningPathContainer: Main orchestrator managing state for carousel, sessions, celebrations
+ * - Carousel Navigation: Keyboard (arrow keys) and click-based slide navigation
+ * - Session Management: Loads existing sessions or auto-generates new courses
+ * - Error Recovery: Comprehensive error states with retry capabilities
+ * - Toast System: Displays transient error messages via useErrorToast hook
+ * 
+ * DEPENDENCIES:
+ * - @tanstack/react-query: Session queries and mutations with optimistic updates
+ * - framer-motion: Carousel slide animations and MasteryCelebration overlay
+ * - axios: HTTP client with AxiosError type guards for error handling
+ * - learningApi: generateCourse and getLearningSession API functions
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // Load existing session
+ * <LearningPathContainer sessionId="session-123" />
+ * 
+ * // Generate new course from query
+ * <LearningPathContainer query="Machine Learning Basics" userId="user-1" />
+ * 
+ * // With completion callback
+ * <LearningPathContainer
+ *   sessionId={sessionId}
+ *   onCourseGenerated={(session) => document.title = `Learn: ${session.course_title}`}
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - 404 Not Found: Shows NotFoundState component
+ * - Generation Failure: Shows ErrorState with retry option
+ * - All Nodes Error: Special state when every node failed to generate
+ * - Mutation Errors: Extracted from axios response and displayed via toast
+ * 
+ * PERFORMANCE NOTES:
+ * - Microtask scheduling (queueMicrotask) avoids synchronous setState in effects
+ * - Session initialization tracking prevents aggressive auto-advancing
+ * - Refs maintain carousel state per session for session switching
+ * - Carousel direction tracking enables smooth slide animations
+ * 
+ * RELATED FILES:
+ * - ConceptCard.tsx: Renders individual concept nodes with all states
+ * - ProgressBar.tsx: Shows progress with clickable node navigation
+ * - useLearningMutations.ts: Handles all mutation logic with optimistic updates
+ * - useErrorToast.tsx: Toast notification system for errors
+ * - ErrorStates.tsx: Reusable error/loading/empty state components
+ * - MasteryCelebration.tsx: Animation overlay for topic/course completion
+ * 
+ * NOTES:
+ * - Requires sessionId prop OR query prop for new course generation
+ * - Auto-generates when query provided but no sessionId
+ * - Keyboard navigation: Left/Right arrows navigate slides
+ * - Sequential flow: Only one node active at a time (first non-COMPLETED, non-LOCKED)
+ * ============================================================================
+ */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';

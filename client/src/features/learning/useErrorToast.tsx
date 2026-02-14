@@ -1,13 +1,63 @@
-// useErrorToast.tsx
-// Toast hook and container for transient learning errors
-
-// Longer description (2-4 lines):
-// - Exposes toast state and helpers for error, warning, and success messages.
-// - Renders a lightweight stack of toasts with auto-dismiss.
-// - Provides accessible roles for screen readers and dismiss actions.
-
-// @see: client/src/features/learning/LearningPathContainer.tsx
-// @note: Uses simple state instead of a toast library
+/**
+ * ============================================================================
+ * FILE: useErrorToast.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Provides a lightweight toast notification system for transient learning errors.
+ * Exposes a custom hook for managing toast state and a container component for
+ * rendering toasts. Supports error, warning, and success message types with
+ * auto-dismiss and manual dismiss capabilities.
+ * 
+ * KEY COMPONENTS:
+ * - useErrorToast: Custom hook exposing toast state and show/dismiss functions
+ * - ToastContainer: Fixed-position container rendering the toast stack
+ * - Toast Types: Error (red), Warning (amber), Success (green)
+ * 
+ * DEPENDENCIES:
+ * - react: useState, useCallback, useEffect, useMemo, useRef hooks
+ * - @/lib/utils: cn() utility for conditional className
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * // In component
+ * const { toasts, showError, showWarning, showSuccess, dismissToast } = useErrorToast();
+ * 
+ * // Show toast
+ * showError('Failed to save progress');
+ * showWarning('Session expiring soon');
+ * showSuccess('Progress saved!');
+ * 
+ * // Render container
+ * <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+ * 
+ * // Or use the hook in conjunction with LearningPathContainer
+ * // which already includes ToastContainer
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Auto-dismiss after 5 seconds (AUTO_DISMISS_MS)
+ * - Maximum 3 visible toasts (older ones removed)
+ * - Manual dismiss via X button
+ * - Cleanup on unmount clears all timeouts
+ * 
+ * PERFORMANCE NOTES:
+ * - Uses refs for timeout IDs to prevent memory leaks
+ * - Toast cleanup removes old toasts when max exceeded
+ * - Reversed order rendering (newest on top)
+ * - useMemo for ordered toasts avoids unnecessary recalculations
+ * 
+ * RELATED FILES:
+ * - LearningPathContainer.tsx: Main consumer of useErrorToast
+ * - ToastContainer: Rendered at bottom-right of screen (fixed position)
+ * 
+ * NOTES:
+ * - Custom implementation (no external toast library)
+ * - Simple state management for minimal bundle size
+ * - Animation: slide-in from right (framer-motion or CSS)
+ * - ARIA roles: alert for errors, status for warnings/success
+ * ============================================================================
+ */
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { cn } from '@/lib/utils';

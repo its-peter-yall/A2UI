@@ -1,3 +1,55 @@
+"""
+=============================================================================
+FILE: test_learning_schemas.py
+=============================================================================
+
+PURPOSE:
+Unit tests for learning schema validation. Validates Pydantic model
+constraints, enum values, minimum list requirements, and default values
+for all learning-related schemas.
+
+KEY TESTS:
+- test_status_values: Validates NodeStatus enum values
+- test_quiz_option_valid: Valid QuizOption creation
+- test_quiz_card_requires_min_options: Four options required
+- test_topic_node_valid: Valid TopicNode creation
+- test_course_outline_min_topics: Minimum 3 topics required
+- test_learning_session_valid: Valid LearningSessionCreate
+- test_concept_node_create: Default NodeStatus.LOCKED validation
+
+DEPENDENCIES:
+- unittest: Python standard testing framework
+- pydantic: ValidationError for schema validation tests
+- server.schemas.learning: All learning-related schemas
+
+USAGE PATTERN:
+```python
+# Run all learning schema tests
+python -m unittest server.tests.test_learning_schemas
+
+# Run specific test class
+python -m unittest server.tests.test_learning_schemas.TestQuizSchemas
+
+# Run single test
+python -m unittest server.tests.test_learning_schemas.TestQuizSchemas.test_quiz_card_requires_min_options
+```
+
+TEST SETUP:
+- Creates mock QuizOption, TopicNode, and other schema objects
+- Tests both positive (valid) and negative (ValidationError) cases
+- No external dependencies - pure schema validation
+
+RELATED FILES:
+- server/schemas/learning.py - All learning schemas under test
+
+NOTES:
+- QuizCard requires exactly 4 options
+- QuizOption requires explanation field
+- CourseOutline requires 3-5 topics
+- NodeStatus enum: LOCKED, VIEWING_EXPLANATION, IN_QUIZ, SHOWING_FEEDBACK, COMPLETED, ERROR
+=============================================================================
+"""
+
 # test_learning_schemas.py
 # Unit tests for learning schema validation
 

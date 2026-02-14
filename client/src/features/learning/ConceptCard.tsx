@@ -1,13 +1,70 @@
-// ConceptCard.tsx
-// Visual card component for concept nodes in the learning path
-
-// Longer description (2-4 lines):
-// - Renders explanation, quiz, feedback, completed, and error states.
-// - Enforces sequential flow by showing only status-appropriate content.
-// - Delegates markdown and feedback rendering to subcomponents.
-
-// @see: client/src/types/learning.ts - Node and status types
-// @note: Content visibility is server-authoritative; card respects status
+/**
+ * ============================================================================
+ * FILE: ConceptCard.tsx
+ * ============================================================================
+ * 
+ * PURPOSE:
+ * Visual card component that renders individual concept nodes in the learning path.
+ * Displays different content and actions based on the node's current status
+ * (LOCKED, VIEWING_EXPLANATION, IN_QUIZ, SHOWING_FEEDBACK, COMPLETED, ERROR).
+ * Enforces the sequential learning flow by only showing status-appropriate content.
+ * 
+ * KEY COMPONENTS:
+ * - ConceptCard: Main card wrapper with status-based styling and animations
+ * - Status Styles: Visual differentiation for each node status (border colors, backgrounds)
+ * - Quiz Interface: Radio button quiz with submit/retry functionality
+ * - Review Mode: Expandable explanation in COMPLETED state
+ * - Error Handling: Regenerate/skip options for ERROR state
+ * 
+ * DEPENDENCIES:
+ * - react: useState, useEffect, useRef for local state management
+ * - @tanstack/react-query: useQuizFeedback hook for feedback data
+ * - lucide-react: ChevronLeft icon for navigation
+ * - MarkdownRenderer: Renders node content as formatted markdown
+ * - QuizFeedback: Shows quiz results with explanations
+ * - CardTransitions: AnimatedCard, ContentTransition, UnlockPulse animations
+ * 
+ * USAGE PATTERN:
+ * ```tsx
+ * <ConceptCard
+ *   node={conceptNode}
+ *   isActive={currentSlideNode.id === activeNodeId}
+ *   quizResult={quizResults[currentSlideNode.id]}
+ *   onProceedToQuiz={(nodeId) => proceedToQuiz(nodeId)}
+ *   onQuizSubmit={(nodeId, optionId) => submitAnswer(nodeId, optionId)}
+ *   onRetryQuiz={(nodeId) => retry(nodeId)}
+ *   onContinueToNext={(nodeId) => continueToNext(nodeId)}
+ *   onRegenerate={(nodeId) => regenerate(nodeId)}
+ *   isRegenerating={isRegenerating}
+ *   isTransitioning={isTransitioning}
+ *   canSkip={canGoNext}
+ *   canPrevious={canGoPrev}
+ * />
+ * ```
+ * 
+ * ERROR HANDLING:
+ * - Missing feedback result: Shows LoadingState or ErrorState
+ * - Feedback load failure: Shows error message with retry option
+ * - Generation error: Shows partial content if available with regenerate/skip options
+ * 
+ * PERFORMANCE NOTES:
+ * - Previous status tracked via ref for animation transitions
+ * - Content wrapped in ContentTransition for smooth status changes
+ * - UnlockPulse animates when transitioning from LOCKED to VIEWING_EXPLANATION
+ * 
+ * RELATED FILES:
+ * - LearningPathContainer.tsx: Parent container that renders this component
+ * - MarkdownRenderer.tsx: Renders the explanation markdown content
+ * - QuizFeedback.tsx: Displays quiz results with explanations
+ * - useQuizFeedback.ts: Hook for fetching quiz feedback data
+ * - useNodeState.ts: Status validation and transition logic
+ * 
+ * NOTES:
+ * - Content visibility is server-authoritative; card respects node.status
+ * - Sequential flow: User must progress through each status in order
+ * - Status icons: 🔒 LOCKED, 📖 VIEWING_EXPLANATION, ❓ IN_QUIZ, 📊 SHOWING_FEEDBACK, ✅ COMPLETED, ! ERROR
+ * ============================================================================
+ */
 
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';

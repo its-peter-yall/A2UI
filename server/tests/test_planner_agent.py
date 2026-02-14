@@ -1,10 +1,60 @@
+"""
+=============================================================================
+FILE: test_planner_agent.py
+=============================================================================
+
+PURPOSE:
+Unit tests for PlannerAgent class and system prompt. Validates agent role,
+initialization, KLI framework prompt engineering, and plan() method wiring
+to the instructor client for structured output generation.
+
+KEY TESTS:
+- test_agent_role: Verifies PlannerAgent has correct 'planner' role
+- test_system_prompt_contains_kli: Validates KLI framework in system prompt
+- test_plan_calls_instructor_client: Tests generate() -> instructor_client wiring
+- test_prompt_has_example: Validates example decomposition in prompt
+
+DEPENDENCIES:
+- unittest: Python standard testing framework
+- unittest.mock: AsyncMock for mocking async instructor client
+- server.agents.planner: PlannerAgent implementation under test
+- server.schemas.learning: CourseOutline and TopicNode schemas
+
+USAGE PATTERN:
+```python
+# Run all planner agent tests
+python -m unittest server.tests.test_planner_agent
+
+# Run specific test class
+python -m unittest server.tests.test_planner_agent.TestPlannerAgent
+
+# Run single test
+python -m unittest server.tests.test_planner_agent.TestPlannerAgent.test_agent_role
+```
+
+TEST SETUP:
+- Uses unittest.mock AsyncMock to mock instructor_client.create_structured
+- No actual LLM calls - fully mock-based to avoid API dependencies
+- Test fixtures create mock CourseOutline and TopicNode objects
+
+RELATED FILES:
+- server/agents/planner.py - PlannerAgent implementation
+- server/schemas/learning.py - CourseOutline, TopicNode schemas
+- server/agents/base.py - BaseAgent with generate() method
+
+NOTES:
+- KLI = Knowledge-Learning-Instruction framework
+- Planner creates 5-7 topics in hierarchical structure
+- Context injection via summary_for_context for Generator/Quizzer agents
+=============================================================================
+"""
+
 # test_planner_agent.py
 # Unit tests for PlannerAgent class and system prompt
 
-# Longer description (2-4 lines):
-# - Validates PlannerAgent initialization, role, and system prompt content.
-# - Uses mocking to test the plan() method without actual LLM calls.
-# - Verifies prompt engineering quality for KLI framework compliance.
+# Validates PlannerAgent initialization, role, and system prompt content.
+# Uses mocking to test the plan() method without actual LLM calls.
+# Verifies prompt engineering quality for KLI framework compliance.
 
 # @see: server/agents/planner.py - PlannerAgent implementation under test
 # @see: server/schemas/learning.py - CourseOutline and TopicNode schemas
