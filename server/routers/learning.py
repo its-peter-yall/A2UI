@@ -353,6 +353,19 @@ def submit_quiz(
             quiz_index=request.quiz_index,
         )
 
+        # Advance quiz-set progress after a correct answer when mastery is not
+        # yet achieved. This enables sequential multi-quiz flow.
+        if result.get("is_correct") and not result.get("is_mastered"):
+            quiz_set_data = learning_manager.get_quiz_set_for_node(node_id)
+            if quiz_set_data is not None:
+                total_quizzes = len(quiz_set_data["quiz_set"].quizzes)
+                next_index = request.quiz_index + 1
+                if next_index < total_quizzes:
+                    learning_manager.update_quiz_set_progress(
+                        node_id=node_id,
+                        current_index=next_index,
+                    )
+
         # If mastered, transition to SHOWING_FEEDBACK and unlock next node
         # User stays in SHOWING_FEEDBACK to review, clicks Continue to go to COMPLETED
         next_node_unlocked = False

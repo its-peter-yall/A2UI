@@ -81,6 +81,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from pydantic import ValidationError
+
 from server.database.persistence import DB_PATH
 from server.schemas.learning import NodeStatus, QuizCard, QuizSet
 
@@ -145,7 +147,7 @@ class LearningManager:
                     id TEXT PRIMARY KEY,
                     node_id TEXT NOT NULL,
                     payload TEXT NOT NULL,
-                    format_version INTEGER DEFAULT 1,
+                    format_version INTEGER,
                     shuffle_seed TEXT,
                     current_index INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -809,8 +811,17 @@ class LearningManager:
                 # Legacy: payload is a QuizCard, return directly
                 return QuizCard.model_validate(payload)
 
-            # New format: payload is a QuizSet, return current quiz
-            quiz_set = QuizSet.model_validate(payload)
+            # New format: payload is a QuizSet. Fall back to legacy parsing
+            # if format_version was incorrectly set during prior migrations.
+            try:
+                quiz_set = QuizSet.model_validate(payload)
+            except ValidationError:
+                logger.warning(
+                    "Detected stale format_version for legacy quiz row: "
+                    "node_id=%s. Falling back to legacy parsing.",
+                    node_id,
+                )
+                return QuizCard.model_validate(payload)
             if quiz_set.quizzes:
                 # Use current_index from database column, not from payload
                 idx = current_index if current_index is not None else quiz_set.current_index
@@ -946,9 +957,21 @@ class LearningManager:
                 shuffle_seed = None
                 current_index = 0
             else:
-                quiz_set = QuizSet.model_validate(payload)
-                shuffle_seed = row["shuffle_seed"]
-                current_index = row["current_index"]
+                try:
+                    quiz_set = QuizSet.model_validate(payload)
+                    shuffle_seed = row["shuffle_seed"]
+                    current_index = row["current_index"]
+                except ValidationError:
+                    logger.warning(
+                        "Detected stale format_version for legacy quiz row: "
+                        "node_id=%s. Falling back to wrapped legacy quiz.",
+                        node_id,
+                    )
+                    single_quiz = QuizCard.model_validate(payload)
+                    quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                    shuffle_seed = None
+                    current_index = 0
+                    format_version = 0
 
             return {
                 "quiz_set": quiz_set,
@@ -1414,7 +1437,7 @@ class LearningManager:
         to support multi-quiz sets and deterministic shuffling.
 
         Migration strategy:
-        - format_version: NULL (legacy) or 1 (QuizSet format)
+        - format_version: 0 (legacy) or 1 (QuizSet format)
         - shuffle_seed: NULL or stored seed for deterministic shuffle
         - current_index: 0 or index of current quiz in set
         """
@@ -1423,9 +1446,7 @@ class LearningManager:
         existing_columns = {row["name"] for row in cursor.fetchall()}
 
         if "format_version" not in existing_columns:
-            cursor.execute(
-                "ALTER TABLE quiz_data ADD COLUMN format_version INTEGER DEFAULT 1"
-            )
+            cursor.execute("ALTER TABLE quiz_data ADD COLUMN format_version INTEGER")
         if "shuffle_seed" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE quiz_data ADD COLUMN shuffle_seed TEXT"
@@ -1437,6 +1458,43 @@ class LearningManager:
         if "updated_at" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE quiz_data ADD COLUMN updated_at TIMESTAMP"
+            )
+
+        self._normalize_quiz_data_format_versions(conn)
+
+    def _normalize_quiz_data_format_versions(self, conn: sqlite3.Connection) -> None:
+        """Normalize format_version values using the stored payload shape.
+
+        Legacy payloads are single QuizCard dicts and should be version 0.
+        QuizSet payloads contain a top-level "quizzes" list and should be 1.
+        """
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, payload, format_version FROM quiz_data")
+        rows = cursor.fetchall()
+        if not rows:
+            return
+
+        now = datetime.now(timezone.utc).isoformat()
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+            except (TypeError, ValueError):
+                continue
+
+            is_quiz_set = isinstance(payload, dict) and isinstance(
+                payload.get("quizzes"), list
+            )
+            expected_version = 1 if is_quiz_set else 0
+            if row["format_version"] == expected_version:
+                continue
+
+            cursor.execute(
+                """
+                UPDATE quiz_data
+                SET format_version = ?, updated_at = COALESCE(updated_at, ?)
+                WHERE id = ?
+                """,
+                (expected_version, now, row["id"]),
             )
 
     def _ensure_quiz_attempts_columns(self, conn: sqlite3.Connection) -> None:

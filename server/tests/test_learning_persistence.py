@@ -66,6 +66,8 @@ NOTES:
 # @see: server/database/learning_persistence.py - Persistence methods under test
 # @note: Each test uses a dedicated temp database file
 
+import json
+import sqlite3
 import tempfile
 import unittest
 import uuid
@@ -842,3 +844,137 @@ class TestLegacyQuizMigration(unittest.TestCase):
         assert quiz_set_data is not None
         self.assertEqual(quiz_set_data["format_version"], 1)
         self.assertEqual(len(quiz_set_data["quiz_set"].quizzes), 2)
+
+
+class TestLegacySchemaMigration(unittest.TestCase):
+    """Tests migration behavior for databases created before QuizSet schema."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "legacy_learning.db"
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_legacy_database(self) -> str:
+        """Create a pre-migration schema with a legacy single-quiz payload."""
+        session_id = str(uuid.uuid4())
+        node_id = str(uuid.uuid4())
+        quiz_data_id = str(uuid.uuid4())
+        quiz_payload = _make_quiz_card().model_dump()
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+
+            cursor.execute(
+                """
+                CREATE TABLE learning_sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    query TEXT NOT NULL,
+                    course_title TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE concept_nodes (
+                    id TEXT PRIMARY KEY,
+                    learning_session_id TEXT NOT NULL,
+                    sequence_index INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    content_markdown TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (learning_session_id)
+                        REFERENCES learning_sessions(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE quiz_data (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (node_id)
+                        REFERENCES concept_nodes(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE quiz_attempts (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL,
+                    attempt_number INTEGER NOT NULL,
+                    selected_option_id TEXT NOT NULL,
+                    is_correct INTEGER NOT NULL,
+                    score_percent INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (node_id)
+                        REFERENCES concept_nodes(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+
+            cursor.execute(
+                """
+                INSERT INTO learning_sessions (id, user_id, query, course_title)
+                VALUES (?, ?, ?, ?)
+                """,
+                (session_id, "user-1", "Legacy topic", "Legacy course"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO concept_nodes (
+                    id, learning_session_id, sequence_index, title,
+                    content_markdown, status
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    node_id,
+                    session_id,
+                    0,
+                    "Legacy node",
+                    "Legacy content",
+                    NodeStatus.IN_QUIZ.value,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO quiz_data (id, node_id, payload)
+                VALUES (?, ?, ?)
+                """,
+                (quiz_data_id, node_id, json.dumps(quiz_payload)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        return node_id
+
+    def test_migration_keeps_legacy_quiz_rows_readable(self) -> None:
+        """Migration should preserve legacy marker for existing single quiz rows."""
+        node_id = self._create_legacy_database()
+        manager = LearningManager(self.db_path)
+
+        manager.init_learning_tables()
+
+        quiz = manager.get_quiz_for_node(node_id)
+        assert quiz is not None
+        self.assertEqual(quiz.question_text, "What is 2 + 2?")
+
+        quiz_set_data = manager.get_quiz_set_for_node(node_id)
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["format_version"], 0)
