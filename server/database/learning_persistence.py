@@ -824,7 +824,11 @@ class LearningManager:
                 return QuizCard.model_validate(payload)
             if quiz_set.quizzes:
                 # Use current_index from database column, not from payload
-                idx = current_index if current_index is not None else quiz_set.current_index
+                idx = (
+                    current_index
+                    if current_index is not None
+                    else quiz_set.current_index
+                )
                 return quiz_set.quizzes[idx]
             return None
         except sqlite3.Error as e:
@@ -954,8 +958,8 @@ class LearningManager:
                 # Legacy: payload is a QuizCard, wrap in QuizSet
                 single_quiz = QuizCard.model_validate(payload)
                 quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
-                shuffle_seed = None
-                current_index = 0
+                shuffle_seed = row["shuffle_seed"]
+                current_index = row["current_index"] or 0
             else:
                 try:
                     quiz_set = QuizSet.model_validate(payload)
@@ -983,6 +987,44 @@ class LearningManager:
             }
         except sqlite3.Error as e:
             logger.error(f"Error getting QuizSet for node: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def update_quiz_shuffle_seed(self, node_id: str, shuffle_seed: str) -> bool:
+        """Update shuffle seed for a node's quiz.
+
+        Args:
+            node_id: The concept node identifier
+            shuffle_seed: New shuffle seed for deterministic shuffling
+
+        Returns:
+            True if updated successfully, False if quiz data not found
+
+        Raises:
+            sqlite3.Error: On database errors
+        """
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE quiz_data
+                SET shuffle_seed = ?, updated_at = ?
+                WHERE node_id = ?
+                """,
+                (shuffle_seed, now, node_id),
+            )
+            conn.commit()
+            updated = cursor.rowcount > 0
+            if updated:
+                logger.info(
+                    f"Updated quiz shuffle seed for node {node_id}: {shuffle_seed}"
+                )
+            return updated
+        except sqlite3.Error as e:
+            logger.error(f"Error updating quiz shuffle seed: {e}")
             raise
         finally:
             conn.close()
@@ -1044,7 +1086,9 @@ class LearningManager:
             )
             conn.commit()
 
-            logger.info(f"Updated QuizSet progress for node {node_id}: index={current_index}")
+            logger.info(
+                f"Updated QuizSet progress for node {node_id}: index={current_index}"
+            )
 
             # Return updated data
             return self.get_quiz_set_for_node(node_id)
@@ -1174,7 +1218,9 @@ class LearningManager:
                 "selected_option_id": selected_option_id,
                 "is_correct": is_correct,
                 "score_percent": score_percent,
-                "correct_option_id": correct_option.option_id if correct_option else None,
+                "correct_option_id": correct_option.option_id
+                if correct_option
+                else None,
                 "explanation": selected_option.explanation,
                 "is_mastered": is_mastered,
                 "created_at": now,
@@ -1241,6 +1287,41 @@ class LearningManager:
             )
             rows = cursor.fetchall()
 
+            cursor.execute(
+                """
+                SELECT payload, format_version
+                FROM quiz_data
+                WHERE node_id = ?
+                """,
+                (node_id,),
+            )
+            quiz_row = cursor.fetchone()
+
+            quiz_set = None
+            if quiz_row:
+                payload = json.loads(quiz_row["payload"])
+                format_version = quiz_row["format_version"]
+
+                if format_version is None or format_version < 1:
+                    try:
+                        single_quiz = QuizCard.model_validate(payload)
+                        quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                    except ValidationError:
+                        logger.warning(
+                            f"Failed to parse legacy quiz payload for node {node_id}"
+                        )
+                else:
+                    try:
+                        quiz_set = QuizSet.model_validate(payload)
+                    except ValidationError:
+                        try:
+                            single_quiz = QuizCard.model_validate(payload)
+                            quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                        except ValidationError:
+                            logger.warning(
+                                f"Failed to parse quiz payload for node {node_id}"
+                            )
+
             attempts = []
             best_score = 0
 
@@ -1249,16 +1330,43 @@ class LearningManager:
                 if score > best_score:
                     best_score = score
 
+                correct_option_id = ""
+                explanation = ""
+                quiz_index = row["quiz_index"]
+                selected_option_id = row["selected_option_id"]
+
+                if quiz_set and quiz_index < len(quiz_set.quizzes):
+                    quiz = quiz_set.quizzes[quiz_index]
+
+                    for option in quiz.options:
+                        if option.is_correct:
+                            correct_option_id = option.option_id
+                            break
+
+                    for option in quiz.options:
+                        if option.option_id == selected_option_id:
+                            explanation = option.explanation
+                            break
+
+                    if not explanation:
+                        for option in quiz.options:
+                            if option.is_correct:
+                                explanation = option.explanation
+                                break
+
                 attempts.append(
                     {
                         "id": row["id"],
                         "node_id": row["node_id"],
                         "attempt_number": row["attempt_number"],
-                        "quiz_index": row["quiz_index"],
-                        "selected_option_id": row["selected_option_id"],
+                        "quiz_index": quiz_index,
+                        "selected_option_id": selected_option_id,
                         "is_correct": bool(row["is_correct"]),
                         "score_percent": score,
                         "created_at": row["created_at"],
+                        "correct_option_id": correct_option_id,
+                        "explanation": explanation,
+                        "is_mastered": score >= 100,
                     }
                 )
 
@@ -1448,17 +1556,13 @@ class LearningManager:
         if "format_version" not in existing_columns:
             cursor.execute("ALTER TABLE quiz_data ADD COLUMN format_version INTEGER")
         if "shuffle_seed" not in existing_columns:
-            cursor.execute(
-                "ALTER TABLE quiz_data ADD COLUMN shuffle_seed TEXT"
-            )
+            cursor.execute("ALTER TABLE quiz_data ADD COLUMN shuffle_seed TEXT")
         if "current_index" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE quiz_data ADD COLUMN current_index INTEGER DEFAULT 0"
             )
         if "updated_at" not in existing_columns:
-            cursor.execute(
-                "ALTER TABLE quiz_data ADD COLUMN updated_at TIMESTAMP"
-            )
+            cursor.execute("ALTER TABLE quiz_data ADD COLUMN updated_at TIMESTAMP")
 
         self._normalize_quiz_data_format_versions(conn)
 

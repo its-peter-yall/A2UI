@@ -77,10 +77,11 @@ NOTES:
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Optional
 
 from server.agents.base import BaseAgent
-from server.schemas.learning import QuizCard, TopicNode
+from server.schemas.learning import QuizCard, QuizOption, TopicNode
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,29 @@ class QuizzerAgent(BaseAgent):
         """
         return QUIZZER_SYSTEM_PROMPT
 
+    def _fix_option_ids(self, quiz: QuizCard) -> QuizCard:
+        """Fixes LLM-generated option_ids that may be A/B/C/D instead of UUIDs."""
+        fixed_options: list[QuizOption] = []
+
+        for option in quiz.options:
+            if option.option_id in {"A", "B", "C", "D"}:
+                fixed_option = QuizOption(
+                    option_id=str(uuid.uuid4()),
+                    display_label=option.display_label,
+                    text=option.text,
+                    is_correct=option.is_correct,
+                    explanation=option.explanation,
+                )
+                fixed_options.append(fixed_option)
+            else:
+                fixed_options.append(option)
+
+        return QuizCard(
+            question_text=quiz.question_text,
+            options=fixed_options,
+            difficulty=quiz.difficulty,
+        )
+
     async def generate_quiz(
         self,
         topic: TopicNode,
@@ -288,6 +312,9 @@ class QuizzerAgent(BaseAgent):
             user_message=user_message,
             context=full_context,
         )
+
+        # Post-process to fix LLM-generated A/B/C/D option_ids to UUIDs
+        quiz = self._fix_option_ids(quiz)
 
         logger.info(
             f"QuizzerAgent created quiz: difficulty={quiz.difficulty}, "

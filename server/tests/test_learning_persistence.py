@@ -809,6 +809,28 @@ class TestLegacyQuizMigration(unittest.TestCase):
         self.assertTrue(result["is_correct"])
         self.assertTrue(result["is_mastered"])
 
+    def test_legacy_quiz_reuses_persisted_shuffle_seed(self) -> None:
+        """Legacy quiz rows should return stored shuffle_seed values."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+
+        self.manager.update_quiz_shuffle_seed(node["id"], "persisted-seed-1")
+
+        quiz_set_data = self.manager.get_quiz_set_for_node(node["id"])
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["format_version"], 0)
+        self.assertEqual(quiz_set_data["shuffle_seed"], "persisted-seed-1")
+
     def test_update_from_legacy_to_quiz_set(self) -> None:
         """Should be able to update a legacy quiz to QuizSet."""
         from server.schemas.learning import QuizSet

@@ -248,6 +248,7 @@ from server.database.persistence import session_manager
 - **Type safety first**: Never suppress errors with `as any`, `@ts-ignore`
 - **Error handling**: Never leave empty catch blocks `catch(e) {}`
 - **Minimal changes**: Fix bugs without refactoring unrelated code
+- **Running python files**: Always use .venv in the root of the server directory, and run with `python -m` to ensure correct imports and environment
 
 ### Quality Gates (per `conductor/workflow.md`)
 Before marking any task complete, verify:
