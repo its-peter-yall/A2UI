@@ -70,13 +70,16 @@ const mockNode = (status: NodeStatus): ConceptNode => ({
   quiz: {
     question_text: 'Test question?',
     options: [
-      { id: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' },
-      { id: 'B', text: 'Option B', is_correct: true, explanation: 'Correct' },
-      { id: 'C', text: 'Option C', is_correct: false, explanation: 'Wrong' },
-      { id: 'D', text: 'Option D', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-a-uuid', display_label: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-b-uuid', display_label: 'B', text: 'Option B', is_correct: true, explanation: 'Correct' },
+      { option_id: 'opt-c-uuid', display_label: 'C', text: 'Option C', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-d-uuid', display_label: 'D', text: 'Option D', is_correct: false, explanation: 'Wrong' },
     ],
     difficulty: 'medium',
   },
+  quiz_set: null,
+  quiz_hidden: null,
+  quiz_set_hidden: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
 });

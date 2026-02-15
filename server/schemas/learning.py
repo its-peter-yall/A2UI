@@ -69,7 +69,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -110,13 +110,23 @@ class QuizDifficulty(str, Enum):
 
 
 class QuizOption(BaseModel):
-    """Single quiz option with correctness and explanation."""
+    """Single quiz option with correctness and explanation.
+
+    For secure randomization:
+    - option_id: Stable UUID that persists across shuffles (used for submissions)
+    - display_label: User-facing label (A, B, C, D) - can be shuffled
+    - text: The actual answer text shown to the user
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: str = Field(
+    option_id: str = Field(
         ...,
-        description="Stable identifier for this option (A, B, C, or D)",
+        description="Stable unique identifier for this option (UUID), persists across shuffles",
+    )
+    display_label: str = Field(
+        ...,
+        description="User-facing label shown in UI (A, B, C, D)",
         pattern=r"^[A-D]$",
     )
     text: str = Field(..., description="Option text shown to the user", min_length=1)
@@ -127,16 +137,56 @@ class QuizOption(BaseModel):
         min_length=1,
     )
 
+    @field_validator("display_label")
+    @classmethod
+    def validate_display_label(cls, v: str) -> str:
+        if v not in {"A", "B", "C", "D"}:
+            raise ValueError("display_label must be A, B, C, or D")
+        return v
+
+
+class QuizOptionHidden(BaseModel):
+    """Quiz option for IN_QUIZ state - hides correctness and explanation.
+
+    This schema is used when sending quiz to client in IN_QUIZ state
+    to prevent answer leakage. The client receives option_id and display_label
+    but not is_correct or explanation.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    option_id: str = Field(
+        ...,
+        description="Stable unique identifier for this option (UUID), used for submissions",
+    )
+    display_label: str = Field(
+        ...,
+        description="User-facing label shown in UI (A, B, C, D)",
+        pattern=r"^[A-D]$",
+    )
+    text: str = Field(..., description="Option text shown to the user", min_length=1)
+
+    @field_validator("display_label")
+    @classmethod
+    def validate_display_label(cls, v: str) -> str:
+        if v not in {"A", "B", "C", "D"}:
+            raise ValueError("display_label must be A, B, C, or D")
+        return v
+
 
 class QuizCard(BaseModel):
-    """Quiz content attached to a concept node."""
+    """Quiz content attached to a concept node.
+
+    Contains question and options with stable option_id for secure shuffling.
+    The display_label (A, B, C, D) can be shuffled while option_id remains stable.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     question_text: str = Field(..., description="Quiz question text", min_length=1)
     options: List[QuizOption] = Field(
         ...,
-        description="Answer options for the quiz (exactly 4 required: A, B, C, D)",
+        description="Answer options for the quiz (exactly 4 required)",
         min_length=4,
         max_length=4,
     )
@@ -147,31 +197,137 @@ class QuizCard(BaseModel):
     @field_validator("options")
     @classmethod
     def validate_options(cls, options: List[QuizOption]) -> List[QuizOption]:
-        # Validate exactly 4 options
         if len(options) != 4:
-            raise ValueError("QuizCard requires exactly 4 options (A, B, C, D)")
+            raise ValueError("QuizCard requires exactly 4 options")
 
-        # Validate exactly one correct option
         correct_count = sum(1 for opt in options if opt.is_correct)
         if correct_count != 1:
             raise ValueError(
                 f"QuizCard requires exactly one correct option, found {correct_count}"
             )
 
-        # Validate option IDs are A, B, C, D
-        expected_ids = {"A", "B", "C", "D"}
-        actual_ids = {opt.id for opt in options}
-        if actual_ids != expected_ids:
+        unique_labels = {opt.display_label for opt in options}
+        if unique_labels != {"A", "B", "C", "D"}:
             raise ValueError(
-                "QuizCard options must have IDs A, B, C, D. "
-                f"Found: {sorted(actual_ids)}"
+                "QuizCard options must have display_labels A, B, C, D. "
+                f"Found: {sorted(unique_labels)}"
             )
 
-        # Validate unique IDs
-        if len(actual_ids) != 4:
-            raise ValueError("QuizCard option IDs must be unique")
+        unique_option_ids = {opt.option_id for opt in options}
+        if len(unique_option_ids) != 4:
+            raise ValueError("QuizCard option_ids must be unique")
 
         return options
+
+
+class QuizCardHidden(BaseModel):
+    """Quiz card for IN_QUIZ state - hides correctness and explanation.
+
+    Used when sending quiz to client to prevent answer leakage.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    question_text: str = Field(..., description="Quiz question text", min_length=1)
+    options: List[QuizOptionHidden] = Field(
+        ...,
+        description="Answer options for the quiz (exactly 4 required)",
+        min_length=4,
+        max_length=4,
+    )
+    difficulty: str = Field(
+        default="medium", description="Difficulty for the quiz (easy, medium, hard)"
+    )
+
+    @field_validator("options")
+    @classmethod
+    def validate_options(
+        cls, options: List[QuizOptionHidden]
+    ) -> List[QuizOptionHidden]:
+        if len(options) != 4:
+            raise ValueError("QuizCard requires exactly 4 options")
+
+        unique_labels = {opt.display_label for opt in options}
+        if unique_labels != {"A", "B", "C", "D"}:
+            raise ValueError(
+                "QuizCard options must have display_labels A, B, C, D. "
+                f"Found: {sorted(unique_labels)}"
+            )
+
+        unique_option_ids = {opt.option_id for opt in options}
+        if len(unique_option_ids) != 4:
+            raise ValueError("QuizCard option_ids must be unique")
+
+        return options
+
+
+class QuizSet(BaseModel):
+    """Container for multiple quizzes per concept node.
+
+    Supports secure server-side randomization with stable option identities.
+    The quizzes array contains all quizzes; display_order determines which
+    is shown first. Each quiz maintains stable option_id across shuffles.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    quizzes: List[QuizCard] = Field(
+        ...,
+        description="List of quizzes for this concept node (1-5 quizzes supported)",
+        min_length=1,
+        max_length=5,
+    )
+    current_index: int = Field(
+        default=0,
+        description="Index of the currently active quiz (0-based)",
+        ge=0,
+    )
+    shuffle_seed: Optional[str] = Field(
+        default=None,
+        description="Seed for deterministic quiz/option ordering",
+    )
+
+    @field_validator("quizzes")
+    @classmethod
+    def validate_quizzes(cls, quizzes: List[QuizCard]) -> List[QuizCard]:
+        if len(quizzes) < 1:
+            raise ValueError("QuizSet requires at least 1 quiz")
+        if len(quizzes) > 5:
+            raise ValueError("QuizSet supports at most 5 quizzes")
+        return quizzes
+
+    @field_validator("current_index")
+    @classmethod
+    def validate_current_index(cls, current_index: int, info: "ModelInfo") -> int:
+        quizzes = info.data.get("quizzes", [])
+        if quizzes and current_index >= len(quizzes):
+            raise ValueError(
+                f"current_index {current_index} exceeds quizzes length {len(quizzes)}"
+            )
+        return current_index
+
+
+class QuizSetHidden(BaseModel):
+    """Quiz set for IN_QUIZ state - hides correctness and explanation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    quizzes: List[QuizCardHidden] = Field(
+        ...,
+        description="List of quizzes for this concept node (hidden correctness)",
+        min_length=1,
+        max_length=5,
+    )
+    current_index: int = Field(
+        default=0,
+        description="Index of the currently active quiz (0-based)",
+        ge=0,
+    )
+    total_quizzes: int = Field(
+        ...,
+        description="Total number of quizzes in the set",
+        ge=1,
+    )
 
 
 class TopicNode(BaseModel):
@@ -243,18 +399,40 @@ class ConceptNodeBase(BaseModel):
 
 
 class ConceptNodeCreate(ConceptNodeBase):
-    """Schema for creating a concept node."""
+    """Schema for creating a concept node.
+
+    Supports either single QuizCard or QuizSet for multiple quizzes.
+    """
 
     quiz: Optional[QuizCard] = Field(
-        default=None, description="Optional quiz payload for the node"
+        default=None, description="Optional single quiz payload for the node"
+    )
+    quiz_set: Optional[QuizSet] = Field(
+        default=None, description="Optional quiz set for multiple quizzes"
     )
 
 
 class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
-    """Response schema for concept nodes."""
+    """Response schema for concept nodes.
+
+    Supports both single quiz and quiz_set. When returning to client
+    in IN_QUIZ state, uses hidden versions (QuizCardHidden/QuizSetHidden)
+    to prevent answer leakage. The response type should be chosen based on
+    node status.
+    """
 
     quiz: Optional[QuizCard] = Field(
-        default=None, description="Quiz payload if available"
+        default=None, description="Single quiz payload if available"
+    )
+    quiz_set: Optional[QuizSet] = Field(
+        default=None, description="Quiz set for multiple quizzes if available"
+    )
+    quiz_hidden: Optional[QuizCardHidden] = Field(
+        default=None,
+        description="Hidden quiz payload for IN_QUIZ state (no correctness)",
+    )
+    quiz_set_hidden: Optional[QuizSetHidden] = Field(
+        default=None, description="Hidden quiz set for IN_QUIZ state (no correctness)"
     )
     error_message: Optional[str] = Field(
         default=None, description="Error message if generation failed"
@@ -262,6 +440,25 @@ class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
     retry_available: bool = Field(
         default=False, description="Whether retry is available"
     )
+
+    def get_visible_quiz(
+        self, status: NodeStatus
+    ) -> Optional[Union[QuizCard, QuizSet]]:
+        """Get quiz payload based on node status.
+
+        For IN_QUIZ state, returns hidden version (no correctness/explanation).
+        For other states, returns full quiz data.
+        """
+        if status == NodeStatus.IN_QUIZ:
+            if self.quiz_set_hidden:
+                return self.quiz_set_hidden
+            if self.quiz_hidden:
+                return self.quiz_hidden
+        if self.quiz_set:
+            return self.quiz_set
+        if self.quiz:
+            return self.quiz
+        return None
 
 
 class LearningSessionBase(BaseModel):
@@ -288,12 +485,24 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
 
 
 class QuizSubmission(BaseModel):
-    """Payload for submitting quiz answers."""
+    """Payload for submitting quiz answers.
+
+    Uses stable option_id (UUID) for submission, not display_label.
+    This allows correct evaluation even when options are shuffled.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     node_id: str = Field(..., description="Concept node identifier")
-    selected_option_id: str = Field(..., description="Selected option identifier")
+    selected_option_id: str = Field(
+        ...,
+        description="Selected option ID (stable UUID from option_id field)",
+    )
+    quiz_index: Optional[int] = Field(
+        default=0,
+        description="Index of quiz in set being answered (0-based)",
+        ge=0,
+    )
 
 
 class QuizResult(BaseModel):
@@ -304,7 +513,7 @@ class QuizResult(BaseModel):
     node_id: str = Field(..., description="Concept node identifier")
     is_correct: bool = Field(..., description="Whether the answer was correct")
     correct_option_id: Optional[str] = Field(
-        default=None, description="Correct option identifier"
+        default=None, description="Correct option identifier (stable UUID)"
     )
     explanation: Optional[str] = Field(
         default=None, description="Explanation for the selected answer"
@@ -323,8 +532,12 @@ class QuizAttemptBase(BaseModel):
     node_id: str = Field(..., description="Concept node identifier")
     selected_option_id: str = Field(
         ...,
-        description="Selected option identifier (A, B, C, or D)",
-        pattern=r"^[A-D]$",
+        description="Selected option ID (stable UUID)",
+    )
+    quiz_index: int = Field(
+        default=0,
+        description="Index of quiz in set being answered (0-based)",
+        ge=0,
     )
 
 
@@ -347,8 +560,7 @@ class QuizAttemptResponse(ResponseBase, TimestampMixin, QuizAttemptBase):
     )
     correct_option_id: str = Field(
         ...,
-        description="The correct option identifier",
-        pattern=r"^[A-D]$",
+        description="The correct option identifier (stable UUID)",
     )
     explanation: str = Field(
         ...,
@@ -377,3 +589,54 @@ class QuizAttemptHistory(BaseModel):
         default_factory=list,
         description="List of all attempts in order",
     )
+
+
+def convert_legacy_quiz_option(legacy: dict) -> QuizOption:
+    """Convert legacy option format (id: str) to new format (option_id: UUID).
+
+    Legacy format: {"id": "A", "text": "...", "is_correct": true, "explanation": "..."}
+    New format: {"option_id": "uuid-...", "display_label": "A", "text": "...", "is_correct": true, "explanation": "..."}
+
+    BACKWARD COMPATIBILITY:
+    - Generates stable UUID from legacy id for option_id
+    - Maps legacy id to display_label
+    - Preserves text, is_correct, explanation
+    """
+    import uuid
+
+    legacy_id = legacy.get("id", "A")
+    stable_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"option-{legacy_id}"))
+
+    return QuizOption(
+        option_id=stable_uuid,
+        display_label=legacy_id,
+        text=legacy.get("text", ""),
+        is_correct=legacy.get("is_correct", False),
+        explanation=legacy.get("explanation", ""),
+    )
+
+
+def convert_legacy_quiz_card(legacy_quiz: dict) -> QuizCard:
+    """Convert legacy QuizCard to new format with stable option IDs.
+
+    BACKWARD COMPATIBILITY:
+    - Converts legacy options using convert_legacy_quiz_option
+    - Generates UUIDs based on legacy IDs for deterministic option_id
+    """
+    legacy_options = legacy_quiz.get("options", [])
+    new_options = [convert_legacy_quiz_option(opt) for opt in legacy_options]
+
+    return QuizCard(
+        question_text=legacy_quiz.get("question_text", ""),
+        options=new_options,
+        difficulty=legacy_quiz.get("difficulty", "medium"),
+    )
+
+
+def convert_legacy_to_quiz_set(legacy_quiz: dict) -> QuizSet:
+    """Convert legacy single quiz to QuizSet (single quiz in set).
+
+    BACKWARD COMPATIBILITY:
+    - Wraps legacy QuizCard in a QuizSet with single quiz
+    """
+    return QuizSet(quizzes=[convert_legacy_quiz_card(legacy_quiz)], current_index=0)

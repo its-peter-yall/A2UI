@@ -63,6 +63,7 @@ NOTES:
 # @note: Uses unittest.mock to avoid actual API calls
 
 import unittest
+import uuid
 from unittest.mock import AsyncMock, patch
 
 from pydantic import ValidationError
@@ -78,6 +79,11 @@ from server.schemas.learning import (
     QuizOption,
     TopicNode,
 )
+
+
+def _make_stable_uuid(label: str) -> str:
+    """Generate deterministic UUID for testing."""
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"test-option-{label}"))
 
 
 def _make_mock_topic(index: int = 0) -> TopicNode:
@@ -96,25 +102,29 @@ def _make_mock_quiz_card() -> QuizCard:
         question_text="What is the main concept of Test Topic 0?",
         options=[
             QuizOption(
-                id="A",
+                option_id=_make_stable_uuid("A"),
+                display_label="A",
                 text="The correct answer explaining the concept",
                 is_correct=True,
                 explanation="This is correct because it accurately describes the concept.",
             ),
             QuizOption(
-                id="B",
+                option_id=_make_stable_uuid("B"),
+                display_label="B",
                 text="A common misconception about the topic",
                 is_correct=False,
                 explanation="This is incorrect because it confuses X with Y.",
             ),
             QuizOption(
-                id="C",
+                option_id=_make_stable_uuid("C"),
+                display_label="C",
                 text="Another plausible but wrong answer",
                 is_correct=False,
                 explanation="This is incorrect because it overgeneralizes.",
             ),
             QuizOption(
-                id="D",
+                option_id=_make_stable_uuid("D"),
+                display_label="D",
                 text="A partial understanding of the concept",
                 is_correct=False,
                 explanation="This is incorrect because it only covers part of the concept.",
@@ -411,8 +421,9 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         correct_count = sum(1 for opt in result.options if opt.is_correct)
         self.assertEqual(correct_count, 1)
 
-        # Verify difficulty
-        self.assertIsInstance(result.difficulty, QuizDifficulty)
+        # Verify difficulty is a valid string value
+        self.assertIsInstance(result.difficulty, str)
+        self.assertIn(result.difficulty, {"easy", "medium", "hard"})
 
 
 class TestQuizCardValidation(unittest.TestCase):
@@ -448,25 +459,29 @@ class TestQuizCardValidation(unittest.TestCase):
                 question_text="What is the answer?",
                 options=[
                     QuizOption(
-                        id="A",
+                        option_id=_make_stable_uuid("A"),
+                        display_label="A",
                         text="Wrong answer 1",
                         is_correct=False,
                         explanation="Explanation for A",
                     ),
                     QuizOption(
-                        id="B",
+                        option_id=_make_stable_uuid("B"),
+                        display_label="B",
                         text="Wrong answer 2",
                         is_correct=False,
                         explanation="Explanation for B",
                     ),
                     QuizOption(
-                        id="C",
+                        option_id=_make_stable_uuid("C"),
+                        display_label="C",
                         text="Wrong answer 3",
                         is_correct=False,
                         explanation="Explanation for C",
                     ),
                     QuizOption(
-                        id="D",
+                        option_id=_make_stable_uuid("D"),
+                        display_label="D",
                         text="Wrong answer 4",
                         is_correct=False,
                         explanation="Explanation for D",
@@ -491,7 +506,8 @@ class TestQuizCardValidation(unittest.TestCase):
                 question_text="What is the answer?",
                 options=[
                     QuizOption(
-                        id="A",
+                        option_id=_make_stable_uuid("A"),
+                        display_label="A",
                         text="Only option",
                         is_correct=True,
                         explanation="Only explanation",
@@ -506,31 +522,36 @@ class TestQuizCardValidation(unittest.TestCase):
                 question_text="What is the answer?",
                 options=[
                     QuizOption(
-                        id="A",
+                        option_id=_make_stable_uuid("A"),
+                        display_label="A",
                         text="Option 1",
                         is_correct=True,
                         explanation="Explanation A",
                     ),
                     QuizOption(
-                        id="B",
+                        option_id=_make_stable_uuid("B"),
+                        display_label="B",
                         text="Option 2",
                         is_correct=False,
                         explanation="Explanation B",
                     ),
                     QuizOption(
-                        id="C",
+                        option_id=_make_stable_uuid("C"),
+                        display_label="C",
                         text="Option 3",
                         is_correct=False,
                         explanation="Explanation C",
                     ),
                     QuizOption(
-                        id="D",
+                        option_id=_make_stable_uuid("D"),
+                        display_label="D",
                         text="Option 4",
                         is_correct=False,
                         explanation="Explanation D",
                     ),
                     QuizOption(
-                        id="E",
+                        option_id=_make_stable_uuid("E"),
+                        display_label="E",
                         text="Option 5",
                         is_correct=False,
                         explanation="Explanation E",
@@ -547,7 +568,8 @@ class TestQuizCardValidation(unittest.TestCase):
         """
         with self.assertRaises(ValidationError):
             QuizOption(
-                id="A",
+                option_id=_make_stable_uuid("A"),
+                display_label="A",
                 text="Answer text",
                 is_correct=True,
                 # Missing explanation - should fail

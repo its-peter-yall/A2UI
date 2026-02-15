@@ -103,7 +103,12 @@ export type {
   ConceptNode,
   NodeStatus,
   QuizCard,
+  QuizCardHidden,
   QuizOption,
+  QuizOptionHidden,
+  QuizSet,
+  QuizSetHidden,
   QuizSubmitResponse,
   QuizAttemptHistory,
+  getVisibleQuiz,
 } from '@/types/learning';

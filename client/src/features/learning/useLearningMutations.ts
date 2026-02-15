@@ -228,12 +228,14 @@ export function useLearningMutations({
     mutationFn: ({
       nodeId,
       selectedOptionId,
+      quizIndex,
     }: {
       nodeId: string;
       selectedOptionId: string;
+      quizIndex?: number;
     }) => {
       // Server handles status transition internally
-      return submitQuiz(nodeId, { selected_option_id: selectedOptionId });
+      return submitQuiz(nodeId, selectedOptionId, quizIndex);
     },
     
     onMutate: async ({ nodeId }): Promise<MutationContext> => {
@@ -422,14 +424,16 @@ export function useLearningMutations({
    * Submit quiz answer.
    * Only valid from IN_QUIZ state.
    * Result determines if user can proceed or must retry.
-   * 
+   *
    * @param nodeId - Node with the quiz
    * @param optionId - Selected option ID (A, B, C, or D)
+   * @param quizIndex - Index of the quiz to submit (for multi-quiz nodes)
    */
-  const submitAnswer = (nodeId: string, optionId: string) => {
+  const submitAnswer = (nodeId: string, optionId: string, quizIndex?: number) => {
     submitQuizMutation.mutate({
       nodeId,
       selectedOptionId: optionId,
+      quizIndex,
     });
   };
 

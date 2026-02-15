@@ -89,16 +89,41 @@ export type NodeStatus =
 export type QuizDifficulty = 'easy' | 'medium' | 'hard';
 
 export interface QuizOption {
-  id: string; // A, B, C, or D
+  option_id: string;
+  display_label: string;
   text: string;
   is_correct: boolean;
   explanation: string;
+}
+
+export interface QuizOptionHidden {
+  option_id: string;
+  display_label: string;
+  text: string;
 }
 
 export interface QuizCard {
   question_text: string;
   options: QuizOption[];
   difficulty: QuizDifficulty;
+}
+
+export interface QuizCardHidden {
+  question_text: string;
+  options: QuizOptionHidden[];
+  difficulty: QuizDifficulty;
+}
+
+export interface QuizSet {
+  quizzes: QuizCard[];
+  current_index: number;
+  shuffle_seed: string | null;
+}
+
+export interface QuizSetHidden {
+  quizzes: QuizCardHidden[];
+  current_index: number;
+  total_quizzes: number;
 }
 
 export interface ConceptNode {
@@ -111,8 +136,21 @@ export interface ConceptNode {
   error_message: string | null;
   retry_available: boolean;
   quiz: QuizCard | null;
+  quiz_set: QuizSet | null;
+  quiz_hidden: QuizCardHidden | null;
+  quiz_set_hidden: QuizSetHidden | null;
   created_at: string;
   updated_at: string | null;
+}
+
+export function getVisibleQuiz(node: ConceptNode): QuizCard | QuizCardHidden | QuizSet | QuizSetHidden | null {
+  if (node.status === 'IN_QUIZ') {
+    if (node.quiz_set_hidden) return node.quiz_set_hidden;
+    if (node.quiz_hidden) return node.quiz_hidden;
+  }
+  if (node.quiz_set) return node.quiz_set;
+  if (node.quiz) return node.quiz;
+  return null;
 }
 
 export interface ConceptNodeWithVisibility extends ConceptNode {
@@ -166,6 +204,7 @@ export interface GenerateCourseRequest {
 
 export interface QuizSubmitRequest {
   selected_option_id: string;
+  quiz_index?: number;
 }
 
 export interface QuizSubmitResponse {

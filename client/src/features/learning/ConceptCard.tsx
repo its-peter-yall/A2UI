@@ -69,7 +69,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronLeft } from 'lucide-react';
-import type { ConceptNode, NodeStatus, QuizSubmitResponse } from '@/types/learning';
+import type { ConceptNode, NodeStatus, QuizSubmitResponse, QuizCardHidden } from '@/types/learning';
+import { getVisibleQuiz } from '@/types/learning';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { QuizFeedback } from './QuizFeedback';
 import { useQuizFeedback } from './useQuizFeedback';
@@ -85,7 +86,7 @@ interface ConceptCardProps {
   isActive?: boolean;
   quizResult?: QuizSubmitResponse;
   onProceedToQuiz?: (nodeId: string) => void;
-  onQuizSubmit?: (nodeId: string, optionId: string) => void;
+  onQuizSubmit?: (nodeId: string, optionId: string, quizIndex: number) => void;
   onRetryQuiz?: (nodeId: string) => void;
   onContinueToNext?: (nodeId: string) => void;
   onRegenerate?: (nodeId: string) => void;
@@ -114,6 +115,8 @@ export function ConceptCard({
   quizResult,
 }: ConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+
+  // Track previous status for animations
 
   // Track previous status for animations
   const prevStatusRef = useRef<NodeStatus>(node.status);
@@ -169,9 +172,9 @@ export function ConceptCard({
     }
   };
 
-  const handleSubmitQuiz = () => {
+  const handleSubmitQuiz = (quizIndex: number) => {
     if (selectedOption) {
-      onQuizSubmit?.(node.id, selectedOption);
+      onQuizSubmit?.(node.id, selectedOption, quizIndex);
       setSelectedOption(null);
     }
   };
@@ -251,53 +254,72 @@ export function ConceptCard({
               )}
 
               {/* IN_QUIZ state */}
-              {node.status === 'IN_QUIZ' && node.quiz && (
-                <div className="space-y-4">
-                  <p className="font-medium text-lg">{node.quiz.question_text}</p>
-                  <fieldset className="space-y-2" role="radiogroup">
-                    <legend className="sr-only">Quiz options</legend>
-                    {node.quiz.options.map((option) => (
-                      <label
-                        key={option.id}
+              {node.status === 'IN_QUIZ' && (() => {
+                const visibleQuiz = getVisibleQuiz(node);
+                if (!visibleQuiz) return null;
+
+                // Type guard for QuizSetHidden (has total_quizzes)
+                const isQuizSetHidden = 'quizzes' in visibleQuiz && 'total_quizzes' in visibleQuiz;
+                const currentQuizIndex = isQuizSetHidden
+                  ? (visibleQuiz as { current_index: number }).current_index
+                  : 0;
+                const currentQuiz = 'quizzes' in visibleQuiz
+                  ? visibleQuiz.quizzes[currentQuizIndex]
+                  : visibleQuiz as QuizCardHidden;
+
+                return (
+                  <div className="space-y-4">
+                    {isQuizSetHidden && (
+                      <div className="text-sm text-muted-foreground mb-2">
+                        Quiz {currentQuizIndex + 1} of {(visibleQuiz as { total_quizzes: number }).total_quizzes}
+                      </div>
+                    )}
+                    <p className="font-medium text-lg">{currentQuiz.question_text}</p>
+                    <fieldset className="space-y-2" role="radiogroup">
+                      <legend className="sr-only">Quiz options</legend>
+                      {currentQuiz.options.map((option) => (
+                        <label
+                          key={option.option_id}
+                          className={cn(
+                            'flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors',
+                            selectedOption === option.option_id
+                              ? 'border-primary bg-primary/10'
+                              : 'border-muted hover:border-primary/50'
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name={`quiz-${node.id}`}
+                            value={option.option_id}
+                            checked={selectedOption === option.option_id}
+                            onChange={() => setSelectedOption(option.option_id)}
+                            className="w-4 h-4"
+                          />
+                          <span className="font-mono text-sm text-muted-foreground">
+                            {option.display_label}.
+                          </span>
+                          <span>{option.text}</span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <div className="flex justify-between items-center pt-4 border-t">
+                      {renderPreviousButton()}
+                      <button
+                        onClick={() => handleSubmitQuiz(currentQuizIndex)}
+                        disabled={!selectedOption}
                         className={cn(
-                          'flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors',
-                          selectedOption === option.id
-                            ? 'border-primary bg-primary/10'
-                            : 'border-muted hover:border-primary/50'
+                          'px-4 py-2 rounded-md transition-colors',
+                          selectedOption
+                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                            : 'bg-muted text-muted-foreground cursor-not-allowed'
                         )}
                       >
-                        <input
-                          type="radio"
-                          name={`quiz-${node.id}`}
-                          value={option.id}
-                          checked={selectedOption === option.id}
-                          onChange={() => setSelectedOption(option.id)}
-                          className="w-4 h-4"
-                        />
-                        <span className="font-mono text-sm text-muted-foreground">
-                          {option.id}.
-                        </span>
-                        <span>{option.text}</span>
-                      </label>
-                    ))}
-                  </fieldset>
-                  <div className="flex justify-between items-center pt-4 border-t">
-                    {renderPreviousButton()}
-                    <button
-                      onClick={handleSubmitQuiz}
-                      disabled={!selectedOption}
-                      className={cn(
-                        'px-4 py-2 rounded-md transition-colors',
-                        selectedOption
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                          : 'bg-muted text-muted-foreground cursor-not-allowed'
-                      )}
-                    >
-                      Submit Answer
-                    </button>
+                        Submit Answer
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {node.status === 'SHOWING_FEEDBACK' && node.quiz && (
                 <>

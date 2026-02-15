@@ -133,12 +133,22 @@ class TransitionRequest(BaseModel):
 
 
 class QuizSubmitRequest(BaseModel):
-    """Request to submit a quiz answer."""
+    """Request to submit a quiz answer.
+
+    Uses stable option_id (UUID) for secure evaluation even when options
+    are shuffled. The option_id is returned with each option and persists
+    across shuffles, while display_label (A, B, C, D) may change position.
+    """
 
     selected_option_id: str = Field(
         ...,
-        description="Selected option identifier (A, B, C, or D)",
-        pattern=r"^[A-D]$",
+        description="Selected option UUID (stable ID from option.option_id)",
+        min_length=1,
+    )
+    quiz_index: int = Field(
+        default=0,
+        description="Index of quiz in set being answered (0-based)",
+        ge=0,
     )
 
 
@@ -340,6 +350,7 @@ def submit_quiz(
         result = learning_manager.create_quiz_attempt(
             node_id=node_id,
             selected_option_id=request.selected_option_id,
+            quiz_index=request.quiz_index,
         )
 
         # If mastered, transition to SHOWING_FEEDBACK and unlock next node

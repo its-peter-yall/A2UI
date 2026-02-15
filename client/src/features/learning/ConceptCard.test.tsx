@@ -75,15 +75,55 @@ const mockNode: ConceptNode = {
   quiz: {
     question_text: 'What is the answer?',
     options: [
-      { id: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' },
-      { id: 'B', text: 'Option B', is_correct: true, explanation: 'Correct!' },
-      { id: 'C', text: 'Option C', is_correct: false, explanation: 'Wrong' },
-      { id: 'D', text: 'Option D', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-a-uuid', display_label: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-b-uuid', display_label: 'B', text: 'Option B', is_correct: true, explanation: 'Correct!' },
+      { option_id: 'opt-c-uuid', display_label: 'C', text: 'Option C', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-d-uuid', display_label: 'D', text: 'Option D', is_correct: false, explanation: 'Wrong' },
     ],
     difficulty: 'medium',
   },
+  quiz_set: null,
+  quiz_hidden: null,
+  quiz_set_hidden: null,
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
+};
+
+const mockQuizSetHiddenNode: ConceptNode = {
+  ...mockNode,
+  id: 'node-quizset',
+  quiz: null,
+  quiz_hidden: null,
+  quiz_set_hidden: {
+    quizzes: [
+      {
+        question_text: 'First quiz question?',
+        options: [
+          { option_id: 'q1-a', display_label: 'A', text: 'First Option' },
+          { option_id: 'q1-b', display_label: 'B', text: 'Second Option' },
+        ],
+        difficulty: 'easy',
+      },
+      {
+        question_text: 'Second quiz question?',
+        options: [
+          { option_id: 'q2-a', display_label: 'A', text: 'Third Option' },
+          { option_id: 'q2-b', display_label: 'B', text: 'Fourth Option' },
+        ],
+        difficulty: 'medium',
+      },
+      {
+        question_text: 'Third quiz question?',
+        options: [
+          { option_id: 'q3-a', display_label: 'A', text: 'Fifth Option' },
+          { option_id: 'q3-b', display_label: 'B', text: 'Sixth Option' },
+        ],
+        difficulty: 'hard',
+      },
+    ],
+    current_index: 0,
+    total_quizzes: 3,
+  },
 };
 
 describe('ConceptCard', () => {
@@ -130,6 +170,54 @@ describe('ConceptCard', () => {
     expect(screen.getByText('Option A')).toBeInTheDocument();
     expect(screen.getByText('Option B')).toBeInTheDocument();
     expect(screen.getByText('Submit Answer')).toBeInTheDocument();
+  });
+
+  it('renders QuizSet with progress indicator', () => {
+    render(
+      <ConceptCard node={{ ...mockQuizSetHiddenNode, status: 'IN_QUIZ' }} />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Quiz 1 of 3')).toBeInTheDocument();
+    expect(screen.getByText('First quiz question?')).toBeInTheDocument();
+    expect(screen.getByText('First Option')).toBeInTheDocument();
+    expect(screen.getByText('Second Option')).toBeInTheDocument();
+  });
+
+  it('calls onQuizSubmit with quiz_index for single quiz', () => {
+    const onQuizSubmit = vi.fn();
+    render(
+      <ConceptCard
+        node={{ ...mockNode, status: 'IN_QUIZ' }}
+        onQuizSubmit={onQuizSubmit}
+      />,
+      { wrapper: createWrapper() }
+    );
+    fireEvent.click(screen.getByText('Option A'));
+    fireEvent.click(screen.getByText('Submit Answer'));
+    expect(onQuizSubmit).toHaveBeenCalledWith('node-1', 'opt-a-uuid', 0);
+  });
+
+  it('calls onQuizSubmit with correct quiz_index for QuizSet', () => {
+    const onQuizSubmit = vi.fn();
+    render(
+      <ConceptCard
+        node={{
+          ...mockQuizSetHiddenNode,
+          status: 'IN_QUIZ',
+          quiz_set_hidden: {
+            ...mockQuizSetHiddenNode.quiz_set_hidden!,
+            current_index: 1,
+          },
+        }}
+        onQuizSubmit={onQuizSubmit}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Quiz 2 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Second quiz question?')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Third Option'));
+    fireEvent.click(screen.getByText('Submit Answer'));
+    expect(onQuizSubmit).toHaveBeenCalledWith('node-quizset', 'q2-a', 1);
   });
 
   it('renders completed state with review option', () => {

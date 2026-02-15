@@ -43,9 +43,9 @@
  * // Fetch existing session
  * const session = await getLearningSession('session-uuid');
  * 
- * // Submit quiz answer
+ * // Submit quiz answer (uses stable option_id, not display_label)
  * const result = await submitQuiz('node-uuid', {
- *   selected_option_id: 'A'
+ *   selected_option_id: 'uuid-of-option-c'  // Use option_id (UUID), not 'C'
  * });
  * ```
  * 
@@ -174,8 +174,13 @@ export const transitionNode = async (
 
 export const submitQuiz = async (
   nodeId: string,
-  data: QuizSubmitRequest
+  selectedOptionId: string,
+  quizIndex?: number
 ): Promise<QuizSubmitResponse> => {
+  const data: QuizSubmitRequest = {
+    selected_option_id: selectedOptionId,
+    quiz_index: quizIndex ?? 0,  // Default to 0 for single quizzes
+  };
   const response = await api.post<QuizSubmitResponse>(
     `/learning/nodes/${nodeId}/submit-quiz`,
     data

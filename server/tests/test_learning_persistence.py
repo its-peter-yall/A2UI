@@ -68,10 +68,16 @@ NOTES:
 
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 
 from server.database.learning_persistence import LearningManager
-from server.schemas.learning import NodeStatus, QuizCard, QuizDifficulty, QuizOption
+from server.schemas.learning import NodeStatus, QuizCard, QuizDifficulty, QuizOption, QuizSet
+
+
+def _make_stable_uuid(label: str) -> str:
+    """Generate deterministic UUID for testing."""
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"test-option-{label}"))
 
 
 def _make_quiz_card() -> QuizCard:
@@ -79,25 +85,29 @@ def _make_quiz_card() -> QuizCard:
         question_text="What is 2 + 2?",
         options=[
             QuizOption(
-                id="A",
+                option_id=_make_stable_uuid("A"),
+                display_label="A",
                 text="4",
                 is_correct=True,
                 explanation="2 + 2 equals 4",
             ),
             QuizOption(
-                id="B",
+                option_id=_make_stable_uuid("B"),
+                display_label="B",
                 text="5",
                 is_correct=False,
                 explanation="2 + 2 does not equal 5",
             ),
             QuizOption(
-                id="C",
+                option_id=_make_stable_uuid("C"),
+                display_label="C",
                 text="3",
                 is_correct=False,
                 explanation="2 + 2 does not equal 3",
             ),
             QuizOption(
-                id="D",
+                option_id=_make_stable_uuid("D"),
+                display_label="D",
                 text="6",
                 is_correct=False,
                 explanation="2 + 2 does not equal 6",
@@ -374,27 +384,30 @@ class TestQuizAttempts(unittest.TestCase):
     def test_create_quiz_attempt_correct_answer(self) -> None:
         """Recording a correct answer should return is_correct=True and is_mastered=True."""
         node_id = self._create_node_with_quiz()
-        result = self.manager.create_quiz_attempt(node_id, "A")  # A is correct
+        correct_option_id = _make_stable_uuid("A")  # A is correct
+        result = self.manager.create_quiz_attempt(node_id, correct_option_id)
 
         self.assertEqual(result["node_id"], node_id)
         self.assertEqual(result["attempt_number"], 1)
-        self.assertEqual(result["selected_option_id"], "A")
+        self.assertEqual(result["selected_option_id"], correct_option_id)
         self.assertTrue(result["is_correct"])
         self.assertEqual(result["score_percent"], 100)
-        self.assertEqual(result["correct_option_id"], "A")
+        self.assertEqual(result["correct_option_id"], correct_option_id)
         self.assertTrue(result["is_mastered"])
         self.assertIn("2 + 2 equals 4", result["explanation"])
 
     def test_create_quiz_attempt_incorrect_answer(self) -> None:
         """Recording an incorrect answer should return is_correct=False and is_mastered=False."""
         node_id = self._create_node_with_quiz()
-        result = self.manager.create_quiz_attempt(node_id, "B")  # B is incorrect
+        incorrect_option_id = _make_stable_uuid("B")  # B is incorrect
+        correct_option_id = _make_stable_uuid("A")  # A is correct
+        result = self.manager.create_quiz_attempt(node_id, incorrect_option_id)
 
         self.assertEqual(result["attempt_number"], 1)
-        self.assertEqual(result["selected_option_id"], "B")
+        self.assertEqual(result["selected_option_id"], incorrect_option_id)
         self.assertFalse(result["is_correct"])
         self.assertEqual(result["score_percent"], 0)
-        self.assertEqual(result["correct_option_id"], "A")
+        self.assertEqual(result["correct_option_id"], correct_option_id)
         self.assertFalse(result["is_mastered"])
         self.assertIn("does not equal 5", result["explanation"])
 
@@ -402,7 +415,7 @@ class TestQuizAttempts(unittest.TestCase):
         """Submitting an invalid option ID should raise ValueError."""
         node_id = self._create_node_with_quiz()
         with self.assertRaises(ValueError) as ctx:
-            self.manager.create_quiz_attempt(node_id, "Z")
+            self.manager.create_quiz_attempt(node_id, "invalid-uuid")
         self.assertIn("Invalid option id", str(ctx.exception))
 
     def test_create_quiz_attempt_no_quiz(self) -> None:
@@ -419,16 +432,22 @@ class TestQuizAttempts(unittest.TestCase):
             quiz=None,
         )
         with self.assertRaises(ValueError) as ctx:
-            self.manager.create_quiz_attempt(node["id"], "A")
+            self.manager.create_quiz_attempt(node["id"], _make_stable_uuid("A"))
         self.assertIn("No quiz found", str(ctx.exception))
 
     def test_create_multiple_attempts_increments_number(self) -> None:
         """Multiple attempts should have incrementing attempt numbers."""
         node_id = self._create_node_with_quiz()
 
-        result1 = self.manager.create_quiz_attempt(node_id, "B")  # wrong
-        result2 = self.manager.create_quiz_attempt(node_id, "C")  # wrong
-        result3 = self.manager.create_quiz_attempt(node_id, "A")  # correct
+        result1 = self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("B")
+        )  # wrong
+        result2 = self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("C")
+        )  # wrong
+        result3 = self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("A")
+        )  # correct
 
         self.assertEqual(result1["attempt_number"], 1)
         self.assertEqual(result2["attempt_number"], 2)
@@ -449,9 +468,11 @@ class TestQuizAttempts(unittest.TestCase):
         """Getting attempts should return all attempts in order with correct stats."""
         node_id = self._create_node_with_quiz()
 
-        self.manager.create_quiz_attempt(node_id, "B")  # wrong - 0%
-        self.manager.create_quiz_attempt(node_id, "C")  # wrong - 0%
-        self.manager.create_quiz_attempt(node_id, "A")  # correct - 100%
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("B"))  # wrong - 0%
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("C"))  # wrong - 0%
+        self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("A")
+        )  # correct - 100%
 
         history = self.manager.get_quiz_attempts(node_id)
 
@@ -478,24 +499,24 @@ class TestQuizAttempts(unittest.TestCase):
         self.assertFalse(self.manager.check_mastery(node_id))
 
         # Wrong attempt
-        self.manager.create_quiz_attempt(node_id, "B")
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("B"))
         self.assertFalse(self.manager.check_mastery(node_id))
 
     def test_check_mastery_mastered(self) -> None:
         """check_mastery should return True after a correct attempt."""
         node_id = self._create_node_with_quiz()
 
-        self.manager.create_quiz_attempt(node_id, "B")  # wrong
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("B"))  # wrong
         self.assertFalse(self.manager.check_mastery(node_id))
 
-        self.manager.create_quiz_attempt(node_id, "A")  # correct
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("A"))  # correct
         self.assertTrue(self.manager.check_mastery(node_id))
 
     def test_quiz_attempts_cascade_delete(self) -> None:
         """Quiz attempts should be deleted when the node is deleted."""
         node_id = self._create_node_with_quiz()
-        self.manager.create_quiz_attempt(node_id, "A")
-        self.manager.create_quiz_attempt(node_id, "B")
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("A"))
+        self.manager.create_quiz_attempt(node_id, _make_stable_uuid("B"))
 
         # Verify attempts exist
         history = self.manager.get_quiz_attempts(node_id)
@@ -516,3 +537,308 @@ class TestQuizAttempts(unittest.TestCase):
             self.assertEqual(cursor.fetchone()[0], 0)
         finally:
             conn.close()
+
+
+class TestQuizSetPersistence(unittest.TestCase):
+    """Tests for QuizSet (multi-quiz) persistence functionality."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _make_quiz_set(self, num_quizzes: int = 3):
+        """Create a QuizSet with multiple quizzes for testing."""
+        from server.schemas.learning import QuizSet
+
+        quizzes = []
+        for i in range(num_quizzes):
+            correct_idx = i % 4  # Rotate correct answer
+            options = []
+            for j, label in enumerate(["A", "B", "C", "D"]):
+                options.append(
+                    QuizOption(
+                        option_id=_make_stable_uuid(f"quiz{i}-{label}"),
+                        display_label=label,
+                        text=f"Answer {label} for Q{i+1}",
+                        is_correct=(j == correct_idx),
+                        explanation=f"Explanation for Q{i+1} option {label}",
+                    )
+                )
+            quizzes.append(
+                QuizCard(
+                    question_text=f"Question {i+1}?",
+                    options=options,
+                    difficulty=QuizDifficulty.EASY,
+                )
+            )
+
+        return QuizSet(
+            quizzes=quizzes,
+            current_index=0,
+            shuffle_seed="test-seed-123",
+        )
+
+    def _create_session_with_quiz_set(self, num_quizzes: int = 3):
+        """Helper to create a session with a node that has a QuizSet."""
+        session = self.manager.create_learning_session(
+            query="Test query", course_title="Test Course", user_id="user-1"
+        )
+        quiz_set = self._make_quiz_set(num_quizzes)
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Test Node",
+            content_markdown="Test content",
+            status=NodeStatus.IN_QUIZ,
+            quiz_set=quiz_set,
+        )
+        return session["id"], node["id"], quiz_set
+
+    def test_create_concept_node_with_quiz_set(self) -> None:
+        """Creating a node with quiz_set should store it correctly."""
+        session_id, node_id, original_quiz_set = self._create_session_with_quiz_set(3)
+
+        # Retrieve and verify
+        quiz_set_data = self.manager.get_quiz_set_for_node(node_id)
+        assert quiz_set_data is not None
+
+        self.assertEqual(quiz_set_data["format_version"], 1)
+        self.assertEqual(quiz_set_data["shuffle_seed"], "test-seed-123")
+        self.assertEqual(quiz_set_data["current_index"], 0)
+        self.assertEqual(len(quiz_set_data["quiz_set"].quizzes), 3)
+
+    def test_create_quiz_set_directly(self) -> None:
+        """Test creating a QuizSet directly using create_quiz_set."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+        )
+
+        quiz_set = self._make_quiz_set(2)
+        result = self.manager.create_quiz_set(
+            node_id=node["id"],
+            quiz_set=quiz_set,
+            shuffle_seed="custom-seed-456",
+        )
+
+        self.assertEqual(result["format_version"], 1)
+        self.assertEqual(result["shuffle_seed"], "custom-seed-456")
+        self.assertEqual(result["total_quizzes"], 2)
+        self.assertEqual(result["current_index"], 0)
+
+    def test_update_quiz_set_progress(self) -> None:
+        """Test updating current quiz index."""
+        _, node_id, _ = self._create_session_with_quiz_set(3)
+
+        # Update to second quiz
+        result = self.manager.update_quiz_set_progress(node_id, 1)
+        assert result is not None
+        self.assertEqual(result["current_index"], 1)
+
+        # Update to third quiz
+        result = self.manager.update_quiz_set_progress(node_id, 2)
+        assert result is not None
+        self.assertEqual(result["current_index"], 2)
+
+    def test_update_quiz_set_progress_invalid_index(self) -> None:
+        """Updating with invalid index should raise ValueError."""
+        _, node_id, _ = self._create_session_with_quiz_set(2)
+
+        with self.assertRaises(ValueError) as ctx:
+            self.manager.update_quiz_set_progress(node_id, 5)
+        self.assertIn("Invalid current_index", str(ctx.exception))
+
+    def test_get_quiz_for_node_returns_current_quiz(self) -> None:
+        """get_quiz_for_node should return the current quiz from QuizSet."""
+        _, node_id, quiz_set = self._create_session_with_quiz_set(3)
+
+        # Default current_index is 0
+        quiz = self.manager.get_quiz_for_node(node_id)
+        assert quiz is not None
+        self.assertEqual(quiz.question_text, "Question 1?")
+
+        # Update progress and check again
+        self.manager.update_quiz_set_progress(node_id, 1)
+        quiz = self.manager.get_quiz_for_node(node_id)
+        assert quiz is not None
+        self.assertEqual(quiz.question_text, "Question 2?")
+
+    def test_create_quiz_attempt_with_quiz_index(self) -> None:
+        """Quiz attempts should track quiz_index in multi-quiz scenario."""
+        _, node_id, _ = self._create_session_with_quiz_set(3)
+
+        # Answer first quiz correctly
+        correct_option_id = _make_stable_uuid("quiz0-A")  # First quiz, A is correct
+        result = self.manager.create_quiz_attempt(
+            node_id, correct_option_id, quiz_index=0
+        )
+
+        self.assertEqual(result["quiz_index"], 0)
+        self.assertTrue(result["is_correct"])
+        self.assertFalse(result["is_mastered"])  # Not all quizzes answered yet
+
+        # Check attempt history includes quiz_index
+        history = self.manager.get_quiz_attempts(node_id)
+        self.assertEqual(history["total_attempts"], 1)
+        self.assertEqual(history["attempts"][0]["quiz_index"], 0)
+
+    def test_multi_quiz_mastery_requires_all_correct(self) -> None:
+        """Mastery requires all quizzes in the set to be answered correctly."""
+        _, node_id, _ = self._create_session_with_quiz_set(3)
+
+        # Answer first quiz correctly
+        self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("quiz0-A"), quiz_index=0
+        )
+        self.assertFalse(self.manager.check_mastery(node_id))
+
+        # Answer second quiz correctly
+        self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("quiz1-B"), quiz_index=1
+        )
+        self.assertFalse(self.manager.check_mastery(node_id))
+
+        # Answer third quiz correctly
+        self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("quiz2-C"), quiz_index=2
+        )
+        self.assertTrue(self.manager.check_mastery(node_id))
+
+    def test_single_quiz_mastery_any_correct(self) -> None:
+        """Single quiz mastery requires only one correct answer."""
+        _, node_id, _ = self._create_session_with_quiz_set(1)
+
+        # Answer incorrectly first
+        self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("quiz0-B"), quiz_index=0
+        )
+        self.assertFalse(self.manager.check_mastery(node_id))
+
+        # Answer correctly
+        self.manager.create_quiz_attempt(
+            node_id, _make_stable_uuid("quiz0-A"), quiz_index=0
+        )
+        self.assertTrue(self.manager.check_mastery(node_id))
+
+
+class TestLegacyQuizMigration(unittest.TestCase):
+    """Tests for backward compatibility with legacy single-quiz format."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def test_legacy_quiz_stored_without_format_version(self) -> None:
+        """Legacy single quiz should be stored without format_version."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+
+        # Verify stored without format_version (None/0)
+        quiz_set_data = self.manager.get_quiz_set_for_node(node["id"])
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["format_version"], 0)
+        self.assertEqual(len(quiz_set_data["quiz_set"].quizzes), 1)
+
+    def test_legacy_quiz_retrieved_via_get_quiz_for_node(self) -> None:
+        """Legacy quiz should be retrievable via get_quiz_for_node."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+
+        # Should return the single quiz
+        retrieved_quiz = self.manager.get_quiz_for_node(node["id"])
+        assert retrieved_quiz is not None
+        self.assertEqual(retrieved_quiz.question_text, quiz.question_text)
+
+    def test_legacy_quiz_attempt_still_works(self) -> None:
+        """Quiz attempts should work with legacy quiz format."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+
+        # Should be able to submit answer
+        correct_option_id = _make_stable_uuid("A")
+        result = self.manager.create_quiz_attempt(node["id"], correct_option_id)
+
+        self.assertTrue(result["is_correct"])
+        self.assertTrue(result["is_mastered"])
+
+    def test_update_from_legacy_to_quiz_set(self) -> None:
+        """Should be able to update a legacy quiz to QuizSet."""
+        from server.schemas.learning import QuizSet
+
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+
+        # Update to QuizSet
+        quiz_set = QuizSet(
+            quizzes=[quiz, quiz],  # Two copies of same quiz
+            current_index=0,
+            shuffle_seed="updated-seed",
+        )
+        updated = self.manager.update_node_content(
+            node_id=node["id"],
+            content_markdown="Updated content",
+            status=NodeStatus.IN_QUIZ,
+            quiz_set=quiz_set,
+        )
+
+        assert updated is not None
+        quiz_set_data = self.manager.get_quiz_set_for_node(node["id"])
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["format_version"], 1)
+        self.assertEqual(len(quiz_set_data["quiz_set"].quizzes), 2)

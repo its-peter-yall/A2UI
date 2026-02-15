@@ -82,7 +82,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from server.database.persistence import DB_PATH
-from server.schemas.learning import NodeStatus, QuizCard
+from server.schemas.learning import NodeStatus, QuizCard, QuizSet
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,11 @@ class LearningManager:
                     id TEXT PRIMARY KEY,
                     node_id TEXT NOT NULL,
                     payload TEXT NOT NULL,
+                    format_version INTEGER DEFAULT 1,
+                    shuffle_seed TEXT,
+                    current_index INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (node_id)
                         REFERENCES concept_nodes(id)
                         ON DELETE CASCADE
@@ -185,6 +189,7 @@ class LearningManager:
                     id TEXT PRIMARY KEY,
                     node_id TEXT NOT NULL,
                     attempt_number INTEGER NOT NULL,
+                    quiz_index INTEGER DEFAULT 0,
                     selected_option_id TEXT NOT NULL,
                     is_correct INTEGER NOT NULL,
                     score_percent INTEGER NOT NULL,
@@ -209,6 +214,8 @@ class LearningManager:
             )
 
             self._ensure_concept_node_columns(conn)
+            self._ensure_quiz_data_columns(conn)
+            self._ensure_quiz_attempts_columns(conn)
 
             conn.commit()
             logger.info("Learning tables initialized successfully")
@@ -300,6 +307,7 @@ class LearningManager:
         content_markdown: str,
         status: NodeStatus,
         quiz: Optional[QuizCard] = None,
+        quiz_set: Optional[QuizSet] = None,
         error_message: Optional[str] = None,
         retry_available: bool = False,
     ) -> Dict[str, Any]:
@@ -308,6 +316,9 @@ class LearningManager:
         Callers must provide the correct initial status:
         - NodeStatus.VIEWING_EXPLANATION for the first node (sequence_index=0)
         - NodeStatus.LOCKED for subsequent nodes (sequence_index>0)
+
+        Supports both single QuizCard and QuizSet for multiple quizzes.
+        If both quiz and quiz_set are provided, quiz_set takes precedence.
         """
         conn = self._get_connection()
         try:
@@ -339,14 +350,46 @@ class LearningManager:
             )
 
             quiz_payload = None
-            if quiz is not None:
+            if quiz_set is not None:
+                # Store as QuizSet (format_version=1)
+                cursor.execute(
+                    """
+                    INSERT INTO quiz_data (
+                        id, node_id, payload, format_version,
+                        shuffle_seed, current_index, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        node_id,
+                        json.dumps(quiz_set.model_dump()),
+                        1,  # format_version for QuizSet
+                        quiz_set.shuffle_seed,
+                        quiz_set.current_index,
+                        now,
+                        now,
+                    ),
+                )
+                quiz_payload = quiz_set.model_dump()
+            elif quiz is not None:
+                # Store as legacy single quiz (format_version=0)
                 quiz_payload = quiz.model_dump()
                 cursor.execute(
                     """
-                    INSERT INTO quiz_data (id, node_id, payload, created_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO quiz_data (
+                        id, node_id, payload, format_version, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (str(uuid.uuid4()), node_id, json.dumps(quiz_payload), now),
+                    (
+                        str(uuid.uuid4()),
+                        node_id,
+                        json.dumps(quiz_payload),
+                        0,  # format_version 0 = legacy single quiz
+                        now,
+                        now,
+                    ),
                 )
 
             conn.commit()
@@ -492,10 +535,17 @@ class LearningManager:
         node_id: str,
         content_markdown: str,
         status: NodeStatus,
-        quiz: Optional[QuizCard],
+        quiz: Optional[QuizCard] = None,
+        quiz_set: Optional[QuizSet] = None,
         error_message: Optional[str] = None,
         retry_available: bool = False,
     ) -> Optional[Dict[str, Any]]:
+        """Update node content, quiz data, and status.
+
+        Supports both single QuizCard and QuizSet for multiple quizzes.
+        If both quiz and quiz_set are provided, quiz_set takes precedence.
+        If both are None, any existing quiz data is deleted.
+        """
         conn = self._get_connection()
         try:
             now = datetime.now(timezone.utc).isoformat()
@@ -540,21 +590,13 @@ class LearningManager:
                     return None
                 raise ValueError("Node status changed during update; retry")
 
-            if quiz is None:
+            # Handle quiz data: quiz_set takes precedence over quiz
+            if quiz_set is not None:
+                # Store as QuizSet (format_version=1)
+                quiz_payload = json.dumps(quiz_set.model_dump())
                 cursor.execute(
                     """
-                    DELETE FROM quiz_data
-                    WHERE node_id = ?
-                    """,
-                    (node_id,),
-                )
-            else:
-                quiz_payload = json.dumps(quiz.model_dump())
-                cursor.execute(
-                    """
-                    SELECT id
-                    FROM quiz_data
-                    WHERE node_id = ?
+                    SELECT id FROM quiz_data WHERE node_id = ?
                     """,
                     (node_id,),
                 )
@@ -563,10 +605,59 @@ class LearningManager:
                     cursor.execute(
                         """
                         UPDATE quiz_data
-                        SET payload = ?
+                        SET payload = ?, format_version = 1,
+                            shuffle_seed = ?, current_index = ?,
+                            updated_at = ?
                         WHERE node_id = ?
                         """,
-                        (quiz_payload, node_id),
+                        (
+                            quiz_payload,
+                            quiz_set.shuffle_seed,
+                            quiz_set.current_index,
+                            now,
+                            node_id,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO quiz_data (
+                            id, node_id, payload, format_version,
+                            shuffle_seed, current_index, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            node_id,
+                            quiz_payload,
+                            1,  # format_version for QuizSet
+                            quiz_set.shuffle_seed,
+                            quiz_set.current_index,
+                            now,
+                            now,
+                        ),
+                    )
+            elif quiz is not None:
+                # Store as legacy single quiz
+                quiz_payload = json.dumps(quiz.model_dump())
+                cursor.execute(
+                    """
+                    SELECT id FROM quiz_data WHERE node_id = ?
+                    """,
+                    (node_id,),
+                )
+                quiz_row = cursor.fetchone()
+                if quiz_row:
+                    cursor.execute(
+                        """
+                        UPDATE quiz_data
+                        SET payload = ?, format_version = 0,
+                            shuffle_seed = NULL, current_index = 0,
+                            updated_at = ?
+                        WHERE node_id = ?
+                        """,
+                        (quiz_payload, now, node_id),
                     )
                 else:
                     cursor.execute(
@@ -576,6 +667,15 @@ class LearningManager:
                         """,
                         (str(uuid.uuid4()), node_id, quiz_payload, now),
                     )
+            else:
+                # Delete existing quiz data if any
+                cursor.execute(
+                    """
+                    DELETE FROM quiz_data
+                    WHERE node_id = ?
+                    """,
+                    (node_id,),
+                )
 
             conn.commit()
             return self._get_node_by_id(node_id, conn)
@@ -690,7 +790,7 @@ class LearningManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT payload
+                SELECT payload, format_version, current_index
                 FROM quiz_data
                 WHERE node_id = ?
                 """,
@@ -699,9 +799,234 @@ class LearningManager:
             row = cursor.fetchone()
             if not row:
                 return None
-            return QuizCard.model_validate(json.loads(row["payload"]))
+
+            payload = json.loads(row["payload"])
+            format_version = row["format_version"]
+            current_index = row["current_index"]
+
+            # Handle legacy format (single QuizCard) stored without format_version
+            if format_version is None or format_version < 1:
+                # Legacy: payload is a QuizCard, return directly
+                return QuizCard.model_validate(payload)
+
+            # New format: payload is a QuizSet, return current quiz
+            quiz_set = QuizSet.model_validate(payload)
+            if quiz_set.quizzes:
+                # Use current_index from database column, not from payload
+                idx = current_index if current_index is not None else quiz_set.current_index
+                return quiz_set.quizzes[idx]
+            return None
         except sqlite3.Error as e:
             logger.error(f"Error getting quiz for node: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def create_quiz_set(
+        self,
+        node_id: str,
+        quiz_set: QuizSet,
+        shuffle_seed: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Store a QuizSet for a concept node.
+
+        Args:
+            node_id: The concept node identifier
+            quiz_set: QuizSet containing 1-5 quizzes
+            shuffle_seed: Optional seed for deterministic shuffling
+
+        Returns:
+            Dict with quiz_set_id, node_id, format_version, and shuffle_seed
+
+        Raises:
+            ValueError: If node_id not found
+            sqlite3.Error: On database errors
+        """
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.cursor()
+
+            # Verify node exists
+            cursor.execute(
+                "SELECT id FROM concept_nodes WHERE id = ?",
+                (node_id,),
+            )
+            if cursor.fetchone() is None:
+                raise ValueError(f"Concept node not found: {node_id}")
+
+            # Delete any existing quiz data for this node
+            cursor.execute(
+                "DELETE FROM quiz_data WHERE node_id = ?",
+                (node_id,),
+            )
+
+            # Insert new QuizSet
+            quiz_set_id = str(uuid.uuid4())
+            cursor.execute(
+                """
+                INSERT INTO quiz_data (
+                    id, node_id, payload, format_version,
+                    shuffle_seed, current_index, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    quiz_set_id,
+                    node_id,
+                    json.dumps(quiz_set.model_dump()),
+                    1,  # format_version for QuizSet
+                    shuffle_seed,
+                    quiz_set.current_index,
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+
+            logger.info(
+                f"Created QuizSet for node {node_id}: "
+                f"{len(quiz_set.quizzes)} quizzes, seed={shuffle_seed}"
+            )
+
+            return {
+                "id": quiz_set_id,
+                "node_id": node_id,
+                "format_version": 1,
+                "shuffle_seed": shuffle_seed,
+                "current_index": quiz_set.current_index,
+                "total_quizzes": len(quiz_set.quizzes),
+                "created_at": now,
+                "updated_at": now,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error creating QuizSet: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_quiz_set_for_node(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve QuizSet data for a concept node.
+
+        Args:
+            node_id: The concept node identifier
+
+        Returns:
+            Dict with quiz_set, shuffle_seed, current_index, format_version,
+            or None if no quiz data exists
+
+        Raises:
+            sqlite3.Error: On database errors
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    payload, format_version, shuffle_seed,
+                    current_index, created_at, updated_at
+                FROM quiz_data
+                WHERE node_id = ?
+                """,
+                (node_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            payload = json.loads(row["payload"])
+            format_version = row["format_version"]
+
+            # Handle legacy format - wrap single quiz in QuizSet
+            if format_version is None or format_version < 1:
+                # Legacy: payload is a QuizCard, wrap in QuizSet
+                single_quiz = QuizCard.model_validate(payload)
+                quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                shuffle_seed = None
+                current_index = 0
+            else:
+                quiz_set = QuizSet.model_validate(payload)
+                shuffle_seed = row["shuffle_seed"]
+                current_index = row["current_index"]
+
+            return {
+                "quiz_set": quiz_set,
+                "format_version": format_version or 0,
+                "shuffle_seed": shuffle_seed,
+                "current_index": current_index,
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error getting QuizSet for node: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def update_quiz_set_progress(
+        self, node_id: str, current_index: int
+    ) -> Optional[Dict[str, Any]]:
+        """Update the current quiz index for a QuizSet.
+
+        Args:
+            node_id: The concept node identifier
+            current_index: New current index (0-based)
+
+        Returns:
+            Updated QuizSet data dict, or None if not found
+
+        Raises:
+            ValueError: If current_index is invalid for the quiz set
+            sqlite3.Error: On database errors
+        """
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.cursor()
+
+            # Get current quiz set to validate index
+            cursor.execute(
+                "SELECT payload, format_version FROM quiz_data WHERE node_id = ?",
+                (node_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            payload = json.loads(row["payload"])
+            format_version = row["format_version"]
+
+            # Validate index against quiz set size
+            if format_version is None or format_version < 1:
+                total_quizzes = 1  # Legacy: single quiz wrapped in QuizSet
+            else:
+                quiz_set_data = QuizSet.model_validate(payload)
+                total_quizzes = len(quiz_set_data.quizzes)
+
+            if current_index < 0 or current_index >= total_quizzes:
+                raise ValueError(
+                    f"Invalid current_index {current_index} for quiz set "
+                    f"with {total_quizzes} quizzes"
+                )
+
+            # Update the current_index
+            cursor.execute(
+                """
+                UPDATE quiz_data
+                SET current_index = ?, updated_at = ?
+                WHERE node_id = ?
+                """,
+                (current_index, now, node_id),
+            )
+            conn.commit()
+
+            logger.info(f"Updated QuizSet progress for node {node_id}: index={current_index}")
+
+            # Return updated data
+            return self.get_quiz_set_for_node(node_id)
+        except sqlite3.Error as e:
+            logger.error(f"Error updating QuizSet progress: {e}")
             raise
         finally:
             conn.close()
@@ -710,28 +1035,45 @@ class LearningManager:
         self,
         node_id: str,
         selected_option_id: str,
+        quiz_index: int = 0,
     ) -> Dict[str, Any]:
         """Record a quiz attempt and return result with mastery status.
 
+        Supports both single QuizCard and QuizSet (multi-quiz) scenarios.
+        For QuizSet, uses quiz_index to select the appropriate quiz.
+
         Args:
             node_id: The concept node identifier
-            selected_option_id: The selected option (A, B, C, or D)
+            selected_option_id: The selected option UUID (stable ID)
+            quiz_index: Index of quiz in set (0-based, default 0)
 
         Returns:
             Dict with attempt details including is_correct, score_percent,
             correct_option_id, explanation, and is_mastered
 
         Raises:
-            ValueError: If node_id not found or has no quiz
+            ValueError: If node_id not found, has no quiz, or quiz_index invalid
         """
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
 
-            # Get quiz data for this node
-            quiz = self.get_quiz_for_node(node_id)
-            if quiz is None:
+            # Get QuizSet data to determine quiz structure
+            quiz_set_data = self.get_quiz_set_for_node(node_id)
+            if quiz_set_data is None:
                 raise ValueError(f"No quiz found for node: {node_id}")
+
+            quiz_set = quiz_set_data["quiz_set"]
+
+            # Validate quiz_index
+            if quiz_index < 0 or quiz_index >= len(quiz_set.quizzes):
+                raise ValueError(
+                    f"Invalid quiz_index {quiz_index} for quiz set with "
+                    f"{len(quiz_set.quizzes)} quizzes"
+                )
+
+            # Get the specific quiz based on quiz_index
+            quiz = quiz_set.quizzes[quiz_index]
 
             # Find correct option and selected option details
             correct_option = None
@@ -739,7 +1081,7 @@ class LearningManager:
             for opt in quiz.options:
                 if opt.is_correct:
                     correct_option = opt
-                if opt.id == selected_option_id:
+                if opt.option_id == selected_option_id:
                     selected_option = opt
 
             if selected_option is None:
@@ -765,15 +1107,16 @@ class LearningManager:
             cursor.execute(
                 """
                 INSERT INTO quiz_attempts (
-                    id, node_id, attempt_number, selected_option_id,
+                    id, node_id, attempt_number, quiz_index, selected_option_id,
                     is_correct, score_percent, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     attempt_id,
                     node_id,
                     attempt_number,
+                    quiz_index,
                     selected_option_id,
                     1 if is_correct else 0,
                     score_percent,
@@ -782,21 +1125,35 @@ class LearningManager:
             )
             conn.commit()
 
+            # Calculate mastery for multi-quiz scenario
+            # For single quiz: mastery = this attempt is correct
+            # For multi-quiz: mastery = all quizzes answered correctly at least once
+            total_quizzes = len(quiz_set.quizzes)
+            if total_quizzes == 1:
+                is_mastered = is_correct
+            else:
+                # Check if all quizzes have at least one correct attempt
+                is_mastered = self._check_multi_quiz_mastery(
+                    node_id, total_quizzes, conn
+                )
+
             logger.info(
                 f"Quiz attempt recorded: node={node_id}, "
-                f"attempt={attempt_number}, correct={is_correct}"
+                f"attempt={attempt_number}, quiz_index={quiz_index}, "
+                f"correct={is_correct}, mastered={is_mastered}"
             )
 
             return {
                 "id": attempt_id,
                 "node_id": node_id,
                 "attempt_number": attempt_number,
+                "quiz_index": quiz_index,
                 "selected_option_id": selected_option_id,
                 "is_correct": is_correct,
                 "score_percent": score_percent,
-                "correct_option_id": correct_option.id,
+                "correct_option_id": correct_option.option_id if correct_option else None,
                 "explanation": selected_option.explanation,
-                "is_mastered": is_correct,  # 100% = mastered for single question
+                "is_mastered": is_mastered,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -805,6 +1162,34 @@ class LearningManager:
             raise
         finally:
             conn.close()
+
+    def _check_multi_quiz_mastery(
+        self, node_id: str, total_quizzes: int, conn: sqlite3.Connection
+    ) -> bool:
+        """Check if all quizzes in a set have been answered correctly.
+
+        Args:
+            node_id: The concept node identifier
+            total_quizzes: Total number of quizzes in the set
+            conn: Database connection
+
+        Returns:
+            True if every quiz index has at least one correct attempt
+        """
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT DISTINCT quiz_index
+            FROM quiz_attempts
+            WHERE node_id = ? AND is_correct = 1
+            """,
+            (node_id,),
+        )
+        correct_quiz_indices = {row["quiz_index"] for row in cursor.fetchall()}
+
+        # Mastered if all quiz indices 0 to total_quizzes-1 are in correct set
+        required_indices = set(range(total_quizzes))
+        return correct_quiz_indices.issuperset(required_indices)
 
     def get_quiz_attempts(self, node_id: str) -> Dict[str, Any]:
         """Get quiz attempt history for a node.
@@ -823,7 +1208,7 @@ class LearningManager:
             cursor.execute(
                 """
                 SELECT
-                    id, node_id, attempt_number, selected_option_id,
+                    id, node_id, attempt_number, quiz_index, selected_option_id,
                     is_correct, score_percent, created_at
                 FROM quiz_attempts
                 WHERE node_id = ?
@@ -835,26 +1220,28 @@ class LearningManager:
 
             attempts = []
             best_score = 0
-            is_mastered = False
 
             for row in rows:
                 score = row["score_percent"]
                 if score > best_score:
                     best_score = score
-                if score == 100:
-                    is_mastered = True
 
                 attempts.append(
                     {
                         "id": row["id"],
                         "node_id": row["node_id"],
                         "attempt_number": row["attempt_number"],
+                        "quiz_index": row["quiz_index"],
                         "selected_option_id": row["selected_option_id"],
                         "is_correct": bool(row["is_correct"]),
                         "score_percent": score,
                         "created_at": row["created_at"],
                     }
                 )
+
+            # Calculate mastery: for single quiz, any 100% = mastered
+            # For multi-quiz, need all quizzes correct
+            is_mastered = self._calculate_mastery_from_attempts(node_id, attempts, conn)
 
             return {
                 "node_id": node_id,
@@ -869,28 +1256,96 @@ class LearningManager:
         finally:
             conn.close()
 
+    def _calculate_mastery_from_attempts(
+        self,
+        node_id: str,
+        attempts: List[Dict[str, Any]],
+        conn: sqlite3.Connection,
+    ) -> bool:
+        """Calculate mastery status from attempts list.
+
+        For single quiz: any correct attempt = mastered
+        For multi-quiz: all quizzes must have at least one correct attempt
+
+        Args:
+            node_id: The concept node identifier
+            attempts: List of attempt dictionaries
+            conn: Database connection
+
+        Returns:
+            True if the quiz/quiz set is mastered
+        """
+        if not attempts:
+            return False
+
+        # Get total quizzes for this node
+        quiz_set_data = self.get_quiz_set_for_node(node_id)
+        if quiz_set_data is None:
+            return False
+
+        quiz_set = quiz_set_data["quiz_set"]
+        total_quizzes = len(quiz_set.quizzes)
+
+        if total_quizzes == 1:
+            # Single quiz: any correct attempt = mastered
+            return any(a["is_correct"] for a in attempts)
+        else:
+            # Multi-quiz: all quizzes must have at least one correct attempt
+            correct_quiz_indices = {
+                a["quiz_index"] for a in attempts if a["is_correct"]
+            }
+            required_indices = set(range(total_quizzes))
+            return correct_quiz_indices.issuperset(required_indices)
+
     def check_mastery(self, node_id: str) -> bool:
-        """Check if a node's quiz has been mastered (100% score achieved).
+        """Check if a node's quiz has been mastered.
+
+        For single quiz: True if any attempt was correct (100%).
+        For multi-quiz: True if all quizzes have at least one correct attempt.
 
         Args:
             node_id: The concept node identifier
 
         Returns:
-            True if any attempt scored 100%, False otherwise
+            True if mastered, False otherwise
         """
         conn = self._get_connection()
         try:
+            # Get quiz set to determine multi-quiz scenario
+            quiz_set_data = self.get_quiz_set_for_node(node_id)
+            if quiz_set_data is None:
+                return False
+
+            quiz_set = quiz_set_data["quiz_set"]
+            total_quizzes = len(quiz_set.quizzes)
+
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT 1
-                FROM quiz_attempts
-                WHERE node_id = ? AND score_percent = 100
-                LIMIT 1
-                """,
-                (node_id,),
-            )
-            return cursor.fetchone() is not None
+
+            if total_quizzes == 1:
+                # Single quiz: any 100% score = mastered
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM quiz_attempts
+                    WHERE node_id = ? AND is_correct = 1
+                    LIMIT 1
+                    """,
+                    (node_id,),
+                )
+                return cursor.fetchone() is not None
+            else:
+                # Multi-quiz: need all quizzes correct
+                cursor.execute(
+                    """
+                    SELECT DISTINCT quiz_index
+                    FROM quiz_attempts
+                    WHERE node_id = ? AND is_correct = 1
+                    """,
+                    (node_id,),
+                )
+                correct_quiz_indices = {row["quiz_index"] for row in cursor.fetchall()}
+                required_indices = set(range(total_quizzes))
+                return correct_quiz_indices.issuperset(required_indices)
         except sqlite3.Error as e:
             logger.error(f"Error checking mastery: {e}")
             raise
@@ -950,6 +1405,52 @@ class LearningManager:
         if "retry_available" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE concept_nodes ADD COLUMN retry_available INTEGER DEFAULT 0"
+            )
+
+    def _ensure_quiz_data_columns(self, conn: sqlite3.Connection) -> None:
+        """Migrate quiz_data table to support QuizSet format.
+
+        Adds columns for format_version, shuffle_seed, and current_index
+        to support multi-quiz sets and deterministic shuffling.
+
+        Migration strategy:
+        - format_version: NULL (legacy) or 1 (QuizSet format)
+        - shuffle_seed: NULL or stored seed for deterministic shuffle
+        - current_index: 0 or index of current quiz in set
+        """
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(quiz_data)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        if "format_version" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE quiz_data ADD COLUMN format_version INTEGER DEFAULT 1"
+            )
+        if "shuffle_seed" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE quiz_data ADD COLUMN shuffle_seed TEXT"
+            )
+        if "current_index" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE quiz_data ADD COLUMN current_index INTEGER DEFAULT 0"
+            )
+        if "updated_at" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE quiz_data ADD COLUMN updated_at TIMESTAMP"
+            )
+
+    def _ensure_quiz_attempts_columns(self, conn: sqlite3.Connection) -> None:
+        """Migrate quiz_attempts table to support multi-quiz tracking.
+
+        Adds quiz_index column to track which quiz in a set the attempt was for.
+        """
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(quiz_attempts)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        if "quiz_index" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE quiz_attempts ADD COLUMN quiz_index INTEGER DEFAULT 0"
             )
 
 

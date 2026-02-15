@@ -167,9 +167,7 @@ describe('useLearningMutations - Sequential Flow', () => {
       result.current.submitAnswer('node-1', 'B');
 
       await waitFor(() => {
-        expect(api.submitQuiz).toHaveBeenCalledWith('node-1', {
-          selected_option_id: 'B',
-        });
+        expect(api.submitQuiz).toHaveBeenCalledWith('node-1', 'B', undefined);
         expect(onQuizResult).toHaveBeenCalledWith(mockResult);
       });
     });

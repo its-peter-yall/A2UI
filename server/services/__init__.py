@@ -54,8 +54,26 @@ NOTES:
 """
 
 from server.services.course_orchestrator import CourseOrchestrator, course_orchestrator
+from server.services.quiz_randomization import (
+    evaluate_quiz_answer,
+    get_or_create_shuffle_order,
+    hide_quiz_card,
+    hide_quiz_set,
+    shuffle_quiz_options,
+    shuffle_quiz_options_with_seed,
+    shuffle_quiz_set,
+    shuffle_quiz_set_with_seed,
+)
 
 __all__ = [
     "CourseOrchestrator",
     "course_orchestrator",
+    "shuffle_quiz_options",
+    "shuffle_quiz_options_with_seed",
+    "shuffle_quiz_set",
+    "shuffle_quiz_set_with_seed",
+    "hide_quiz_card",
+    "hide_quiz_set",
+    "evaluate_quiz_answer",
+    "get_or_create_shuffle_order",
 ]

@@ -99,10 +99,10 @@ const createQuiz = (overrides: Partial<QuizCard> = {}): QuizCard => ({
   question_text: 'What is inertia?',
   difficulty: 'easy',
   options: [
-    { id: 'A', text: 'Resistance to change', is_correct: true, explanation: 'Correct!' },
-    { id: 'B', text: 'Speed of motion', is_correct: false, explanation: 'Wrong' },
-    { id: 'C', text: 'Force applied', is_correct: false, explanation: 'Wrong' },
-    { id: 'D', text: 'Mass of object', is_correct: false, explanation: 'Wrong' },
+    { option_id: 'opt-a-uuid', display_label: 'A', text: 'Resistance to change', is_correct: true, explanation: 'Correct!' },
+    { option_id: 'opt-b-uuid', display_label: 'B', text: 'Speed of motion', is_correct: false, explanation: 'Wrong' },
+    { option_id: 'opt-c-uuid', display_label: 'C', text: 'Force applied', is_correct: false, explanation: 'Wrong' },
+    { option_id: 'opt-d-uuid', display_label: 'D', text: 'Mass of object', is_correct: false, explanation: 'Wrong' },
   ],
   ...overrides,
 });
@@ -117,6 +117,9 @@ const createMockNode = (overrides: Partial<ConceptNode> = {}): ConceptNode => ({
   error_message: null,
   retry_available: false,
   quiz: createQuiz(),
+  quiz_set: null,
+  quiz_hidden: null,
+  quiz_set_hidden: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   ...overrides,
@@ -235,8 +238,8 @@ describe('Learning feature integration flow', () => {
       attempt_number: 1,
       is_correct: false,
       score_percent: 0,
-      correct_option_id: 'A',
-      selected_option_id: 'B',
+      correct_option_id: 'opt-a-uuid',
+      selected_option_id: 'opt-b-uuid',
       explanation: 'Wrong answer',
       is_mastered: false,
       next_node_unlocked: false,
@@ -258,9 +261,7 @@ describe('Learning feature integration flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit answer/i }));
 
     await waitFor(() => {
-      expect(api.submitQuiz).toHaveBeenCalledWith('node-1', {
-        selected_option_id: 'B',
-      });
+      expect(api.submitQuiz).toHaveBeenCalledWith('node-1', 'opt-b-uuid', 0);
     });
 
     await waitFor(() => {

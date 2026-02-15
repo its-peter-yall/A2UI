@@ -120,7 +120,7 @@ export function useQuizFeedback({
           const lastAttempt = history.attempts[history.attempts.length - 1];
           const correctOption = quiz.options.find((option) => option.is_correct);
           const selectedOption = quiz.options.find(
-            (option) => option.id === lastAttempt.selected_option_id
+            (option) => option.option_id === lastAttempt.selected_option_id
           );
           if (!correctOption || !selectedOption) {
             return undefined;
@@ -134,7 +134,7 @@ export function useQuizFeedback({
             attempt_number: lastAttempt.attempt_number,
             is_correct: isCorrect,
             score_percent: scorePercent,
-            correct_option_id: correctOption.id,
+            correct_option_id: correctOption.option_id,
             selected_option_id: lastAttempt.selected_option_id,
             explanation: selectedOption.explanation,
             is_mastered: isMastered,
