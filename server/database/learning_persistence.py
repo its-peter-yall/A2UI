@@ -531,6 +531,307 @@ class LearningManager:
         finally:
             conn.close()
 
+    def create_revision_session(
+        self,
+        original_session_id: str,
+        mode: str,
+    ) -> Dict[str, Any]:
+        """Create a revision session for a completed learning session.
+
+        Args:
+            original_session_id: Identifier of the completed session to revise.
+            mode: Revision mode, either 'full_review' or 'quiz_only'.
+
+        Returns:
+            Revision session payload with created node progress rows.
+
+        Raises:
+            LookupError: If the original learning session does not exist.
+            ValueError: If mode is invalid or session is not completed.
+        """
+        allowed_modes = {"full_review", "quiz_only"}
+        if mode not in allowed_modes:
+            raise ValueError(f"Invalid revision mode: {mode}")
+
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, status
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (original_session_id,),
+            )
+            session_row = cursor.fetchone()
+            if session_row is None:
+                raise LookupError(
+                    f"Learning session not found: {original_session_id}"
+                )
+            if session_row["status"] != "completed":
+                raise ValueError(
+                    "Revision sessions can only be created for completed sessions"
+                )
+
+            revision_id = str(uuid.uuid4())
+            revision_number = self._get_next_revision_number(
+                original_session_id=original_session_id,
+                conn=conn,
+            )
+            now = datetime.now(timezone.utc).isoformat()
+
+            cursor.execute(
+                """
+                INSERT INTO revision_sessions (
+                    id, original_session_id, revision_number, mode, status,
+                    progress_percent, total_quiz_score_percent, started_at,
+                    completed_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    revision_id,
+                    original_session_id,
+                    revision_number,
+                    mode,
+                    "in_progress",
+                    0,
+                    None,
+                    now,
+                    None,
+                ),
+            )
+
+            cursor.execute(
+                """
+                SELECT id, title, sequence_index
+                FROM concept_nodes
+                WHERE learning_session_id = ?
+                ORDER BY sequence_index ASC
+                """,
+                (original_session_id,),
+            )
+
+            progress_rows: List[Dict[str, Any]] = []
+            for node_row in cursor.fetchall():
+                progress_id = str(uuid.uuid4())
+                cursor.execute(
+                    """
+                    INSERT INTO revision_node_progress (
+                        id, revision_session_id, node_id, status, reviewed_at
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        progress_id,
+                        revision_id,
+                        node_row["id"],
+                        "pending",
+                        None,
+                    ),
+                )
+                progress_rows.append(
+                    {
+                        "id": progress_id,
+                        "revision_session_id": revision_id,
+                        "node_id": node_row["id"],
+                        "node_title": node_row["title"],
+                        "sequence_index": int(node_row["sequence_index"]),
+                        "status": "pending",
+                        "reviewed_at": None,
+                    }
+                )
+
+            conn.commit()
+            return {
+                "id": revision_id,
+                "original_session_id": original_session_id,
+                "revision_number": revision_number,
+                "mode": mode,
+                "status": "in_progress",
+                "progress_percent": 0,
+                "total_quiz_score_percent": None,
+                "started_at": now,
+                "completed_at": None,
+                "nodes": progress_rows,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error creating revision session: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_revisions_for_session(
+        self,
+        session_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """List revision sessions for an original learning session."""
+        conn = self._get_connection()
+        try:
+            safe_limit = max(limit, 0)
+            safe_offset = max(offset, 0)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total_count
+                FROM revision_sessions
+                WHERE original_session_id = ?
+                """,
+                (session_id,),
+            )
+            count_row = cursor.fetchone()
+            total_count = int(count_row["total_count"]) if count_row else 0
+
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    original_session_id,
+                    revision_number,
+                    mode,
+                    status,
+                    progress_percent,
+                    total_quiz_score_percent,
+                    started_at,
+                    completed_at
+                FROM revision_sessions
+                WHERE original_session_id = ?
+                ORDER BY started_at DESC
+                LIMIT ? OFFSET ?
+                """,
+                (session_id, safe_limit, safe_offset),
+            )
+            revisions = [
+                {
+                    "id": row["id"],
+                    "original_session_id": row["original_session_id"],
+                    "revision_number": int(row["revision_number"]),
+                    "mode": row["mode"],
+                    "status": row["status"],
+                    "progress_percent": int(row["progress_percent"] or 0),
+                    "total_quiz_score_percent": row["total_quiz_score_percent"],
+                    "started_at": row["started_at"],
+                    "completed_at": row["completed_at"],
+                }
+                for row in cursor.fetchall()
+            ]
+            return revisions, total_count
+        except sqlite3.Error as e:
+            logger.error(f"Error listing revision sessions: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def get_revision_session(self, revision_id: str) -> Optional[Dict[str, Any]]:
+        """Get a revision session with node-level progress details."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    original_session_id,
+                    revision_number,
+                    mode,
+                    status,
+                    progress_percent,
+                    total_quiz_score_percent,
+                    started_at,
+                    completed_at
+                FROM revision_sessions
+                WHERE id = ?
+                """,
+                (revision_id,),
+            )
+            revision_row = cursor.fetchone()
+            if revision_row is None:
+                return None
+
+            cursor.execute(
+                """
+                SELECT
+                    rnp.id,
+                    rnp.revision_session_id,
+                    rnp.node_id,
+                    rnp.status,
+                    rnp.reviewed_at,
+                    cn.title AS node_title,
+                    cn.sequence_index AS sequence_index
+                FROM revision_node_progress rnp
+                INNER JOIN concept_nodes cn
+                    ON cn.id = rnp.node_id
+                WHERE rnp.revision_session_id = ?
+                ORDER BY cn.sequence_index ASC
+                """,
+                (revision_id,),
+            )
+            progress_rows = [
+                {
+                    "id": row["id"],
+                    "revision_session_id": row["revision_session_id"],
+                    "node_id": row["node_id"],
+                    "node_title": row["node_title"],
+                    "sequence_index": int(row["sequence_index"]),
+                    "status": row["status"],
+                    "reviewed_at": row["reviewed_at"],
+                }
+                for row in cursor.fetchall()
+            ]
+
+            return {
+                "id": revision_row["id"],
+                "original_session_id": revision_row["original_session_id"],
+                "revision_number": int(revision_row["revision_number"]),
+                "mode": revision_row["mode"],
+                "status": revision_row["status"],
+                "progress_percent": int(revision_row["progress_percent"] or 0),
+                "total_quiz_score_percent": revision_row["total_quiz_score_percent"],
+                "started_at": revision_row["started_at"],
+                "completed_at": revision_row["completed_at"],
+                "nodes": progress_rows,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error getting revision session: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def delete_revision_session(self, revision_id: str) -> bool:
+        """Delete a revision session by ID.
+
+        Returns:
+            True if a revision session was deleted, otherwise False.
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                DELETE FROM quiz_attempts
+                WHERE revision_session_id = ?
+                """,
+                (revision_id,),
+            )
+            cursor.execute(
+                """
+                DELETE FROM revision_sessions
+                WHERE id = ?
+                """,
+                (revision_id,),
+            )
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting revision session: {e}")
+            raise
+        finally:
+            conn.close()
+
     def create_concept_node(
         self,
         session_id: str,

@@ -557,9 +557,10 @@ GET /learning/sessions/{id}/progress
 ---
 
 ### Phase 11: Backend — Revision & Quiz Re-attendance API
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/11-revision-api/`
 **Estimated Plans**: 2
+**Plans Completed**: 1/2
 
 Build the API endpoints for creating revision sessions, tracking revision
 progress, and enabling quiz re-attendance with separate scoring.
@@ -1439,7 +1440,7 @@ npm run build                   # Production build succeeds
 |-------|------|-------|--------|--------------|
 | 09 | Database Schema Extensions | 2 | in_progress | - |
 | 10 | Session Listing & Progress API | 2 | completed | 09 |
-| 11 | Revision & Quiz Re-attendance API | 2 | pending | 10 |
+| 11 | Revision & Quiz Re-attendance API | 2 | in_progress | 10 |
 | 12 | Course Dashboard Components | 2 | pending | 10 |
 | 13 | Course Resume & Navigation | 2 | pending | 12 |
 | 14 | Revision Mode UI | 2 | pending | 11, 12 |

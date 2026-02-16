@@ -86,6 +86,10 @@ from server.schemas.learning import (
     NodeStatus,
     QuizAttemptHistory,
     QuizAttemptResponse,
+    RevisionCreateRequest,
+    RevisionSessionListResponse,
+    RevisionSessionResponse,
+    RevisionSessionWithProgress,
     SessionProgress,
     SessionListResponse,
 )
@@ -168,6 +172,12 @@ class QuizSubmitRequest(BaseModel):
         description="Index of quiz in set being answered (0-based)",
         ge=0,
     )
+
+
+class DeleteRevisionResponse(BaseModel):
+    """Response payload for deleting a revision session."""
+
+    deleted: bool = Field(..., description="Whether the revision was deleted")
 
 
 def _apply_node_visibility(node: dict, include_flags: bool = False) -> dict:
@@ -409,6 +419,129 @@ def get_learning_session(session_id: str) -> LearningSessionWithNodes:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get learning session: {str(e)}",
+        )
+
+
+@router.post(
+    "/sessions/{session_id}/revisions",
+    response_model=RevisionSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create revision session",
+    description=(
+        "Create a revision session for a completed learning session."
+    ),
+)
+def create_revision(
+    session_id: str,
+    request: RevisionCreateRequest,
+) -> RevisionSessionResponse:
+    """Create a new revision session for a completed learning session."""
+    try:
+        revision = learning_manager.create_revision_session(
+            session_id,
+            request.mode,
+        )
+        return RevisionSessionResponse(**revision)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error creating revision session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create revision session: {str(e)}",
+        )
+
+
+@router.get(
+    "/sessions/{session_id}/revisions",
+    response_model=RevisionSessionListResponse,
+    summary="List revision sessions",
+    description=(
+        "Get revision sessions for a learning session with pagination."
+    ),
+)
+def get_revisions_for_session(
+    session_id: str,
+    limit: int = Query(default=20, ge=0),
+    offset: int = Query(default=0, ge=0),
+) -> RevisionSessionListResponse:
+    """List revision sessions for an original learning session."""
+    try:
+        safe_limit = min(limit, 100)
+        revisions, total_count = learning_manager.get_revisions_for_session(
+            session_id=session_id,
+            limit=safe_limit,
+            offset=offset,
+        )
+        return RevisionSessionListResponse(
+            revisions=revisions,
+            total_count=total_count,
+        )
+    except Exception as e:
+        logger.error(f"Error listing revision sessions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list revision sessions: {str(e)}",
+        )
+
+
+@router.get(
+    "/revisions/{revision_id}",
+    response_model=RevisionSessionWithProgress,
+    summary="Get revision session",
+    description="Get a revision session with node-level progress details.",
+)
+def get_revision(revision_id: str) -> RevisionSessionWithProgress:
+    """Get a revision session by ID."""
+    try:
+        revision = learning_manager.get_revision_session(revision_id)
+        if not revision:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Revision session not found: {revision_id}",
+            )
+        return RevisionSessionWithProgress(**revision)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting revision session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get revision session: {str(e)}",
+        )
+
+
+@router.delete(
+    "/revisions/{revision_id}",
+    response_model=DeleteRevisionResponse,
+    summary="Delete revision session",
+    description="Delete a revision session and its node progress records.",
+)
+def delete_revision(revision_id: str) -> DeleteRevisionResponse:
+    """Delete a revision session by ID."""
+    try:
+        deleted = learning_manager.delete_revision_session(revision_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Revision session not found: {revision_id}",
+            )
+        return DeleteRevisionResponse(deleted=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting revision session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete revision session: {str(e)}",
         )
 
 

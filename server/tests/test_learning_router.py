@@ -422,3 +422,138 @@ class TestLearningRouterSessionProgress(unittest.TestCase):
             response = client.get("/learning/sessions/missing/progress")
 
         self.assertEqual(response.status_code, 404)
+
+
+class TestLearningRouterRevisions(unittest.TestCase):
+    """Tests for revision session CRUD router endpoints."""
+
+    def _make_revision(
+        self,
+        revision_id: str = "revision-1",
+        mode: str = "full_review",
+        revision_number: int = 1,
+    ) -> dict:
+        return {
+            "id": revision_id,
+            "original_session_id": "session-1",
+            "revision_number": revision_number,
+            "mode": mode,
+            "status": "in_progress",
+            "progress_percent": 0,
+            "total_quiz_score_percent": None,
+            "started_at": "2026-02-16T00:00:00+00:00",
+            "completed_at": None,
+        }
+
+    def test_create_revision_returns_201_with_payload(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.create_revision_session.return_value = self._make_revision()
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/sessions/session-1/revisions",
+                json={"mode": "full_review"},
+            )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertEqual(payload["id"], "revision-1")
+        self.assertEqual(payload["mode"], "full_review")
+        fake_manager.create_revision_session.assert_called_once_with(
+            "session-1",
+            "full_review",
+        )
+
+    def test_create_revision_returns_400_for_incomplete_session(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.create_revision_session.side_effect = ValueError(
+            "Revision sessions can only be created for completed sessions"
+        )
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/sessions/session-1/revisions",
+                json={"mode": "full_review"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_revision_returns_404_for_missing_session(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.create_revision_session.side_effect = LookupError(
+            "Learning session not found"
+        )
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/sessions/missing/revisions",
+                json={"mode": "quiz_only"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_revisions_returns_paginated_payload(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_revisions_for_session.return_value = (
+            [self._make_revision("revision-2", "quiz_only", 2)],
+            2,
+        )
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get(
+                "/learning/sessions/session-1/revisions",
+                params={"limit": 1, "offset": 0},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total_count"], 2)
+        self.assertEqual(len(payload["revisions"]), 1)
+        self.assertEqual(payload["revisions"][0]["id"], "revision-2")
+        fake_manager.get_revisions_for_session.assert_called_once_with(
+            session_id="session-1",
+            limit=1,
+            offset=0,
+        )
+
+    def test_get_revision_returns_full_details(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_revision_session.return_value = {
+            **self._make_revision(),
+            "nodes": [
+                {
+                    "id": "progress-1",
+                    "node_id": "node-1",
+                    "node_title": "Node 1",
+                    "sequence_index": 0,
+                    "status": "pending",
+                    "reviewed_at": None,
+                }
+            ],
+        }
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get("/learning/revisions/revision-1")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["id"], "revision-1")
+        self.assertEqual(payload["nodes"][0]["node_title"], "Node 1")
+
+    def test_delete_revision_returns_success_then_404(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.delete_revision_session.side_effect = [True, False]
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            first = client.delete("/learning/revisions/revision-1")
+            second = client.delete("/learning/revisions/revision-1")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json(), {"deleted": True})
+        self.assertEqual(second.status_code, 404)

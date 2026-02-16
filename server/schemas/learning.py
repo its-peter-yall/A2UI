@@ -625,6 +625,18 @@ class RevisionSessionWithProgress(RevisionSessionResponse):
     )
 
 
+class RevisionSessionListResponse(BaseModel):
+    """Paginated response payload for revision session listings."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    revisions: List[RevisionSessionResponse] = Field(
+        default_factory=list,
+        description="Revision sessions for the requested original session",
+    )
+    total_count: int = Field(..., description="Total matching revisions", ge=0)
+
+
 class QuizSubmission(BaseModel):
     """Payload for submitting quiz answers.
 

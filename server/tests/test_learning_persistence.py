@@ -1905,6 +1905,174 @@ class TestRevisionPersistenceSchema(unittest.TestCase):
             conn.close()
 
 
+class TestRevisionSessionPersistence(unittest.TestCase):
+    """Tests CRUD operations for revision sessions and node progress."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "revision_crud_learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_learning_session(
+        self, status: str = "completed", node_count: int = 3
+    ) -> str:
+        session = self.manager.create_learning_session(
+            query="Revision CRUD topic",
+            course_title="Revision CRUD course",
+            user_id="user-1",
+        )
+        for index in range(node_count):
+            self.manager.create_concept_node(
+                session_id=session["id"],
+                sequence_index=index,
+                title=f"Node {index}",
+                content_markdown=f"Content {index}",
+                status=NodeStatus.COMPLETED,
+            )
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE learning_sessions
+                SET status = ?, progress_percent = ?,
+                    completed_at = CASE
+                        WHEN ? = 'completed' THEN '2026-02-16T00:00:00+00:00'
+                        ELSE NULL
+                    END
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    100 if status == "completed" else 0,
+                    status,
+                    session["id"],
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        return session["id"]
+
+    def test_create_revision_for_completed_session_creates_pending_nodes(
+        self,
+    ) -> None:
+        session_id = self._create_learning_session(status="completed", node_count=3)
+
+        revision = self.manager.create_revision_session(
+            original_session_id=session_id,
+            mode="full_review",
+        )
+
+        self.assertEqual(revision["original_session_id"], session_id)
+        self.assertEqual(revision["revision_number"], 1)
+        self.assertEqual(revision["mode"], "full_review")
+        self.assertEqual(revision["status"], "in_progress")
+        self.assertEqual(len(revision["nodes"]), 3)
+        self.assertTrue(all(node["status"] == "pending" for node in revision["nodes"]))
+
+    def test_create_revision_for_in_progress_session_raises_value_error(self) -> None:
+        session_id = self._create_learning_session(status="in_progress")
+
+        with self.assertRaises(ValueError):
+            self.manager.create_revision_session(session_id, mode="full_review")
+
+    def test_create_revision_for_missing_session_raises_lookup_error(self) -> None:
+        with self.assertRaises(LookupError):
+            self.manager.create_revision_session("missing-session-id", mode="quiz_only")
+
+    def test_revision_number_increments_for_same_original_session(self) -> None:
+        session_id = self._create_learning_session(status="completed")
+
+        first = self.manager.create_revision_session(session_id, mode="full_review")
+        second = self.manager.create_revision_session(session_id, mode="quiz_only")
+        third = self.manager.create_revision_session(session_id, mode="full_review")
+
+        self.assertEqual(first["revision_number"], 1)
+        self.assertEqual(second["revision_number"], 2)
+        self.assertEqual(third["revision_number"], 3)
+        self.assertEqual(second["mode"], "quiz_only")
+
+    def test_get_revisions_for_session_returns_started_at_desc_order(self) -> None:
+        session_id = self._create_learning_session(status="completed")
+        first = self.manager.create_revision_session(session_id, mode="full_review")
+        second = self.manager.create_revision_session(session_id, mode="quiz_only")
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE revision_sessions
+                SET started_at = ?
+                WHERE id = ?
+                """,
+                ("2026-02-15T00:00:00+00:00", first["id"]),
+            )
+            cursor.execute(
+                """
+                UPDATE revision_sessions
+                SET started_at = ?
+                WHERE id = ?
+                """,
+                ("2026-02-16T00:00:00+00:00", second["id"]),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        revisions, total_count = self.manager.get_revisions_for_session(session_id)
+
+        self.assertEqual(total_count, 2)
+        self.assertEqual([item["id"] for item in revisions], [second["id"], first["id"]])
+
+    def test_get_revision_session_returns_nodes_with_titles_and_sequence(self) -> None:
+        session_id = self._create_learning_session(status="completed", node_count=2)
+        created = self.manager.create_revision_session(session_id, mode="full_review")
+
+        revision = self.manager.get_revision_session(created["id"])
+
+        self.assertIsNotNone(revision)
+        assert revision is not None
+        self.assertEqual(revision["id"], created["id"])
+        self.assertEqual(len(revision["nodes"]), 2)
+        self.assertEqual(revision["nodes"][0]["node_title"], "Node 0")
+        self.assertEqual(revision["nodes"][0]["sequence_index"], 0)
+
+    def test_delete_revision_session_cascades_to_node_progress(self) -> None:
+        session_id = self._create_learning_session(status="completed")
+        created = self.manager.create_revision_session(session_id, mode="full_review")
+
+        deleted = self.manager.delete_revision_session(created["id"])
+        deleted_again = self.manager.delete_revision_session(created["id"])
+
+        self.assertTrue(deleted)
+        self.assertFalse(deleted_again)
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM revision_node_progress
+                WHERE revision_session_id = ?
+                """,
+                (created["id"],),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            self.assertEqual(row["count"], 0)
+        finally:
+            conn.close()
+
+
 class TestRevisionQuizAttemptsMigration(unittest.TestCase):
     """Tests migration behavior for quiz_attempts.revision_session_id."""
 
