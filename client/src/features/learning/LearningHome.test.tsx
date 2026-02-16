@@ -376,6 +376,44 @@ describe('LearningHome', () => {
       expect(mockNavigate).not.toHaveBeenCalled();
       consoleErrorSpy.mockRestore();
     });
+
+    it('navigates to revision page when a revision history row is clicked', async () => {
+      (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
+        multiCourseResponse
+      );
+      (learningApi.getRevisionsList as ReturnType<typeof vi.fn>).mockResolvedValue({
+        revisions: [
+          {
+            id: 'rev-1',
+            original_session_id: 'session-2',
+            revision_number: 1,
+            mode: 'full_review',
+            status: 'completed',
+            progress_percent: 100,
+            total_quiz_score_percent: 85,
+            started_at: '2025-01-25T08:00:00Z',
+            completed_at: '2025-01-25T08:20:00Z',
+          },
+        ],
+        total_count: 1,
+      });
+
+      renderWithProviders(<LearningHome />);
+
+      await waitFor(() => {
+        expect(screen.getByText('TypeScript Advanced')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('revision-history-toggle'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('revision-row')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('revision-row'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('/learn/session-2/revise/rev-1');
+    });
   });
 
   describe('Filtering', () => {

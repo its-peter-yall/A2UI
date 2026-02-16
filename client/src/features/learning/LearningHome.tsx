@@ -178,6 +178,13 @@ export function LearningHome() {
     [navigate]
   );
 
+  const handleViewRevision = useCallback(
+    (sessionId: string, revisionId: string) => {
+      navigate(`/learn/${sessionId}/revise/${revisionId}`);
+    },
+    [navigate]
+  );
+
   // Derived state for rendering
   const hasCourses = totalCount > 0;
   const isInitialLoad = isLoading && offset === 0 && sessions.length === 0;
@@ -312,6 +319,9 @@ export function LearningHome() {
                           session={session}
                           onResume={handleResume}
                           onRevise={handleRevise}
+                          onViewRevision={(revisionId) => {
+                            handleViewRevision(session.id, revisionId);
+                          }}
                         />
                       </motion.div>
                     ))}

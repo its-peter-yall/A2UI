@@ -91,7 +91,7 @@ export function RevisionPage() {
   // Invalidate course list when summary data first becomes available
   useEffect(() => {
     if (summaryData) {
-      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
     }
   }, [summaryData, queryClient]);
 
@@ -108,7 +108,7 @@ export function RevisionPage() {
         mode: revisionSession.mode,
       });
       setSummaryDismissed(true);
-      navigate(`/learn/${sessionId}/revision/${newRevision.id}`);
+      navigate(`/learn/${sessionId}/revise/${newRevision.id}`);
     } catch (err) {
       console.error('Failed to create new revision:', err);
     }

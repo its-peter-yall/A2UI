@@ -152,10 +152,10 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
       </div>
 
       {/* Revision history section */}
-      {session.revision_count > 0 && (
+      {session.revision_count > 0 && onViewRevision && (
         <RevisionHistoryList
           sessionId={session.id}
-          onViewRevision={onViewRevision ?? (() => {})}
+          onViewRevision={onViewRevision}
         />
       )}
     </motion.article>

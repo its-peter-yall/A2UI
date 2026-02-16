@@ -977,9 +977,10 @@ interface CourseFilterProps {
 ---
 
 ### Phase 13: Frontend — Course Resume & Multi-Session Navigation
-**Status**: `in_progress`
+**Status**: `completed`
 **Directory**: `phases/13-resume-navigation/`
 **Estimated Plans**: 2
+**Plans Completed**: 2/2
 
 Implement the "resume where you left off" experience and enable smooth
 navigation between multiple courses without losing progress.
@@ -1286,19 +1287,19 @@ function useRevisionHistory(sessionId: string) {
 **Dependencies**: Phase 11 (revision API must exist), Phase 12 (CourseCard must exist)
 
 **Verification**:
-- [ ] Full review mode shows content + quiz for each node
-- [ ] Quiz only mode shows only quizzes (no explanations)
-- [ ] No sequential locking in revision mode (all nodes accessible)
-- [ ] Performance comparison shows correct improvement/decline
-- [ ] Revision history displays correctly on CourseCard
-- [ ] RevisionSummaryModal appears on revision completion
-- [ ] All cards show correct badges (reviewed/passed/failed)
-- [ ] All new tests pass
+- [x] Full review mode shows content + quiz for each node
+- [x] Quiz only mode shows only quizzes (no explanations)
+- [x] No sequential locking in revision mode (all nodes accessible)
+- [x] Performance comparison shows correct improvement/decline
+- [x] Revision history displays correctly on CourseCard
+- [x] RevisionSummaryModal appears on revision completion
+- [x] All cards show correct badges (reviewed/passed/failed)
+- [x] All new tests pass
 
 ---
 
 ### Phase 15: Integration, Testing & Polish
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/15-integration-polish/`
 **Estimated Plans**: 2
 
@@ -1444,9 +1445,9 @@ npm run build                   # Production build succeeds
 | 10 | Session Listing & Progress API | 2 | completed | 09 |
 | 11 | Revision & Quiz Re-attendance API | 2 | completed | 10 |
 | 12 | Course Dashboard Components | 2 | completed | 10 |
-| 13 | Course Resume & Navigation | 2 | pending | 12 |
+| 13 | Course Resume & Navigation | 2 | completed | 12 |
 | 14 | Revision Mode UI | 2 | completed | 11, 12 |
-| 15 | Integration, Testing & Polish | 2 | pending | 09-14 |
+| 15 | Integration, Testing & Polish | 2 | in_progress | 09-14 |
 
 **Total Estimated Plans (v1.1)**: 14
 **Total Estimated Plans (v1.0 + v1.1)**: 34

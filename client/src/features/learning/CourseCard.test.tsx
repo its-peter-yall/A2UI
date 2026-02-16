@@ -225,6 +225,19 @@ describe('CourseCard', () => {
     expect(screen.getByText('Revision History')).toBeInTheDocument();
   });
 
+  it('revision history section hidden when onViewRevision is not provided', () => {
+    render(
+      <CourseCard
+        session={mockCompletedSession}
+        onResume={defaultOnResume}
+        onRevise={defaultOnRevise}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('revision-history-section')).not.toBeInTheDocument();
+  });
+
   it('revision history is expandable when revision_count > 0', async () => {
     (api.getRevisionsList as ReturnType<typeof vi.fn>).mockResolvedValue({
       revisions: [

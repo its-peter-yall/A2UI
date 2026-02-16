@@ -514,5 +514,66 @@ describe('RevisionPage', () => {
 
       expect(mockNavigate).toHaveBeenCalledWith('/learn');
     });
+
+    it('"Revise Again" navigates to /learn/:sessionId/revise/:revisionId', async () => {
+      const originalSession = createOriginalSession();
+      const completedRevision = createRevisionSession({
+        status: 'completed',
+        progress_percent: 100,
+        nodes: createRevisionNodes([
+          { nodeId: 'node-0', status: 'quiz_passed' },
+          { nodeId: 'node-1', status: 'quiz_passed' },
+        ]),
+      });
+
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(originalSession);
+      (api.getRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue(completedRevision);
+      (api.getRevisionSummary as ReturnType<typeof vi.fn>).mockResolvedValue(mockSummary);
+      (api.createRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'revision-2',
+        mode: 'full_review',
+      });
+
+      render(<RevisionPage />, { wrapper: createWrapper() });
+
+      const reviseAgainBtn = await screen.findByTestId('revise-again-btn');
+      fireEvent.click(reviseAgainBtn);
+
+      await waitFor(() => {
+        expect(api.createRevisionSession).toHaveBeenCalledWith('session-1', {
+          mode: 'full_review',
+        });
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/learn/session-1/revise/revision-2');
+    });
+
+    it('invalidates courses queries when summary data becomes available', async () => {
+      const originalSession = createOriginalSession();
+      const completedRevision = createRevisionSession({
+        status: 'completed',
+        progress_percent: 100,
+        nodes: createRevisionNodes([
+          { nodeId: 'node-0', status: 'quiz_passed' },
+          { nodeId: 'node-1', status: 'quiz_passed' },
+        ]),
+      });
+      const wrapper = createWrapper();
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(originalSession);
+      (api.getRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue(completedRevision);
+      (api.getRevisionSummary as ReturnType<typeof vi.fn>).mockResolvedValue(mockSummary);
+
+      render(<RevisionPage />, { wrapper });
+
+      await screen.findByText('Revision Complete!');
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith({
+          queryKey: ['courses'],
+        });
+      });
+
+      invalidateSpy.mockRestore();
+    });
   });
 });
