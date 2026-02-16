@@ -319,3 +319,9 @@ export const getRevisionsList = async (
   );
   return response.data;
 };
+
+// --- Delete Session ---
+
+export const deleteSession = async (sessionId: string): Promise<void> => {
+  await api.delete(`/learning/sessions/${sessionId}`);
+};

@@ -12,8 +12,9 @@
 // @see: conductor/product-guidelines.md (visual identity)
 // @note: onRevise accepts a mode param ('full_review' | 'quiz_only')
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Trash2, AlertCircle } from 'lucide-react';
 
 import type { LearningSessionSummary } from '@/types/learning';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,7 @@ export interface CourseCardProps {
   onResume: (sessionId: string) => void;
   onRevise: (sessionId: string, mode: 'full_review' | 'quiz_only') => void;
   onViewRevision?: (revisionId: string) => void;
+  onDelete?: (sessionId: string) => void | Promise<void>;
 }
 
 function formatDate(isoString: string): string {
@@ -33,9 +35,10 @@ function formatDate(isoString: string): string {
   }).format(new Date(isoString));
 }
 
-export function CourseCard({ session, onResume, onRevise, onViewRevision }: CourseCardProps) {
+export function CourseCard({ session, onResume, onRevise, onViewRevision, onDelete }: CourseCardProps) {
   const isCompleted = session.status === 'completed';
   const progressPercent = Math.floor(session.progress_percent);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -48,10 +51,26 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
     }
   };
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowConfirm(true);
+  };
+
+  const handleConfirmDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowConfirm(false);
+    onDelete?.(session.id);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowConfirm(false);
+  };
+
   return (
     <motion.article
       className={cn(
-        'relative rounded-xl border border-white/10 p-5',
+        'group relative rounded-xl border border-white/10 p-5',
         'bg-card/80 backdrop-blur-sm',
         'flex flex-col gap-3',
         'w-full',
@@ -72,8 +91,73 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
         }
       }}
     >
+      {/* Delete button - shown on hover */}
+      {onDelete && !showConfirm && (
+        <button
+          onClick={handleDeleteClick}
+          className={cn(
+            'absolute top-3 right-3 p-2 rounded-lg',
+            'bg-background/80 backdrop-blur-sm',
+            'text-muted-foreground hover:text-[#FFD400]',
+            'opacity-0 group-hover:opacity-100',
+            'transition-all duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-[#FFD400] focus:ring-offset-2 focus:ring-offset-background'
+          )}
+          aria-label="Delete course"
+          data-testid="delete-course-button"
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+
+      {/* Confirmation dialog */}
+      {showConfirm && (
+        <div
+          className={cn(
+            'absolute inset-0 z-10 rounded-xl',
+            'bg-background/95 backdrop-blur-sm',
+            'flex flex-col items-center justify-center gap-4 p-5',
+            'border border-[#FFD400]/30'
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-2 text-[#FFD400]">
+            <AlertCircle className="h-5 w-5" aria-hidden="true" />
+            <span className="font-semibold">Delete Course?</span>
+          </div>
+          <p className="text-sm text-muted-foreground text-center">
+            This will permanently delete &quot;{session.course_title}&quot; and all
+            associated progress.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleCancelDelete}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium',
+                'border border-border text-foreground',
+                'hover:bg-muted transition-colors',
+                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
+              )}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-medium',
+                'bg-red-600 text-white',
+                'hover:bg-red-700 transition-colors',
+                'focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 focus:ring-offset-background'
+              )}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header: title + status */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 pr-8">
         <h3 className="text-base font-semibold text-foreground line-clamp-2 flex-1">
           {session.course_title}
         </h3>
