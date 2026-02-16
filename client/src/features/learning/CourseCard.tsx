@@ -64,14 +64,9 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onClick={(e) => {
-        // Prevent triggering if clicking specific buttons/interactive elements
         if ((e.target as HTMLElement).closest('button')) return;
         if (isCompleted) {
-          // For completed, maybe don't trigger main action on card click to avoid ambiguity?
-          // Or default to full_review?
-          // The buttons are clearer. Let's keep card click for resume only or explicit buttons.
-          // But for accessibility, the card itself is focusable.
-          // Let's make the card click trigger resume if in progress.
+          onRevise(session.id, 'full_review');
         } else {
           onResume(session.id);
         }

@@ -5,7 +5,7 @@
 // @see: ConceptCard.tsx (original learning card)
 // @see: useRevisionMutations.ts (mutation handlers)
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import type {
   ConceptNode,
@@ -68,6 +68,11 @@ export function RevisionConceptCard({
   isSubmitting = false,
 }: RevisionConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
+
+  // Reset quiz selection when navigating to a different node
+  useEffect(() => {
+    setSelectedOption(null);
+  }, [node.id]);
 
   const badge = statusBadges[revisionProgress.status];
 

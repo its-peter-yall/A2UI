@@ -234,11 +234,18 @@ export function RevisionPage() {
       n.status === 'quiz_failed'
   ).length;
   const progressPercent =
-    totalNodes > 0 ? Math.round((completedNodes / totalNodes) * 100) : 0;
+    totalNodes > 0 ? Math.floor((completedNodes / totalNodes) * 100) : 0;
 
   const currentNode = originalSession.nodes[currentIndex];
   const currentRevisionProgress = currentNode
-    ? revisionProgressMap.get(currentNode.id)
+    ? revisionProgressMap.get(currentNode.id) ?? {
+        id: `fallback-${currentNode.id}`,
+        node_id: currentNode.id,
+        node_title: currentNode.title,
+        sequence_index: currentNode.sequence_index,
+        status: 'pending' as const,
+        reviewed_at: null,
+      }
     : undefined;
 
   return (
