@@ -177,6 +177,14 @@ class QuizSubmitRequest(BaseModel):
     )
 
 
+class LastActiveRequest(BaseModel):
+    """Request to update last active node for a session."""
+
+    node_id: str = Field(
+        ..., description="ID of the last active node"
+    )
+
+
 class DeleteRevisionResponse(BaseModel):
     """Response payload for deleting a revision session."""
 
@@ -389,6 +397,41 @@ def get_learning_session_progress(session_id: str) -> SessionProgress:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get learning session progress: {str(e)}",
+        )
+
+
+@router.patch(
+    "/sessions/{session_id}/last-active",
+    summary="Update last active node",
+    description="Update the last active node for a learning session.",
+)
+def update_last_active(
+    session_id: str,
+    request: LastActiveRequest,
+) -> dict:
+    """Update the last active node position for resume."""
+    try:
+        learning_manager.update_last_active_node(
+            session_id, request.node_id
+        )
+        return {"updated": True}
+    except LookupError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"Learning session not found: {session_id}"
+            ),
+        )
+    except Exception as e:
+        logger.error(
+            f"Error updating last active node: {e}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                f"Failed to update last active node: "
+                f"{str(e)}"
+            ),
         )
 
 

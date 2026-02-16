@@ -85,6 +85,7 @@ vi.mock('@/lib/learningApi', () => ({
   retryQuiz: vi.fn(),
   regenerateNode: vi.fn(),
   getQuizAttempts: vi.fn(),
+  updateLastActiveNode: vi.fn().mockResolvedValue(undefined),
   getSessionsList: vi.fn().mockResolvedValue({
     sessions: [],
     total_count: 0,
@@ -140,6 +141,7 @@ const createSession = (
   course_title: 'Newton’s Laws of Motion',
   total_nodes: nodes.length,
   completed_nodes: nodes.filter((node) => node.status === 'COMPLETED').length,
+  last_active_node_id: null,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
   nodes,

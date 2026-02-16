@@ -165,6 +165,7 @@ export interface LearningSession {
   course_title: string;
   total_nodes: number;
   completed_nodes: number;
+  last_active_node_id: string | null;
   created_at: string;
   updated_at: string | null;
 }

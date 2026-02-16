@@ -59,6 +59,7 @@ export function LearningPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const [dismissedSessionId, setDismissedSessionId] = useState<string | null>(null);
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
@@ -75,6 +76,15 @@ export function LearningPage() {
     // Refetch to sync progress bar with LearningPathContainer
     refetchInterval: 2000,
   });
+
+  // Show resume banner when session has a last active node
+  useEffect(() => {
+    if (session?.last_active_node_id) {
+      queueMicrotask(() => setShowResumeBanner(true));
+      const timer = setTimeout(() => setShowResumeBanner(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [session?.last_active_node_id]);
 
   // Check for course completion
   const isComplete =
@@ -164,10 +174,18 @@ export function LearningPage() {
         </div>
       </header>
 
+      {/* Resume banner */}
+      {showResumeBanner && (
+        <div className="bg-primary/10 text-primary text-sm text-center py-1.5 px-4 animate-in fade-in duration-300">
+          Resuming where you left off...
+        </div>
+      )}
+
       {/* Main content */}
       <main className="py-8">
         <LearningPathContainer
           sessionId={sessionId}
+          initialNodeId={session?.last_active_node_id ?? undefined}
           onCourseGenerated={(session) => {
             document.title = `Learn: ${session.course_title}`;
             // Refetch to update progress bar

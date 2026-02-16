@@ -482,6 +482,10 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
 
     total_nodes: int = Field(default=0, description="Total nodes in the session")
     completed_nodes: int = Field(default=0, description="Number of completed nodes")
+    last_active_node_id: Optional[str] = Field(
+        default=None,
+        description="ID of the last active node for resume",
+    )
 
 
 class LearningSessionSummary(BaseModel):

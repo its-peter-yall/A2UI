@@ -325,6 +325,7 @@ class LearningManager:
                     ls.user_id,
                     ls.query,
                     ls.course_title,
+                    ls.last_active_node_id,
                     ls.created_at,
                     ls.updated_at,
                     COUNT(cn.id) AS total_nodes,
@@ -344,6 +345,7 @@ class LearningManager:
                 "user_id": row["user_id"],
                 "query": row["query"],
                 "course_title": row["course_title"],
+                "last_active_node_id": row["last_active_node_id"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
                 "total_nodes": row["total_nodes"],
@@ -1461,7 +1463,7 @@ class LearningManager:
                 conn=conn,
             )
             if status == NodeStatus.VIEWING_EXPLANATION:
-                self._update_last_active_node(
+                self._update_last_active_node_internal(
                     session_id=session_id,
                     node_id=node_id,
                     conn=conn,
@@ -2148,7 +2150,7 @@ class LearningManager:
             # quiz submissions. Revision activity must not contaminate
             # the original session's last_active_node_id or updated_at.
             if revision_session_id is None:
-                self._update_last_active_node(
+                self._update_last_active_node_internal(
                     session_id=session_id,
                     node_id=node_id,
                     conn=active_conn,
@@ -2557,7 +2559,46 @@ class LearningManager:
         )
         return progress_percent
 
-    def _update_last_active_node(
+    def update_last_active_node(
+        self,
+        session_id: str,
+        node_id: str,
+    ) -> None:
+        """Update the last active node for a learning session.
+
+        Args:
+            session_id: The learning session identifier.
+            node_id: The node to mark as last active.
+
+        Raises:
+            LookupError: If the session does not exist.
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM learning_sessions WHERE id = ?",
+                (session_id,),
+            )
+            if not cursor.fetchone():
+                raise LookupError(
+                    f"Learning session not found: {session_id}"
+                )
+            self._update_last_active_node_internal(
+                session_id, node_id, conn
+            )
+            conn.commit()
+        except LookupError:
+            raise
+        except sqlite3.Error as e:
+            logger.error(
+                f"Error updating last active node: {e}"
+            )
+            raise
+        finally:
+            conn.close()
+
+    def _update_last_active_node_internal(
         self,
         session_id: str,
         node_id: str,

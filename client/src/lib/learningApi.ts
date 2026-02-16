@@ -229,6 +229,17 @@ export const regenerateNode = async (
   return response.data;
 };
 
+// --- Last Active Node ---
+
+export const updateLastActiveNode = async (
+  sessionId: string,
+  nodeId: string
+): Promise<void> => {
+  await api.patch(`/learning/sessions/${sessionId}/last-active`, {
+    node_id: nodeId,
+  });
+};
+
 // --- Session Listing ---
 
 export interface SessionListParams {

@@ -33,6 +33,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from server.routers.learning import (
+    LastActiveRequest,
     QuizSubmitRequest,
     TransitionRequest,
     get_learning_session,
@@ -665,3 +666,64 @@ class TestLearningRouterRevisions(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["progress_percent"], 100)
         self.assertEqual(payload["comparison"]["improvement_percent"], 25)
+
+
+class TestLearningRouterLastActive(unittest.TestCase):
+    """Tests for PATCH /learning/sessions/{id}/last-active."""
+
+    def test_patch_updates_last_active_node_id(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.update_last_active_node.return_value = None
+        client = _create_client()
+
+        with patch(
+            "server.routers.learning.learning_manager",
+            fake_manager,
+        ):
+            response = client.patch(
+                "/learning/sessions/session-1/last-active",
+                json={"node_id": "node-3"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["updated"])
+        fake_manager.update_last_active_node.assert_called_once_with(
+            "session-1", "node-3"
+        )
+
+    def test_patch_returns_404_for_missing_session(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.update_last_active_node.side_effect = (
+            LookupError("Learning session not found")
+        )
+        client = _create_client()
+
+        with patch(
+            "server.routers.learning.learning_manager",
+            fake_manager,
+        ):
+            response = client.patch(
+                "/learning/sessions/missing/last-active",
+                json={"node_id": "node-1"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_patch_with_valid_node_id_succeeds(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.update_last_active_node.return_value = None
+        client = _create_client()
+
+        with patch(
+            "server.routers.learning.learning_manager",
+            fake_manager,
+        ):
+            response = client.patch(
+                "/learning/sessions/session-1/last-active",
+                json={"node_id": "specific-node-id"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        fake_manager.update_last_active_node.assert_called_once_with(
+            "session-1", "specific-node-id"
+        )

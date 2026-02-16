@@ -56,7 +56,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { LearningPathContainer } from './LearningPathContainer';
 import * as api from '@/lib/learningApi';
 import type { ReactNode } from 'react';
-import type { LearningSessionWithNodes } from '@/types/learning';
+import type { LearningSessionWithNodes, NodeStatus } from '@/types/learning';
 
 // Mock the API module
 vi.mock('@/lib/learningApi', () => ({
@@ -68,6 +68,7 @@ vi.mock('@/lib/learningApi', () => ({
   retryQuiz: vi.fn(),
   getQuizAttempts: vi.fn(),
   regenerateNode: vi.fn(),
+  updateLastActiveNode: vi.fn().mockResolvedValue(undefined),
 }));
 
 function createWrapper() {
@@ -139,6 +140,7 @@ describe('LearningPathContainer', () => {
       course_title: 'Test Course',
       total_nodes: 0,
       completed_nodes: 0,
+      last_active_node_id: null,
       created_at: '2024-01-01T00:00:00Z',
       updated_at: null,
       nodes: [],
@@ -165,5 +167,101 @@ describe('LearningPathContainer', () => {
     );
 
     expect(await screen.findByText(/failed to generate course/i)).toBeInTheDocument();
+  });
+});
+
+function createSessionWithNodes(nodeCount: number, lastActiveNodeId?: string): LearningSessionWithNodes {
+  const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+    id: `node-${i}`,
+    learning_session_id: 'session-1',
+    sequence_index: i,
+    title: `Topic ${i + 1}`,
+    content_markdown: `Content for topic ${i + 1}`,
+    status: (i === 0 ? 'VIEWING_EXPLANATION' : 'LOCKED') as NodeStatus,
+    error_message: null,
+    retry_available: false,
+    quiz: null,
+    quiz_set: null,
+    quiz_hidden: null,
+    quiz_set_hidden: null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: null,
+  }));
+
+  return {
+    id: 'session-1',
+    user_id: null,
+    query: 'test',
+    course_title: 'Test Course',
+    total_nodes: nodeCount,
+    completed_nodes: 0,
+    last_active_node_id: lastActiveNodeId ?? null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: null,
+    nodes,
+  };
+}
+
+describe('initialNodeId and resume navigation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('positions carousel at initialNodeId slide', async () => {
+    const session = createSessionWithNodes(5);
+    // Make node-2 the active one (non-locked, non-completed)
+    session.nodes[0].status = 'COMPLETED';
+    session.nodes[1].status = 'COMPLETED';
+    session.nodes[2].status = 'VIEWING_EXPLANATION';
+
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+    render(
+      <LearningPathContainer sessionId="session-1" initialNodeId="node-2" />,
+      { wrapper: createWrapper() }
+    );
+
+    // Should show Topic 3 (node-2, index 2)
+    expect(await screen.findByText('Topic 3')).toBeInTheDocument();
+  });
+
+  it('falls back to first non-completed node when initialNodeId not found', async () => {
+    const session = createSessionWithNodes(3);
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+    render(
+      <LearningPathContainer sessionId="session-1" initialNodeId="nonexistent-node" />,
+      { wrapper: createWrapper() }
+    );
+
+    // Should fall back to first VIEWING_EXPLANATION node (node-0, Topic 1)
+    expect(await screen.findByText('Topic 1')).toBeInTheDocument();
+  });
+
+  it('debounced PATCH fires after 2s of no carousel movement', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const session = createSessionWithNodes(3);
+    session.nodes[0].status = 'VIEWING_EXPLANATION';
+    session.nodes[1].status = 'VIEWING_EXPLANATION';
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+    render(
+      <LearningPathContainer sessionId="session-1" />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Topic 1')).toBeInTheDocument();
+    });
+
+    // Advance past debounce timeout
+    await vi.advanceTimersByTimeAsync(2500);
+
+    // The debounced call should eventually fire
+    await waitFor(() => {
+      expect(api.updateLastActiveNode).toHaveBeenCalled();
+    });
+
+    vi.useRealTimers();
   });
 });

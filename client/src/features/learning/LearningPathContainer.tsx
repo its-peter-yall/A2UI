@@ -70,7 +70,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
-import { generateCourse, getLearningSession } from '@/lib/learningApi';
+import { generateCourse, getLearningSession, updateLastActiveNode } from '@/lib/learningApi';
 import { ConceptCard } from './ConceptCard';
 import { LearningErrorBoundary } from './LearningErrorBoundary';
 import { MasteryCelebration } from './animations/MasteryCelebration';
@@ -97,6 +97,8 @@ interface LearningPathContainerProps {
   query?: string;
   /** Optional user ID for new sessions */
   userId?: string;
+  /** Initial node ID to scroll to on first load */
+  initialNodeId?: string;
   /** Callback when course generation completes */
   onCourseGenerated?: (session: LearningSessionWithNodes) => void;
 }
@@ -112,6 +114,7 @@ export function LearningPathContainer({
   sessionId,
   query,
   userId,
+  initialNodeId,
   onCourseGenerated,
 }: LearningPathContainerProps) {
   const queryClient = useQueryClient();
@@ -149,6 +152,13 @@ export function LearningPathContainer({
   // Track initialized sessions and previous active node to prevent aggressive auto-advancing
   const initializedSessionsRef = useRef<Set<string>>(new Set());
   const previousActiveNodeIndexRef = useRef<number>(-1);
+
+  // Highlight state for initial node glow effect
+  const [highlightNodeId, setHighlightNodeId] = useState<string | null>(null);
+
+  // Debounced last-active tracking
+  const lastActiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingNodeIdRef = useRef<string | null>(null);
 
   // Fetch existing session
   const {
@@ -254,13 +264,27 @@ export function LearningPathContainer({
       // Check if we haven't initialized this session yet
       if (!initializedSessionsRef.current.has(activeSessionKey)) {
         initializedSessionsRef.current.add(activeSessionKey);
+
+        // Determine initial index: prefer initialNodeId if found
+        let startIndex = activeNodeIndex;
+        if (initialNodeId) {
+          const foundIndex = session.nodes.findIndex((n) => n.id === initialNodeId);
+          if (foundIndex >= 0) {
+            startIndex = foundIndex;
+            // Trigger glow highlight on the initial node
+            queueMicrotask(() => setHighlightNodeId(initialNodeId));
+            setTimeout(() => setHighlightNodeId(null), 1500);
+          }
+          // If not found, fall back to activeNodeIndex (existing behavior)
+        }
+
         previousActiveNodeIndexRef.current = activeNodeIndex;
         
         // Schedule state update in a microtask to avoid synchronous setState in effect
         queueMicrotask(() => {
           setCarouselStateBySession((prev) => ({
             ...prev,
-            [activeSessionKey]: { currentIndex: activeNodeIndex, direction: 0 },
+            [activeSessionKey]: { currentIndex: startIndex, direction: 0 },
           }));
         });
       } else if (activeNodeIndex !== previousActiveNodeIndexRef.current) {
@@ -277,7 +301,47 @@ export function LearningPathContainer({
         });
       }
     }
-  }, [session, activeNodeIndex, activeSessionKey, carouselState.currentIndex]);
+  }, [session, activeNodeIndex, activeSessionKey, carouselState.currentIndex, initialNodeId]);
+
+  // Flush pending last-active update to the server
+  const flushLastActive = useCallback(() => {
+    if (pendingNodeIdRef.current && activeSessionId) {
+      updateLastActiveNode(activeSessionId, pendingNodeIdRef.current).catch(
+        (err) => console.error('Failed to update last active node:', err)
+      );
+      pendingNodeIdRef.current = null;
+    }
+    if (lastActiveTimeoutRef.current) {
+      clearTimeout(lastActiveTimeoutRef.current);
+      lastActiveTimeoutRef.current = null;
+    }
+  }, [activeSessionId]);
+
+  // Track carousel changes with debounce
+  useEffect(() => {
+    const currentNode = session?.nodes[carouselState.currentIndex];
+    if (!currentNode || !activeSessionId) return;
+
+    // Don't track during initial mount
+    if (!initializedSessionsRef.current.has(activeSessionKey)) return;
+
+    pendingNodeIdRef.current = currentNode.id;
+
+    if (lastActiveTimeoutRef.current) {
+      clearTimeout(lastActiveTimeoutRef.current);
+    }
+
+    lastActiveTimeoutRef.current = setTimeout(() => {
+      flushLastActive();
+    }, 2000);
+  }, [carouselState.currentIndex, session?.nodes, activeSessionId, activeSessionKey, flushLastActive]);
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => {
+      flushLastActive();
+    };
+  }, [flushLastActive]);
 
   // Carousel navigation functions
   const goToSlide = useCallback((index: number) => {
@@ -557,8 +621,17 @@ export function LearningPathContainer({
                     initial="enter"
                     animate="center"
                     exit="exit"
-                    className="w-full"
+                    className="w-full relative"
                   >
+                    {highlightNodeId === currentSlideNode.id && (
+                      <motion.div
+                        className="absolute inset-0 rounded-xl pointer-events-none"
+                        initial={{ boxShadow: '0 0 0px rgba(255, 212, 0, 0)' }}
+                        animate={{ boxShadow: ['0 0 20px rgba(255, 212, 0, 0.6)', '0 0 0px rgba(255, 212, 0, 0)'] }}
+                        transition={{ duration: 1.5, ease: 'easeOut' }}
+                        aria-hidden="true"
+                      />
+                    )}
                     <ConceptCard
                       node={currentSlideNode}
                       isActive={currentSlideNode.id === activeNodeId}
