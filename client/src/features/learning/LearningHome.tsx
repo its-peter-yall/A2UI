@@ -66,7 +66,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { createRevisionSession } from '@/lib/learningApi';
+import { createRevisionSession, deleteSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
 import type { SessionListResponse } from '@/types/learning';
 import { TopicInput } from './TopicInput';
@@ -183,6 +183,25 @@ export function LearningHome() {
       navigate(`/learn/${sessionId}/revise/${revisionId}`);
     },
     [navigate]
+  );
+
+  const handleDelete = useCallback(
+    async (sessionId: string) => {
+      const confirmed = window.confirm(
+        'Are you sure you want to delete this course? This action cannot be undone.'
+      );
+      if (!confirmed) return;
+
+      try {
+        await deleteSession(sessionId);
+        // Invalidate React Query cache to refresh the course list
+        queryClient.invalidateQueries({ queryKey: ['courses'] });
+      } catch (error) {
+        console.error('Failed to delete course:', error);
+        alert('Failed to delete course. Please try again.');
+      }
+    },
+    [queryClient]
   );
 
   // Derived state for rendering
@@ -322,6 +341,7 @@ export function LearningHome() {
                           onViewRevision={(revisionId) => {
                             handleViewRevision(session.id, revisionId);
                           }}
+                          onDelete={handleDelete}
                         />
                       </motion.div>
                     ))}
