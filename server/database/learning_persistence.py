@@ -869,7 +869,7 @@ class LearningManager:
                 cursor.execute(
                     f"""
                     DELETE FROM quiz_attempts
-                    WHERE concept_node_id IN ({placeholders})
+                    WHERE node_id IN ({placeholders})
                     """,
                     tuple(node_ids),
                 )
