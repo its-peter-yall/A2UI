@@ -64,6 +64,8 @@ export { TopicInput } from './TopicInput';
 export { ProgressBar } from './ProgressBar';
 export { LearningPage } from './LearningPage';
 export { LearningHome } from './LearningHome';
+export { RevisionPage } from './RevisionPage';
+export { RevisionConceptCard } from './RevisionConceptCard';
 export { LearningErrorBoundary } from './LearningErrorBoundary';
 export { CourseCard } from './CourseCard';
 export type { CourseCardProps } from './CourseCard';

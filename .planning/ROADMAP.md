@@ -1106,9 +1106,10 @@ Dashboard > Course Title > Topic N
 ---
 
 ### Phase 14: Frontend — Revision Mode UI
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/14-revision-ui/`
 **Estimated Plans**: 2
+**Plans Completed**: 1/2
 
 Build the frontend UI for course revision and quiz re-attendance, including
 the revision launcher, revision-mode learning flow, and performance comparison.
@@ -1444,7 +1445,7 @@ npm run build                   # Production build succeeds
 | 11 | Revision & Quiz Re-attendance API | 2 | completed | 10 |
 | 12 | Course Dashboard Components | 2 | completed | 10 |
 | 13 | Course Resume & Navigation | 2 | pending | 12 |
-| 14 | Revision Mode UI | 2 | pending | 11, 12 |
+| 14 | Revision Mode UI | 2 | in_progress | 11, 12 |
 | 15 | Integration, Testing & Polish | 2 | pending | 09-14 |
 
 **Total Estimated Plans (v1.1)**: 14

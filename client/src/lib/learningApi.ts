@@ -85,6 +85,11 @@ import type {
   QuizAttemptHistory,
   RevisionCreateRequest,
   RevisionSessionResponse,
+  RevisionSessionWithProgress,
+  RevisionNodeProgressWithDetails,
+  RevisionSummary,
+  RevisionQuizResponse,
+  RevisionListResponse,
   QuizSubmitRequest,
   QuizSubmitResponse,
   SessionListResponse,
@@ -256,6 +261,61 @@ export const getSessionsList = async (
   const response = await api.get<SessionListResponse>(
     '/learning/sessions',
     { params }
+  );
+  return response.data;
+};
+
+// --- Revision Sessions ---
+
+export const getRevisionSession = async (
+  revisionId: string
+): Promise<RevisionSessionWithProgress> => {
+  const response = await api.get<RevisionSessionWithProgress>(
+    `/learning/revisions/${revisionId}`
+  );
+  return response.data;
+};
+
+export const markNodeReviewed = async (
+  revisionId: string,
+  nodeId: string
+): Promise<RevisionNodeProgressWithDetails> => {
+  const response = await api.post<RevisionNodeProgressWithDetails>(
+    `/learning/revisions/${revisionId}/nodes/${nodeId}/mark-reviewed`
+  );
+  return response.data;
+};
+
+export const submitRevisionQuiz = async (
+  revisionId: string,
+  nodeId: string,
+  selectedOptionId: string,
+  quizIndex?: number
+): Promise<RevisionQuizResponse> => {
+  const response = await api.post<RevisionQuizResponse>(
+    `/learning/revisions/${revisionId}/nodes/${nodeId}/submit-quiz`,
+    { selected_option_id: selectedOptionId, quiz_index: quizIndex ?? 0 }
+  );
+  return response.data;
+};
+
+export const getRevisionSummary = async (
+  revisionId: string
+): Promise<RevisionSummary> => {
+  const response = await api.get<RevisionSummary>(
+    `/learning/revisions/${revisionId}/summary`
+  );
+  return response.data;
+};
+
+export const getRevisionsList = async (
+  sessionId: string,
+  limit?: number,
+  offset?: number
+): Promise<RevisionListResponse> => {
+  const response = await api.get<RevisionListResponse>(
+    `/learning/sessions/${sessionId}/revisions`,
+    { params: { limit, offset } }
   );
   return response.data;
 };

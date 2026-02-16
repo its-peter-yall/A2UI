@@ -265,3 +265,52 @@ export interface RevisionSessionResponse {
   started_at: string;
   completed_at: string | null;
 }
+
+export type RevisionNodeStatus = 'pending' | 'reviewed' | 'quiz_passed' | 'quiz_failed';
+
+export interface RevisionNodeProgressWithDetails {
+  id: string;
+  node_id: string;
+  node_title: string;
+  sequence_index: number;
+  status: RevisionNodeStatus;
+  reviewed_at: string | null;
+}
+
+export interface RevisionSessionWithProgress extends RevisionSessionResponse {
+  nodes: RevisionNodeProgressWithDetails[];
+}
+
+export interface RevisionSummary {
+  revision_id: string;
+  mode: RevisionMode;
+  progress_percent: number;
+  total_quiz_score_percent: number | null;
+  nodes_reviewed: number;
+  nodes_total: number;
+  quizzes_passed: number;
+  quizzes_failed: number;
+  quizzes_total: number;
+  time_spent_seconds: number | null;
+  comparison: {
+    original_quiz_score_percent: number;
+    improvement_percent: number;
+  } | null;
+}
+
+export interface RevisionQuizResponse {
+  id: string;
+  node_id: string;
+  attempt_number: number;
+  selected_option_id: string;
+  is_correct: boolean;
+  score_percent: number;
+  correct_option_id: string;
+  explanation: string;
+  revision_node_status: RevisionNodeStatus;
+}
+
+export interface RevisionListResponse {
+  revisions: RevisionSessionResponse[];
+  total_count: number;
+}

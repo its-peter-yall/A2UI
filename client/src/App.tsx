@@ -57,6 +57,7 @@
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LearningHome, LearningPage } from '@/features/learning';
+import { RevisionPage } from '@/features/learning/RevisionPage';
 
 function App() {
   return (
@@ -66,6 +67,7 @@ function App() {
         <Route path="/" element={<LearningHome />} />
         <Route path="/learn" element={<LearningHome />} />
         <Route path="/learn/:sessionId" element={<LearningPage />} />
+        <Route path="/learn/:sessionId/revise/:revisionId" element={<RevisionPage />} />
 
         {/* Fallback - redirect unknown routes to learn */}
         <Route path="*" element={<Navigate to="/" replace />} />
