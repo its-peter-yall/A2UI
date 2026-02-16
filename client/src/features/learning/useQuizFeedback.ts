@@ -101,6 +101,10 @@ export function useQuizFeedback({
   quiz,
   nodeStatus,
 }: UseQuizFeedbackProps): UseQuizFeedbackReturn {
+  // IMPORTANT: If we have a latestResult (from mutation), always use it
+  // regardless of enabled state to prevent flickering during session refetch
+  const hasLatestResult = !!latestResult;
+
   // Fetch attempt history if no latest result provided
   const {
     data: history,
@@ -109,13 +113,18 @@ export function useQuizFeedback({
   } = useQuery({
     queryKey: ['quizAttempts', nodeId],
     queryFn: () => getQuizAttempts(nodeId),
-    enabled: enabled && !latestResult,
+    // Only fetch if enabled AND no latest result
+    enabled: enabled && !hasLatestResult,
   });
 
-  const attemptCount = latestResult?.attempt_number ?? history?.total_attempts ?? 0;
+  // If we have latestResult, use its attempt number, otherwise fall back to history
+  const attemptCount = hasLatestResult
+    ? latestResult.attempt_number
+    : (history?.total_attempts ?? 0);
 
+  // Build fallback result from history (when user reloads page)
   const fallbackResult =
-    history && history.attempts.length > 0 && quiz
+    !hasLatestResult && history && history.attempts.length > 0 && quiz
       ? (() => {
           const lastAttempt = history.attempts[history.attempts.length - 1];
           const correctOption = quiz.options.find((option) => option.is_correct);
@@ -129,14 +138,17 @@ export function useQuizFeedback({
           const scorePercent =
             lastAttempt.score_percent ?? (isCorrect ? 100 : 0);
           const isMastered = history.is_mastered ?? isCorrect;
+          // Only reveal correct answer if the last attempt was correct
+          // For wrong answers, don't reveal the correct option to maintain learning
           return {
             node_id: nodeId,
             attempt_number: lastAttempt.attempt_number,
             is_correct: isCorrect,
             score_percent: scorePercent,
-            correct_option_id: correctOption.option_id,
+            correct_option_id: isCorrect ? correctOption.option_id : null,
             selected_option_id: lastAttempt.selected_option_id,
-            explanation: selectedOption.explanation,
+            explanation: isCorrect ? correctOption.explanation : "",
+            selected_explanation: isCorrect ? undefined : selectedOption.explanation,
             is_mastered: isMastered,
             next_node_unlocked: isMastered,
             node_status: nodeStatus,
@@ -144,7 +156,8 @@ export function useQuizFeedback({
         })()
       : undefined;
 
-  const result = latestResult ?? fallbackResult;
+  // Priority: latestResult (from mutation) > fallbackResult (from history) > undefined
+  const result = hasLatestResult ? latestResult : fallbackResult;
 
   return {
     result,

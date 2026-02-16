@@ -339,12 +339,9 @@ describe('LearningHome', () => {
           { mode: 'full_review' }
         );
       });
-      expect(mockNavigate).toHaveBeenCalledWith('/learn/session-2', {
-        state: {
-          revisionId: 'revision-1',
-          revisionMode: 'full_review',
-        },
-      });
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/learn/session-2/revise/revision-1'
+      );
     });
 
     it('does not navigate when revision creation fails', async () => {

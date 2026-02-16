@@ -499,9 +499,7 @@ class LearningSessionSummary(BaseModel):
     status: Literal["in_progress", "completed"] = Field(
         ..., description="Session status"
     )
-    progress_percent: int = Field(
-        ..., description="Progress percentage", ge=0, le=100
-    )
+    progress_percent: int = Field(..., description="Progress percentage", ge=0, le=100)
     total_nodes: int = Field(..., description="Total number of concept nodes", ge=0)
     completed_nodes: int = Field(
         ..., description="Number of completed concept nodes", ge=0
@@ -673,7 +671,9 @@ class RevisionSummary(BaseModel):
     nodes_reviewed: int = Field(..., description="Completed revision nodes", ge=0)
     nodes_total: int = Field(..., description="Total revision nodes", ge=0)
     quizzes_passed: int = Field(..., description="Correct revision quiz attempts", ge=0)
-    quizzes_failed: int = Field(..., description="Incorrect revision quiz attempts", ge=0)
+    quizzes_failed: int = Field(
+        ..., description="Incorrect revision quiz attempts", ge=0
+    )
     quizzes_total: int = Field(..., description="Total revision quiz attempts", ge=0)
     time_spent_seconds: Optional[int] = Field(
         default=None,
@@ -780,13 +780,22 @@ class QuizAttemptResponse(ResponseBase, TimestampMixin, QuizAttemptBase):
         ge=0,
         le=100,
     )
-    correct_option_id: str = Field(
-        ...,
-        description="The correct option identifier (stable UUID)",
+    correct_option_id: Optional[str] = Field(
+        default=None,
+        description="The correct option identifier (only revealed when answer is correct)",
     )
     explanation: str = Field(
-        ...,
-        description="Explanation for the selected answer",
+        default="",
+        description="Explanation for the correct answer (only revealed when answer is correct)",
+    )
+    selected_explanation: Optional[str] = Field(
+        default=None,
+        description="Explanation for the selected answer (only when incorrect, for learning why it's wrong)",
+    )
+    quiz_index: int = Field(
+        default=0,
+        description="Index of quiz in set (for multi-quiz nodes)",
+        ge=0,
     )
     is_mastered: bool = Field(
         ...,

@@ -1120,6 +1120,7 @@ class LearningManager:
                 "is_correct": bool(quiz_result["is_correct"]),
                 "correct_option_id": quiz_result.get("correct_option_id"),
                 "explanation": quiz_result.get("explanation"),
+                "selected_explanation": quiz_result.get("selected_explanation"),
                 "revision_node_status": next_status,
             }
         except sqlite3.Error as e:
@@ -2329,10 +2330,14 @@ class LearningManager:
                 "selected_option_id": selected_option_id,
                 "is_correct": is_correct,
                 "score_percent": score_percent,
+                # Only reveal correct answer when user answered correctly
                 "correct_option_id": correct_option.option_id
-                if correct_option
+                if correct_option and is_correct
                 else None,
-                "explanation": selected_option.explanation,
+                "explanation": correct_option.explanation if correct_option and is_correct else "",
+                "selected_explanation": selected_option.explanation
+                if not is_correct
+                else None,
                 "is_mastered": is_mastered,
                 "created_at": now,
                 "updated_at": now,

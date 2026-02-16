@@ -169,20 +169,20 @@ describe('Dashboard e2e flows', () => {
   });
 
   it('filter "In Progress" hides completed courses', async () => {
+    const allCoursesResponse = createResponse([
+      createSession({ id: 'session-1', course_title: 'In Progress Course' }),
+      createSession({
+        id: 'session-2',
+        course_title: 'Completed Course',
+        status: 'completed',
+        progress_percent: 100,
+        completed_nodes: 5,
+        completed_at: '2025-02-01T11:00:00Z',
+      }),
+    ]);
     (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(
-        createResponse([
-          createSession({ id: 'session-1', course_title: 'In Progress Course' }),
-          createSession({
-            id: 'session-2',
-            course_title: 'Completed Course',
-            status: 'completed',
-            progress_percent: 100,
-            completed_nodes: 5,
-            completed_at: '2025-02-01T11:00:00Z',
-          }),
-        ])
-      )
+      .mockResolvedValueOnce(allCoursesResponse) // Initial load
+      .mockResolvedValueOnce(allCoursesResponse) // Unfiltered count check
       .mockResolvedValueOnce(
         createResponse([
           createSession({ id: 'session-1', course_title: 'In Progress Course' }),
@@ -201,20 +201,20 @@ describe('Dashboard e2e flows', () => {
   });
 
   it('filter "Completed" hides in-progress courses', async () => {
+    const allCoursesResponse = createResponse([
+      createSession({ id: 'session-1', course_title: 'In Progress Course' }),
+      createSession({
+        id: 'session-2',
+        course_title: 'Completed Course',
+        status: 'completed',
+        progress_percent: 100,
+        completed_nodes: 5,
+        completed_at: '2025-02-01T11:00:00Z',
+      }),
+    ]);
     (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(
-        createResponse([
-          createSession({ id: 'session-1', course_title: 'In Progress Course' }),
-          createSession({
-            id: 'session-2',
-            course_title: 'Completed Course',
-            status: 'completed',
-            progress_percent: 100,
-            completed_nodes: 5,
-            completed_at: '2025-02-01T11:00:00Z',
-          }),
-        ])
-      )
+      .mockResolvedValueOnce(allCoursesResponse) // Initial load
+      .mockResolvedValueOnce(allCoursesResponse) // Unfiltered count check
       .mockResolvedValueOnce(
         createResponse([
           createSession({
@@ -240,55 +240,54 @@ describe('Dashboard e2e flows', () => {
   });
 
   it('sort by progress orders cards correctly', async () => {
+    const initialResponse = createResponse([
+      createSession({
+        id: 'session-1',
+        course_title: 'Low Progress',
+        progress_percent: 10,
+        completed_nodes: 1,
+      }),
+      createSession({
+        id: 'session-2',
+        course_title: 'High Progress',
+        progress_percent: 90,
+        completed_nodes: 9,
+        total_nodes: 10,
+      }),
+      createSession({
+        id: 'session-3',
+        course_title: 'Medium Progress',
+        progress_percent: 50,
+        completed_nodes: 5,
+        total_nodes: 10,
+      }),
+    ]);
+    const sortedResponse = createResponse([
+      createSession({
+        id: 'session-2',
+        course_title: 'High Progress',
+        progress_percent: 90,
+        completed_nodes: 9,
+        total_nodes: 10,
+      }),
+      createSession({
+        id: 'session-3',
+        course_title: 'Medium Progress',
+        progress_percent: 50,
+        completed_nodes: 5,
+        total_nodes: 10,
+      }),
+      createSession({
+        id: 'session-1',
+        course_title: 'Low Progress',
+        progress_percent: 10,
+        completed_nodes: 1,
+      }),
+    ]);
     (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(
-        createResponse([
-          createSession({
-            id: 'session-1',
-            course_title: 'Low Progress',
-            progress_percent: 10,
-            completed_nodes: 1,
-          }),
-          createSession({
-            id: 'session-2',
-            course_title: 'High Progress',
-            progress_percent: 90,
-            completed_nodes: 9,
-            total_nodes: 10,
-          }),
-          createSession({
-            id: 'session-3',
-            course_title: 'Medium Progress',
-            progress_percent: 50,
-            completed_nodes: 5,
-            total_nodes: 10,
-          }),
-        ])
-      )
-      .mockResolvedValueOnce(
-        createResponse([
-          createSession({
-            id: 'session-2',
-            course_title: 'High Progress',
-            progress_percent: 90,
-            completed_nodes: 9,
-            total_nodes: 10,
-          }),
-          createSession({
-            id: 'session-3',
-            course_title: 'Medium Progress',
-            progress_percent: 50,
-            completed_nodes: 5,
-            total_nodes: 10,
-          }),
-          createSession({
-            id: 'session-1',
-            course_title: 'Low Progress',
-            progress_percent: 10,
-            completed_nodes: 1,
-          }),
-        ])
-      );
+      .mockResolvedValueOnce(initialResponse) // Initial load
+      .mockResolvedValueOnce(initialResponse) // Unfiltered count check
+      .mockResolvedValueOnce(sortedResponse); // After sort change
 
     renderDashboard();
 
@@ -328,13 +327,13 @@ describe('Dashboard e2e flows', () => {
   });
 
   it('load more fetches the next page', async () => {
+    const firstPageResponse = createResponse(
+      [createSession({ id: 'session-1', course_title: 'First Page Course' })],
+      true
+    );
     (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(
-        createResponse(
-          [createSession({ id: 'session-1', course_title: 'First Page Course' })],
-          true
-        )
-      )
+      .mockResolvedValueOnce(firstPageResponse) // Initial load
+      .mockResolvedValueOnce(firstPageResponse) // Unfiltered count check
       .mockResolvedValueOnce(
         createResponse([
           createSession({ id: 'session-2', course_title: 'Second Page Course' }),

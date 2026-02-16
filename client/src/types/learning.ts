@@ -213,9 +213,11 @@ export interface QuizSubmitResponse {
   attempt_number: number;
   is_correct: boolean;
   score_percent: number;
-  correct_option_id: string;
+  correct_option_id: string | null; // null when answer is incorrect (not revealed)
   selected_option_id: string;
-  explanation: string;
+  explanation: string; // Explanation for the correct answer (empty when answer is incorrect)
+  selected_explanation?: string; // Explanation for the selected answer (only when incorrect)
+  quiz_index?: number; // Index of quiz in set (for multi-quiz nodes)
   is_mastered: boolean;
   next_node_unlocked: boolean;
   node_status: NodeStatus;
@@ -306,7 +308,8 @@ export interface RevisionQuizResponse {
   is_correct: boolean;
   score_percent: number;
   correct_option_id: string;
-  explanation: string;
+  explanation: string; // Explanation for the correct answer
+  selected_explanation?: string; // Explanation for the selected answer (only when incorrect)
   revision_node_status: RevisionNodeStatus;
 }
 

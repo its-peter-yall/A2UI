@@ -66,6 +66,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import axios from 'axios';
 
 import { createRevisionSession, deleteSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
@@ -97,6 +98,14 @@ export function LearningHome() {
     sortBy,
     limit: COURSES_PER_PAGE,
     offset,
+  });
+
+  // Fetch unfiltered count to determine if dashboard should be shown
+  // (separate from filtered results to handle empty filter states)
+  const { data: allCoursesData } = useCourseList({
+    status: 'all',
+    limit: 1,
+    offset: 0,
   });
 
   const pageResponses = useMemo(() => {
@@ -167,12 +176,7 @@ export function LearningHome() {
     async (sessionId: string, mode: 'full_review' | 'quiz_only') => {
       try {
         const revisionSession = await createRevisionSession(sessionId, { mode });
-        navigate(`/learn/${sessionId}`, {
-          state: {
-            revisionId: revisionSession.id,
-            revisionMode: revisionSession.mode,
-          },
-        });
+        navigate(`/learn/${sessionId}/revise/${revisionSession.id}`);
       } catch (error) {
         console.error('Failed to create revision session:', error);
       }
@@ -191,26 +195,33 @@ export function LearningHome() {
     async (sessionId: string) => {
       try {
         await deleteSession(sessionId);
-        // Invalidate React Query cache to refresh the course list
-        queryClient.invalidateQueries({ queryKey: ['courses'] });
       } catch (error) {
-        console.error('Failed to delete course:', error);
-        // Error is logged to console; UI remains unchanged on failure
+        // If 404, session already deleted - treat as success
+        const isNotFound =
+          axios.isAxiosError(error) && error.response?.status === 404;
+        if (!isNotFound) {
+          console.error('Failed to delete course:', error);
+          return; // Don't invalidate cache on other errors
+        }
       }
+      // Invalidate React Query cache to refresh the course list
+      // This runs on success OR 404 (session already gone)
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
     },
     [queryClient]
   );
 
   // Derived state for rendering
-  const hasCourses = totalCount > 0;
+  const hasAnyCourses = (allCoursesData?.total_count ?? 0) > 0;
+  const hasFilteredCourses = totalCount > 0;
   const isInitialLoad = isLoading && offset === 0 && sessions.length === 0;
-  const showDashboard = hasCourses;
+  const showDashboard = hasAnyCourses;
   const hasMore = latestResponse?.has_more ?? false;
   const shouldAutoFocusTopicInput = searchParams.get('new') === 'true';
 
-  // Empty filter state: server has courses but current filter matches none
+  // Empty filter state: user has courses overall but current filter matches none
   const showEmptyFilterState =
-    !isLoading && hasCourses && sessions.length === 0;
+    !isLoading && hasAnyCourses && !hasFilteredCourses;
 
   const statusLabel =
     filterStatus === 'in_progress'

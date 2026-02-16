@@ -36,4 +36,4 @@ None currently.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
-| 001 | Add delete functionality to course cards | 2026-02-16 | a48d84e | .planning/quick/001-add-delete-course-cards/ |
+| 001 | Add delete functionality to course cards | 2026-02-16 | e73c16a | .planning/quick/001-add-delete-course-cards/ |

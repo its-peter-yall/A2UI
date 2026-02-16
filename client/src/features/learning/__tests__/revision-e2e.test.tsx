@@ -283,8 +283,7 @@ describe('Revision e2e flows', () => {
         'session-1',
         { mode: 'full_review' }
       );
-      expect(screen.getByTestId('location-path')).toHaveTextContent('/learn/session-1');
-      expect(screen.getByTestId('location-state').textContent).toContain('"revisionId":"revision-1"');
+      expect(screen.getByTestId('location-path')).toHaveTextContent('/learn/session-1/revise/revision-1');
     });
   });
 

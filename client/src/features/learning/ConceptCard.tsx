@@ -321,19 +321,28 @@ export function ConceptCard({
                 );
               })()}
 
-              {node.status === 'SHOWING_FEEDBACK' && node.quiz && (
+              {node.status === 'SHOWING_FEEDBACK' && (node.quiz || node.quiz_set) && (
                 <>
                   {feedbackResult && (
                     <QuizFeedback
-                      quiz={node.quiz}
+                      quiz={node.quiz_set || node.quiz!}
                       result={feedbackResult}
                       attemptCount={attemptCount}
+                      currentQuizIndex={
+                        node.quiz_set_hidden?.current_index ||
+                        feedbackResult.quiz_index ||
+                        0
+                      }
                       onRetry={handleRetry}
                       onContinue={
                         feedbackResult.is_mastered
                           ? () => onContinueToNext?.(node.id)
                           : undefined
                       }
+                      onNextQuiz={() => {
+                        // Next quiz handling is managed by parent via quiz_index
+                        // The quiz set current_index is updated on the server
+                      }}
                     />
                   )}
                   {!feedbackResult && isFeedbackLoading && (

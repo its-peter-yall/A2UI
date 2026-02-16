@@ -24,7 +24,7 @@ import {
   prefersReducedMotion,
 } from './animations';
 import { LoadingState, ErrorState } from './ErrorStates';
-import type { RevisionNodeProgressWithDetails } from '@/types/learning';
+import type { RevisionNodeProgressWithDetails, RevisionQuizResponse } from '@/types/learning';
 
 export function RevisionPage() {
   const { sessionId, revisionId } = useParams<{
@@ -39,6 +39,9 @@ export function RevisionPage() {
   // Carousel state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(0);
+
+  // Store quiz results per node for feedback display
+  const [quizResults, setQuizResults] = useState<Record<string, RevisionQuizResponse>>({});
 
   // Fetch original session for node content/quizzes
   const {
@@ -79,6 +82,10 @@ export function RevisionPage() {
     revisionId: revisionId ?? '',
     onError: (error, context) => {
       console.error(`Revision mutation error (${context}):`, error);
+    },
+    onQuizResult: (nodeId, _isCorrect, result) => {
+      // Store quiz result for feedback display
+      setQuizResults(prev => ({ ...prev, [nodeId]: result }));
     },
   });
 
@@ -391,6 +398,7 @@ export function RevisionPage() {
                     onQuizSubmit={submitAnswer}
                     isMarkingReviewed={isMarkingReviewed}
                     isSubmitting={isSubmitting}
+                    quizResult={quizResults[currentNode.id]}
                   />
                 </motion.div>
               )}

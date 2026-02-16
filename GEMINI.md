@@ -15,14 +15,14 @@ Follow the commands and style rules below; match local patterns when editing.
 
 | Document | Purpose |
 |----------|---------|
-| `conductor/product.md` | Vision, purpose, target audience, core capabilities, technical architecture |
+| `.planning/codebase/ARCHITECTURE.md` | Vision, purpose, target audience, core capabilities, technical architecture |
 | `conductor/product-guidelines.md` | Visual identity (Cyber Yellow #FFD400), UX principles, component standards |
-| `conductor/tech-stack.md` | Technology choices: React 19, FastAPI, Vertex AI, SQLite, Tailwind 4.x |
-| `conductor/workflow.md` | TDD workflow, quality gates, commit guidelines, definition of done |
-| `conductor/code_styleguides/general.md` | Cross-language principles: readability, consistency, simplicity |
-| `conductor/code_styleguides/typescript.md` | Google TS Style Guide: `const` default, named exports, single quotes |
-| `conductor/code_styleguides/python.md` | Google Python Style Guide: 80-char lines, 4-space indent, docstrings |
-| `conductor/code_styleguides/html-css.md` | Google HTML/CSS Guide: 2-space indent, lowercase, alphabetize CSS |
+| `.planning/codebase/STACK.md` | Technology choices: React 19, FastAPI, Vertex AI, SQLite, Tailwind 4.x |
+| `.planning/codebase/TESTING.md` | TDD workflow, quality gates, testing patterns, definition of done |
+| `.planning/codebase/CONVENTIONS.md` | Coding conventions for TypeScript, Python, and HTML/CSS |
+| `.planning/codebase/STRUCTURE.md` | Directory layout and where to add new code |
+| `.planning/codebase/INTEGRATIONS.md` | External service integrations and configuration |
+| `.planning/codebase/CONCERNS.md` | Known tech debt, security considerations, performance bottlenecks |
 
 **Rule**: Before implementing any feature, read the relevant spec documents above.
 
@@ -30,7 +30,8 @@ Follow the commands and style rules below; match local patterns when editing.
 
 - `client/`: Vite + React 19 + TypeScript frontend
 - `server/`: FastAPI backend with Pydantic v2 (models, REST routers, services, utils)
-- `conductor/`: Internal guidelines and product docs (the specs)
+- `conductor/`: Product guidelines and UI/UX standards
+- `.planning/codebase/`: Comprehensive codebase documentation (architecture, stack, conventions)
 - `features/learning/`: Adaptive learning system components
   - Client: LearningPage, LearningPathContainer, ConceptCard, QuizModal
   - Server: CourseOrchestrator, agent architecture (PlannerAgent, GeneratorAgent, QuizzerAgent)
@@ -108,7 +109,7 @@ The application uses `react-router-dom` with the following routes:
 
 ## Quick Reference: Code Style
 
-### TypeScript/React (per `conductor/code_styleguides/typescript.md`)
+### TypeScript/React (per `.planning/codebase/CONVENTIONS.md`)
 - Use `const` by default; never `var`
 - **No default exports** (mandatory - use named exports only)
 - Single quotes; explicit semicolons
@@ -119,7 +120,7 @@ The application uses `react-router-dom` with the following routes:
 - Hooks start with `use`
 - Type-only imports: `import type { Foo } from ...`
 
-### Python/FastAPI (per `conductor/code_styleguides/python.md`)
+### Python/FastAPI (per `.planning/codebase/CONVENTIONS.md`)
 - 4-space indentation, **80-character line limit**
 - Import grouping: stdlib → third-party → local (`server.*`)
 - `snake_case` functions/vars, `PascalCase` classes
@@ -130,7 +131,7 @@ The application uses `react-router-dom` with the following routes:
 - Pydantic: `Field` constraints, `ConfigDict(from_attributes=True)`
 - **main() function pattern** for executable Python files
 
-### HTML/CSS (per `conductor/code_styleguides/html-css.md`)
+### HTML/CSS (per `.planning/codebase/CONVENTIONS.md`)
 - 2-space indentation; no tabs
 - Lowercase: elements, attributes, selectors, properties
 - Class selectors preferred; avoid ID selectors for styling
@@ -173,7 +174,7 @@ from server.database.persistence import session_manager
   - File naming: `test_*.py`
   - Located in `server/tests/` directory
 - Keep tests small, deterministic; mock external dependencies
-- Target: >80% code coverage per `conductor/workflow.md`
+- Target: >80% code coverage per `.planning/codebase/TESTING.md`
 
 ## Conventions to Preserve
 - API routes in `server/routers`; schemas in `server/schemas`
@@ -241,13 +242,13 @@ from server.database.persistence import session_manager
 
 ## AGENT BEHAVIOUR (Spec-Driven)
 
-### Research-First Principle (per `conductor/workflow.md`)
+### Research-First Principle (per `.planning/codebase/CONVENTIONS.md`)
 - **ALWAYS web-search before implementing** unfamiliar libraries, APIs, or patterns
 - **NEVER assume** library behavior — verify with official documentation
 - **Search first** when encountering: new npm packages, Python libraries, framework features
 - Use `librarian` agent for docs, `explore` agent for codebase patterns
 
-### SWE Best Practices (per `conductor/workflow.md`)
+### SWE Best Practices (per `.planning/codebase/TESTING.md`)
 - **Write tests BEFORE or WITH code**, not after — TDD required
 - **Verify with diagnostics**: Run diagnostics before marking tasks complete
 - **Build & test**: Always run build/test commands after implementation
@@ -256,26 +257,26 @@ from server.database.persistence import session_manager
 - **Minimal changes**: Fix bugs without refactoring unrelated code
 - **Running python files**: Always use .venv in the root of the server directory, and run with `python -m` to ensure correct imports and environment
 
-### Quality Gates (per `conductor/workflow.md`)
+### Quality Gates (per `.planning/codebase/TESTING.md`)
 Before marking any task complete, verify:
 - [ ] All tests pass
 - [ ] Code coverage >80%
-- [ ] Code follows style guides in `conductor/code_styleguides/`
+- [ ] Code follows conventions in `.planning/codebase/CONVENTIONS.md`
 - [ ] Public functions documented (docstrings/JSDoc)
 - [ ] Type safety enforced
 - [ ] No linting errors
 - [ ] Documentation updated if needed
 
-### Task Workflow (per `conductor/workflow.md`)
-1. **Read specs**: Check `conductor/product.md`, `conductor/tech-stack.md`, relevant style guides
-2. **Select task**: Choose next task from `plan.md`
-3. **Mark in progress**: Change `[ ]` to `[~]` in `plan.md`
+### Task Workflow (per `.planning/codebase/TESTING.md`)
+1. **Read specs**: Check `.planning/codebase/ARCHITECTURE.md`, `.planning/codebase/STACK.md`, `.planning/codebase/CONVENTIONS.md`
+2. **Select task**: Choose next task from roadmap in `.planning/`
+3. **Mark in progress**: Update task status in `.planning/` roadmap
 4. **Red phase**: Write failing tests first (verify they fail!)
 5. **Green phase**: Implement to pass tests
 6. **Refactor**: Improve clarity with passing tests as safety net
 7. **Verify coverage**: >80% for new code
-8. **Document deviations**: If implementation differs from stack, STOP and update `tech-stack.md`
-9. **Commit**: Clear message per `conductor/workflow.md` commit format
+8. **Document deviations**: If implementation differs from stack, STOP and update `.planning/codebase/STACK.md`
+9. **Commit**: Clear message per `.planning/codebase/TESTING.md` commit format
 
 ### TDD Phases (Explicit)
 
@@ -295,7 +296,7 @@ Before marking any task complete, verify:
 - Maintain all passing tests as safety net
 - No behavior changes during refactoring
 
-### Definition of Done (per `conductor/workflow.md`)
+### Definition of Done (per `.planning/codebase/TESTING.md`)
 A task is complete when:
 1. All code implemented to specification
 2. Unit tests written and passing (>80% coverage)
@@ -391,11 +392,11 @@ git log --show-notes
 - **Session Sidebar**: Clean list with active indicators, "New Session" button, rename/delete menus
 
 ## References
-- `conductor/product.md` - Product vision and architecture
+- `.planning/codebase/ARCHITECTURE.md` - Product vision and architecture
 - `conductor/product-guidelines.md` - UI/UX standards
-- `conductor/tech-stack.md` - Technology specifications
-- `conductor/workflow.md` - Development workflow and quality gates
-- `conductor/code_styleguides/general.md` - General principles
-- `conductor/code_styleguides/typescript.md` - TypeScript/React rules
-- `conductor/code_styleguides/python.md` - Python/FastAPI rules
-- `conductor/code_styleguides/html-css.md` - HTML/CSS rules
+- `.planning/codebase/STACK.md` - Technology specifications
+- `.planning/codebase/TESTING.md` - Development workflow and quality gates
+- `.planning/codebase/CONVENTIONS.md` - Coding conventions for all languages
+- `.planning/codebase/STRUCTURE.md` - Directory layout
+- `.planning/codebase/INTEGRATIONS.md` - External service integrations
+- `.planning/codebase/CONCERNS.md` - Known issues and tech debt

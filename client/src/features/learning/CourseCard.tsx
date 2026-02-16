@@ -39,6 +39,7 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
   const isCompleted = session.status === 'completed';
   const progressPercent = Math.floor(session.progress_percent);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -56,10 +57,17 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
     setShowConfirm(true);
   };
 
-  const handleConfirmDelete = (e: React.MouseEvent) => {
+  const handleConfirmDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setShowConfirm(false);
-    onDelete?.(session.id);
+    if (isDeleting) return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete?.(session.id);
+    } finally {
+      setIsDeleting(false);
+      setShowConfirm(false);
+    }
   };
 
   const handleCancelDelete = (e: React.MouseEvent) => {
@@ -132,10 +140,12 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
           <div className="flex items-center gap-3">
             <button
               onClick={handleCancelDelete}
+              disabled={isDeleting}
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium',
                 'border border-border text-foreground',
                 'hover:bg-muted transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
                 'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
               )}
             >
@@ -143,14 +153,16 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
             </button>
             <button
               onClick={handleConfirmDelete}
+              disabled={isDeleting}
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium',
                 'bg-red-600 text-white',
                 'hover:bg-red-700 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
                 'focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 focus:ring-offset-background'
               )}
             >
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
           </div>
         </div>

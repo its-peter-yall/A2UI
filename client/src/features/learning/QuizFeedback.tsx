@@ -91,8 +91,14 @@ export function QuizFeedback({
   onContinue,
   onNextQuiz,
 }: QuizFeedbackProps) {
-  const { is_correct, is_mastered, selected_option_id, correct_option_id } =
-    result;
+  const {
+    is_correct,
+    is_mastered,
+    selected_option_id,
+    correct_option_id,
+    explanation,
+    selected_explanation,
+  } = result;
 
   // Determine if we're dealing with a QuizSet and extract current quiz
   const isQuizSet = 'quizzes' in quiz;
@@ -111,6 +117,10 @@ export function QuizFeedback({
 
   const totalQuizzes = isQuizSet ? quiz.quizzes.length : 1;
   const hasMoreQuizzes = currentQuizIndex < totalQuizzes - 1;
+
+  // For wrong answers, correct_option_id is null (not revealed)
+  // Only show correct answer when user answered correctly
+  const showCorrectAnswer = is_correct && correct_option_id !== null;
 
   return (
     <div className="space-y-6">
@@ -162,13 +172,22 @@ export function QuizFeedback({
               key={option.option_id}
               className={cn(
                 'p-4 rounded-lg border-2 transition-all',
-                isCorrectOption &&
+                // Show correct answer styling only when user answered correctly
+                showCorrectAnswer &&
+                  isCorrectOption &&
                   'border-green-500 bg-green-50 dark:bg-green-900/20',
+                // Show selected wrong answer styling
                 isSelected &&
                   !isCorrectOption &&
                   'border-red-500 bg-red-50 dark:bg-red-900/20',
+                // Default styling for unselected options when answer was wrong
                 !isSelected &&
                   !isCorrectOption &&
+                  'border-muted bg-muted/30',
+                // When answer was correct but this option wasn't selected, show neutral
+                !isSelected &&
+                  !isCorrectOption &&
+                  showCorrectAnswer &&
                   'border-muted bg-muted/30'
               )}
             >
@@ -177,9 +196,12 @@ export function QuizFeedback({
                 <div
                   className={cn(
                     'w-6 h-6 rounded-full flex items-center justify-center text-sm font-mono shrink-0',
-                    isCorrectOption && 'bg-green-500 text-white',
+                    showCorrectAnswer &&
+                      isCorrectOption &&
+                      'bg-green-500 text-white',
                     isSelected && !isCorrectOption && 'bg-red-500 text-white',
-                    !isSelected && !isCorrectOption && 'bg-muted text-muted-foreground'
+                    (!showCorrectAnswer || (!isSelected && !isCorrectOption)) &&
+                      'bg-muted text-muted-foreground'
                   )}
                 >
                   {option.display_label}
@@ -194,24 +216,52 @@ export function QuizFeedback({
                         (Your answer)
                       </span>
                     )}
-                    {isCorrectOption && (
+                    {showCorrectAnswer && isCorrectOption && (
                       <span className="text-xs text-green-600 dark:text-green-400 font-medium">
                         ✓ Correct answer
                       </span>
                     )}
                   </div>
 
-                  {/* Explanation */}
-                  <p
-                    className={cn(
-                      'text-sm',
-                      isCorrectOption
-                        ? 'text-green-700 dark:text-green-300'
-                        : 'text-muted-foreground'
+                  {/* Explanation - show from result data */}
+                  {/* When answer is correct, show all option explanations for learning */}
+                  {showCorrectAnswer && (
+                    <div className="mt-2">
+                      {isCorrectOption ? (
+                        <div>
+                          <span className="text-xs text-green-600 dark:text-green-400 font-medium block mb-1">
+                            ✓ Correct answer
+                          </span>
+                          <p className="text-sm text-green-700 dark:text-green-300">
+                            {explanation}
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-xs text-muted-foreground font-medium block mb-1">
+                            Why this is incorrect:
+                          </span>
+                          <p className="text-sm text-muted-foreground">
+                            {option.explanation}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Show explanation for wrong selected answer (when answer is wrong) */}
+                  {!showCorrectAnswer &&
+                    isSelected &&
+                    !isCorrectOption &&
+                    selected_explanation && (
+                      <div className="mt-2">
+                        <span className="text-xs text-red-500 dark:text-red-400 font-medium block mb-1">
+                          Why this is incorrect:
+                        </span>
+                        <p className="text-sm text-red-600 dark:text-red-300">
+                          {selected_explanation}
+                        </p>
+                      </div>
                     )}
-                  >
-                    {option.explanation}
-                  </p>
                 </div>
               </div>
             </div>

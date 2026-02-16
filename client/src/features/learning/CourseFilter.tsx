@@ -40,7 +40,7 @@ export function CourseFilter({
   onSortChange,
 }: CourseFilterProps) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mt-3 ml-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       {/* Status filter pills */}
       <div
         role="tablist"

@@ -861,16 +861,16 @@ def submit_quiz(
                         current_index=next_index,
                     )
 
-        # If mastered, transition to SHOWING_FEEDBACK and unlock next node
-        # User stays in SHOWING_FEEDBACK to review, clicks Continue to go to COMPLETED
+        # Always transition to SHOWING_FEEDBACK after quiz submission
+        # User sees feedback, then either retries (if not mastered) or continues (if mastered)
         next_node_unlocked = False
-        if result.get("is_mastered"):
-            # Transition to SHOWING_FEEDBACK so user can see the feedback
-            learning_manager.update_node_status(
-                node_id=node_id,
-                status=NodeStatus.SHOWING_FEEDBACK,
-            )
+        learning_manager.update_node_status(
+            node_id=node_id,
+            status=NodeStatus.SHOWING_FEEDBACK,
+        )
 
+        # If mastered, unlock the next node
+        if result.get("is_mastered"):
             # Check if there's a next node to unlock
             next_node = learning_manager.get_next_node(
                 session_id=node["learning_session_id"],

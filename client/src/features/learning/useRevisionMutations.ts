@@ -6,6 +6,7 @@ import { markNodeReviewed, submitRevisionQuiz } from '@/lib/learningApi';
 import type {
   RevisionSessionWithProgress,
   RevisionNodeStatus,
+  RevisionQuizResponse,
 } from '@/types/learning';
 import { revisionQueryKeys } from './useRevisionSession';
 
@@ -18,7 +19,7 @@ export interface UseRevisionMutationsProps {
   /** Called on any mutation error */
   onError?: (error: Error, context: string) => void;
   /** Called after a quiz is submitted */
-  onQuizResult?: (nodeId: string, isCorrect: boolean) => void;
+  onQuizResult?: (nodeId: string, isCorrect: boolean, result: RevisionQuizResponse) => void;
 }
 
 /**
@@ -101,7 +102,7 @@ export function useRevisionMutations({
     },
 
     onSuccess: (result) => {
-      onQuizResult?.(result.node_id, result.is_correct);
+      onQuizResult?.(result.node_id, result.is_correct, result);
     },
 
     onError: (error, _variables, context) => {

@@ -49,7 +49,7 @@ class TestLearningRouterQuizProgression(unittest.TestCase):
     """Regression tests for submit_quiz multi-quiz progression handling."""
 
     def test_submit_quiz_advances_quiz_set_after_correct_non_mastered(self) -> None:
-        """Correct non-mastered attempts should advance quiz_set current_index."""
+        """Correct non-mastered attempts should advance quiz_set current_index and transition to SHOWING_FEEDBACK."""
         request = QuizSubmitRequest(selected_option_id="option-1", quiz_index=0)
 
         fake_conn = MagicMock()
@@ -85,7 +85,53 @@ class TestLearningRouterQuizProgression(unittest.TestCase):
         fake_manager.update_quiz_set_progress.assert_called_once_with(
             node_id="node-1", current_index=1
         )
-        fake_manager.update_node_status.assert_not_called()
+        # Should always transition to SHOWING_FEEDBACK after quiz submission
+        from server.database.learning_persistence import NodeStatus
+        fake_manager.update_node_status.assert_called_once_with(
+            node_id="node-1", status=NodeStatus.SHOWING_FEEDBACK
+        )
+        self.assertFalse(response.is_mastered)
+        self.assertFalse(response.next_node_unlocked)
+
+    def test_submit_quiz_transitions_to_showing_feedback_on_wrong_answer(self) -> None:
+        """Wrong answer should transition to SHOWING_FEEDBACK so user can see feedback."""
+        request = QuizSubmitRequest(selected_option_id="option-wrong", quiz_index=0)
+
+        fake_conn = MagicMock()
+        fake_manager = MagicMock()
+        fake_manager._get_connection.return_value = fake_conn
+        fake_manager._get_node_by_id.return_value = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 0,
+            "status": "IN_QUIZ",
+        }
+        fake_manager.create_quiz_attempt.return_value = {
+            "id": "attempt-1",
+            "node_id": "node-1",
+            "attempt_number": 1,
+            "quiz_index": 0,
+            "selected_option_id": "option-wrong",
+            "is_correct": False,
+            "score_percent": 0,
+            "correct_option_id": "option-1",
+            "explanation": "The correct answer is option-1.",
+            "is_mastered": False,
+            "created_at": "2026-02-15T00:00:00+00:00",
+            "updated_at": "2026-02-15T00:00:00+00:00",
+        }
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = submit_quiz("node-1", request)
+
+        # Should always transition to SHOWING_FEEDBACK after quiz submission
+        from server.database.learning_persistence import NodeStatus
+        fake_manager.update_node_status.assert_called_once_with(
+            node_id="node-1", status=NodeStatus.SHOWING_FEEDBACK
+        )
+        # Quiz set progress should NOT advance on wrong answer
+        fake_manager.update_quiz_set_progress.assert_not_called()
+        self.assertFalse(response.is_correct)
         self.assertFalse(response.is_mastered)
         self.assertFalse(response.next_node_unlocked)
 

@@ -12,6 +12,7 @@ import type {
   RevisionNodeProgressWithDetails,
   RevisionMode,
   RevisionNodeStatus,
+  RevisionQuizResponse,
 } from '@/types/learning';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
@@ -30,6 +31,8 @@ interface RevisionConceptCardProps {
   isMarkingReviewed?: boolean;
   /** Whether the quiz submit mutation is loading */
   isSubmitting?: boolean;
+  /** Last quiz result for showing feedback */
+  quizResult?: RevisionQuizResponse;
 }
 
 /**
@@ -66,6 +69,7 @@ export function RevisionConceptCard({
   onQuizSubmit,
   isMarkingReviewed = false,
   isSubmitting = false,
+  quizResult,
 }: RevisionConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
@@ -119,6 +123,9 @@ export function RevisionConceptCard({
     const currentQuiz = quizData.quizzes[currentQuizIndex];
     if (!currentQuiz) return null;
 
+    // Show feedback if quiz has been submitted
+    const showFeedback = quizResult && (revisionProgress.status === 'quiz_passed' || revisionProgress.status === 'quiz_failed');
+
     return (
       <div className="space-y-4 mt-4 pt-4 border-t" data-testid="revision-quiz-section">
         {quizData.quizzes.length > 1 && (
@@ -129,38 +136,93 @@ export function RevisionConceptCard({
         <p className="font-medium text-lg">{currentQuiz.question_text}</p>
         <fieldset className="space-y-2" role="radiogroup">
           <legend className="sr-only">Quiz options</legend>
-          {currentQuiz.options.map((option) => (
-            <label
-              key={option.option_id}
-              className={cn(
-                'flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors',
-                selectedOption === option.option_id
-                  ? 'border-primary bg-primary/10'
-                  : 'border-muted hover:border-primary/50'
-              )}
-            >
-              <input
-                type="radio"
-                name={`revision-quiz-${node.id}`}
-                value={option.option_id}
-                checked={selectedOption === option.option_id}
-                onChange={() => setSelectedOption(option.option_id)}
-                className="w-4 h-4"
-              />
-              <span className="font-mono text-sm text-muted-foreground">
-                {option.display_label}.
-              </span>
-              <span>{option.text}</span>
-            </label>
-          ))}
+          {currentQuiz.options.map((option) => {
+            const isSelected = showFeedback && option.option_id === quizResult?.selected_option_id;
+            const isCorrectOption = showFeedback && option.option_id === quizResult?.correct_option_id;
+
+            return (
+              <div
+                key={option.option_id}
+                className={cn(
+                  'p-3 rounded-md border transition-colors',
+                  showFeedback && isCorrectOption && 'border-green-500 bg-green-50 dark:bg-green-900/20',
+                  showFeedback && isSelected && !isCorrectOption && 'border-red-500 bg-red-50 dark:bg-red-900/20',
+                  showFeedback && !isSelected && !isCorrectOption && 'border-muted bg-muted/30',
+                  !showFeedback && selectedOption === option.option_id && 'border-primary bg-primary/10',
+                  !showFeedback && selectedOption !== option.option_id && 'border-muted hover:border-primary/50'
+                )}
+              >
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name={`revision-quiz-${node.id}`}
+                    value={option.option_id}
+                    checked={selectedOption === option.option_id}
+                    onChange={() => setSelectedOption(option.option_id)}
+                    disabled={showFeedback}
+                    className="w-4 h-4"
+                  />
+                  <span className="font-mono text-sm text-muted-foreground">
+                    {option.display_label}.
+                  </span>
+                  <span>{option.text}</span>
+                </label>
+
+                {/* Show explanation from quiz result */}
+                {showFeedback && isCorrectOption && (
+                  <div className="mt-2 pl-7">
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium block mb-1">
+                      ✓ Correct answer
+                    </span>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      {quizResult?.explanation}
+                    </p>
+                  </div>
+                )}
+                {showFeedback && isSelected && !isCorrectOption && quizResult?.selected_explanation && (
+                  <div className="mt-2 pl-7">
+                    <span className="text-xs text-red-500 dark:text-red-400 font-medium block mb-1">
+                      Why this is incorrect:
+                    </span>
+                    <p className="text-sm text-red-600 dark:text-red-300">
+                      {quizResult.selected_explanation}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </fieldset>
+
+        {/* Result header when feedback is shown */}
+        {showFeedback && (
+          <div
+            className={cn(
+              'flex items-center gap-3 p-3 rounded-lg mt-4',
+              quizResult.is_correct
+                ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+            )}
+          >
+            <span className="text-xl">{quizResult.is_correct ? '✅' : '❌'}</span>
+            <div>
+              <p className="font-semibold">
+                {quizResult.is_correct ? 'Correct!' : 'Incorrect'}
+              </p>
+              <p className="text-sm opacity-80">
+                Score: {quizResult.score_percent}%
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end pt-2">
           <button
             onClick={() => handleQuizSubmit(currentQuizIndex)}
-            disabled={!selectedOption || isSubmitting}
+            disabled={!selectedOption || isSubmitting || showFeedback}
             className={cn(
               'px-4 py-2 rounded-md transition-colors',
-              selectedOption && !isSubmitting
+              selectedOption && !isSubmitting && !showFeedback
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                 : 'bg-muted text-muted-foreground cursor-not-allowed'
             )}
