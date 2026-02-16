@@ -284,9 +284,10 @@ End-to-end integration, testing, and polish.
 ---
 
 ### Phase 09: Database Schema Extensions for Progress & Revision
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/09-database-progress-revision/`
 **Estimated Plans**: 2
+**Plans Completed**: 1/2
 
 Extend the SQLite schema to support session-level progress tracking, course
 status management, and a separate revision system that preserves original
@@ -1436,7 +1437,7 @@ npm run build                   # Production build succeeds
 
 | Phase | Name | Plans | Status | Dependencies |
 |-------|------|-------|--------|--------------|
-| 09 | Database Schema Extensions | 2 | pending | - |
+| 09 | Database Schema Extensions | 2 | in_progress | - |
 | 10 | Session Listing & Progress API | 2 | pending | 09 |
 | 11 | Revision & Quiz Re-attendance API | 2 | pending | 10 |
 | 12 | Course Dashboard Components | 2 | pending | 10 |

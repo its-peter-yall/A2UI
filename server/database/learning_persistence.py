@@ -216,6 +216,8 @@ class LearningManager:
             )
 
             self._ensure_concept_node_columns(conn)
+            self._ensure_session_progress_columns(conn)
+            self._ensure_node_timestamp_columns(conn)
             self._ensure_quiz_data_columns(conn)
             self._ensure_quiz_attempts_columns(conn)
 
@@ -490,7 +492,7 @@ class LearningManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT status
+                SELECT status, learning_session_id
                 FROM concept_nodes
                 WHERE id = ?
                 """,
@@ -500,6 +502,7 @@ class LearningManager:
             if not row:
                 return None
             current_status = NodeStatus(row["status"])
+            session_id = row["learning_session_id"]
             logger.info(
                 f"Transition attempt: {current_status.value} -> {status.value} for node {node_id}"
             )
@@ -514,16 +517,40 @@ class LearningManager:
             cursor.execute(
                 """
                 UPDATE concept_nodes
-                SET status = ?, updated_at = ?
+                SET status = ?, updated_at = ?,
+                    started_at = CASE
+                        WHEN ? = ? AND started_at IS NULL THEN ?
+                        ELSE started_at
+                    END,
+                    completed_at = CASE
+                        WHEN ? = ? THEN ?
+                        ELSE completed_at
+                    END
                 WHERE id = ? AND status = ?
                 """,
-                (status.value, now, node_id, current_status.value),
+                (
+                    status.value,
+                    now,
+                    status.value,
+                    NodeStatus.VIEWING_EXPLANATION.value,
+                    now,
+                    status.value,
+                    NodeStatus.COMPLETED.value,
+                    now,
+                    node_id,
+                    current_status.value,
+                ),
             )
             if cursor.rowcount == 0:
                 node = self._get_node_by_id(node_id, conn)
                 if node is None:
                     return None
                 raise ValueError("Node status changed during update; retry")
+            self._update_session_progress(
+                session_id=session_id,
+                conn=conn,
+                last_active_node_id=node_id,
+            )
             conn.commit()
             return self._get_node_by_id(node_id, conn)
         except sqlite3.Error as e:
@@ -1527,6 +1554,93 @@ class LearningManager:
             "quiz": quiz_payload,
         }
 
+    @staticmethod
+    def _calculate_progress_percent(completed_nodes: int, total_nodes: int) -> int:
+        """Calculate session progress percentage using floor integer math."""
+        if total_nodes <= 0:
+            return 0
+        bounded_completed = min(max(completed_nodes, 0), total_nodes)
+        return (bounded_completed * 100) // total_nodes
+
+    def _update_session_progress(
+        self,
+        session_id: str,
+        conn: sqlite3.Connection,
+        last_active_node_id: Optional[str] = None,
+    ) -> None:
+        """Update cached session progress and completion metadata."""
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total_nodes,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed_nodes
+            FROM concept_nodes
+            WHERE learning_session_id = ?
+            """,
+            (NodeStatus.COMPLETED.value, session_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return
+
+        total_nodes = row["total_nodes"] or 0
+        completed_nodes = row["completed_nodes"] or 0
+        progress_percent = self._calculate_progress_percent(
+            completed_nodes=completed_nodes,
+            total_nodes=total_nodes,
+        )
+        session_status = "completed" if progress_percent == 100 else "in_progress"
+        now = datetime.now(timezone.utc).isoformat()
+
+        if last_active_node_id is None:
+            cursor.execute(
+                """
+                UPDATE learning_sessions
+                SET status = ?,
+                    progress_percent = ?,
+                    completed_at = CASE
+                        WHEN ? = 'completed' THEN COALESCE(completed_at, ?)
+                        ELSE NULL
+                    END,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    session_status,
+                    progress_percent,
+                    session_status,
+                    now,
+                    now,
+                    session_id,
+                ),
+            )
+            return
+
+        cursor.execute(
+            """
+            UPDATE learning_sessions
+            SET status = ?,
+                progress_percent = ?,
+                completed_at = CASE
+                    WHEN ? = 'completed' THEN COALESCE(completed_at, ?)
+                    ELSE NULL
+                END,
+                last_active_node_id = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                session_status,
+                progress_percent,
+                session_status,
+                now,
+                last_active_node_id,
+                now,
+                session_id,
+            ),
+        )
+
     def _ensure_concept_node_columns(self, conn: sqlite3.Connection) -> None:
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(concept_nodes)")
@@ -1536,6 +1650,46 @@ class LearningManager:
         if "retry_available" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE concept_nodes ADD COLUMN retry_available INTEGER DEFAULT 0"
+            )
+
+    def _ensure_session_progress_columns(self, conn: sqlite3.Connection) -> None:
+        """Migrate learning_sessions table to include progress tracking."""
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(learning_sessions)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        if "status" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions "
+                "ADD COLUMN status TEXT DEFAULT 'in_progress'"
+            )
+        if "progress_percent" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions "
+                "ADD COLUMN progress_percent INTEGER DEFAULT 0"
+            )
+        if "completed_at" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions ADD COLUMN completed_at TIMESTAMP"
+            )
+        if "last_active_node_id" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions ADD COLUMN last_active_node_id TEXT"
+            )
+
+    def _ensure_node_timestamp_columns(self, conn: sqlite3.Connection) -> None:
+        """Migrate concept_nodes table to include started/completed timestamps."""
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(concept_nodes)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        if "started_at" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN started_at TIMESTAMP"
+            )
+        if "completed_at" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN completed_at TIMESTAMP"
             )
 
     def _ensure_quiz_data_columns(self, conn: sqlite3.Connection) -> None:

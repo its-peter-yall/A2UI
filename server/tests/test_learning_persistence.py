@@ -1000,3 +1000,221 @@ class TestLegacySchemaMigration(unittest.TestCase):
         quiz_set_data = manager.get_quiz_set_for_node(node_id)
         assert quiz_set_data is not None
         self.assertEqual(quiz_set_data["format_version"], 0)
+
+    def test_migration_adds_progress_and_timestamp_columns(self) -> None:
+        """Migration should add all Phase 09-01 schema columns."""
+        self._create_legacy_database()
+        manager = LearningManager(self.db_path)
+
+        manager.init_learning_tables()
+        manager.init_learning_tables()
+
+        conn = manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(learning_sessions)")
+            learning_columns = {row["name"] for row in cursor.fetchall()}
+            self.assertIn("status", learning_columns)
+            self.assertIn("progress_percent", learning_columns)
+            self.assertIn("completed_at", learning_columns)
+            self.assertIn("last_active_node_id", learning_columns)
+
+            cursor.execute("PRAGMA table_info(concept_nodes)")
+            node_columns = {row["name"] for row in cursor.fetchall()}
+            self.assertIn("started_at", node_columns)
+            self.assertIn("completed_at", node_columns)
+        finally:
+            conn.close()
+
+    def test_migration_sets_defaults_and_nullable_values(self) -> None:
+        """Migration should apply defaults and preserve nullable timestamps."""
+        self._create_legacy_database()
+        manager = LearningManager(self.db_path)
+        manager.init_learning_tables()
+
+        conn = manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT status, progress_percent, completed_at, last_active_node_id
+                FROM learning_sessions
+                LIMIT 1
+                """
+            )
+            session_row = cursor.fetchone()
+            assert session_row is not None
+            self.assertEqual(session_row["status"], "in_progress")
+            self.assertEqual(session_row["progress_percent"], 0)
+            self.assertIsNone(session_row["completed_at"])
+            self.assertIsNone(session_row["last_active_node_id"])
+
+            cursor.execute(
+                """
+                SELECT started_at, completed_at
+                FROM concept_nodes
+                LIMIT 1
+                """
+            )
+            node_row = cursor.fetchone()
+            assert node_row is not None
+            self.assertIsNone(node_row["started_at"])
+            self.assertIsNone(node_row["completed_at"])
+        finally:
+            conn.close()
+
+
+class TestSessionProgressHelpers(unittest.TestCase):
+    """Tests progress helper behavior introduced in Phase 09-01."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_session_with_nodes(self, total_nodes: int) -> tuple[str, list[str]]:
+        session = self.manager.create_learning_session(
+            query="Progress test",
+            course_title="Progress 101",
+            user_id="user-1",
+        )
+        node_ids = []
+        for index in range(total_nodes):
+            node = self.manager.create_concept_node(
+                session_id=session["id"],
+                sequence_index=index,
+                title=f"Node {index}",
+                content_markdown="Content",
+                status=NodeStatus.LOCKED,
+            )
+            node_ids.append(node["id"])
+        return session["id"], node_ids
+
+    def test_calculate_progress_percent(self) -> None:
+        self.assertEqual(self.manager._calculate_progress_percent(0, 5), 0)
+        self.assertEqual(self.manager._calculate_progress_percent(3, 5), 60)
+        self.assertEqual(self.manager._calculate_progress_percent(5, 5), 100)
+
+    def test_update_session_progress_tracks_completion_and_last_active(self) -> None:
+        session_id, node_ids = self._create_session_with_nodes(total_nodes=5)
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE concept_nodes
+                SET status = ?
+                WHERE id IN (?, ?, ?)
+                """,
+                (
+                    NodeStatus.COMPLETED.value,
+                    node_ids[0],
+                    node_ids[1],
+                    node_ids[2],
+                ),
+            )
+            self.manager._update_session_progress(
+                session_id=session_id,
+                conn=conn,
+                last_active_node_id=node_ids[2],
+            )
+            conn.commit()
+
+            cursor.execute(
+                """
+                SELECT status, progress_percent, completed_at, last_active_node_id
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            partial_row = cursor.fetchone()
+            assert partial_row is not None
+            self.assertEqual(partial_row["status"], "in_progress")
+            self.assertEqual(partial_row["progress_percent"], 60)
+            self.assertIsNone(partial_row["completed_at"])
+            self.assertEqual(partial_row["last_active_node_id"], node_ids[2])
+
+            cursor.execute(
+                """
+                UPDATE concept_nodes
+                SET status = ?
+                WHERE learning_session_id = ?
+                """,
+                (NodeStatus.COMPLETED.value, session_id),
+            )
+            self.manager._update_session_progress(
+                session_id=session_id,
+                conn=conn,
+                last_active_node_id=node_ids[4],
+            )
+            conn.commit()
+
+            cursor.execute(
+                """
+                SELECT status, progress_percent, completed_at, last_active_node_id
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            complete_row = cursor.fetchone()
+            assert complete_row is not None
+            self.assertEqual(complete_row["status"], "completed")
+            self.assertEqual(complete_row["progress_percent"], 100)
+            self.assertIsNotNone(complete_row["completed_at"])
+            self.assertEqual(complete_row["last_active_node_id"], node_ids[4])
+        finally:
+            conn.close()
+
+    def test_node_timestamps_are_set_on_transitions(self) -> None:
+        session_id, node_ids = self._create_session_with_nodes(total_nodes=1)
+        node_id = node_ids[0]
+
+        first_transition = self.manager.update_node_status(
+            node_id, NodeStatus.VIEWING_EXPLANATION
+        )
+        self.assertIsNotNone(first_transition)
+
+        self.manager.update_node_status(node_id, NodeStatus.IN_QUIZ)
+        self.manager.update_node_status(node_id, NodeStatus.SHOWING_FEEDBACK)
+        completed_node = self.manager.update_node_status(node_id, NodeStatus.COMPLETED)
+        self.assertIsNotNone(completed_node)
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT started_at, completed_at
+                FROM concept_nodes
+                WHERE id = ?
+                """,
+                (node_id,),
+            )
+            node_row = cursor.fetchone()
+            assert node_row is not None
+            self.assertIsNotNone(node_row["started_at"])
+            self.assertIsNotNone(node_row["completed_at"])
+
+            cursor.execute(
+                """
+                SELECT status, progress_percent, completed_at, last_active_node_id
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            session_row = cursor.fetchone()
+            assert session_row is not None
+            self.assertEqual(session_row["status"], "completed")
+            self.assertEqual(session_row["progress_percent"], 100)
+            self.assertIsNotNone(session_row["completed_at"])
+            self.assertEqual(session_row["last_active_node_id"], node_id)
+        finally:
+            conn.close()
