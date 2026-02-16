@@ -637,6 +637,71 @@ class RevisionSessionListResponse(BaseModel):
     total_count: int = Field(..., description="Total matching revisions", ge=0)
 
 
+class RevisionComparison(BaseModel):
+    """Performance comparison between revision and original attempts."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    original_quiz_score_percent: int = Field(
+        ...,
+        description="Original attempt quiz score percentage",
+        ge=0,
+        le=100,
+    )
+    improvement_percent: int = Field(
+        ...,
+        description="Signed percentage point improvement from original attempt",
+    )
+
+
+class RevisionSummary(BaseModel):
+    """Summary metrics for a revision session."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    revision_id: str = Field(..., description="Revision session identifier")
+    mode: RevisionMode = Field(..., description="Revision mode")
+    progress_percent: int = Field(..., description="Revision progress percentage")
+    total_quiz_score_percent: Optional[int] = Field(
+        default=None,
+        description="Overall quiz score percentage for revision attempts",
+    )
+    nodes_reviewed: int = Field(..., description="Completed revision nodes", ge=0)
+    nodes_total: int = Field(..., description="Total revision nodes", ge=0)
+    quizzes_passed: int = Field(..., description="Correct revision quiz attempts", ge=0)
+    quizzes_failed: int = Field(..., description="Incorrect revision quiz attempts", ge=0)
+    quizzes_total: int = Field(..., description="Total revision quiz attempts", ge=0)
+    time_spent_seconds: Optional[int] = Field(
+        default=None,
+        description="Seconds between revision start and completion",
+        ge=0,
+    )
+    comparison: Optional[RevisionComparison] = Field(
+        default=None,
+        description="Optional performance comparison against original attempts",
+    )
+
+
+class RevisionQuizSubmissionResult(BaseModel):
+    """Result payload for revision quiz submissions."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    is_correct: bool = Field(..., description="Whether selected option is correct")
+    correct_option_id: Optional[str] = Field(
+        default=None,
+        description="Correct option identifier",
+    )
+    explanation: Optional[str] = Field(
+        default=None,
+        description="Explanation for selected option",
+    )
+    revision_node_status: RevisionNodeStatus = Field(
+        ...,
+        description="Updated revision node status after submission",
+    )
+
+
 class QuizSubmission(BaseModel):
     """Payload for submitting quiz answers.
 

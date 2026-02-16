@@ -557,3 +557,111 @@ class TestLearningRouterRevisions(unittest.TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.json(), {"deleted": True})
         self.assertEqual(second.status_code, 404)
+
+    def test_mark_revision_node_reviewed_returns_200_with_payload(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.mark_revision_node_reviewed.return_value = {
+            "id": "progress-1",
+            "revision_session_id": "revision-1",
+            "node_id": "node-1",
+            "status": "reviewed",
+            "reviewed_at": "2026-02-16T00:00:00+00:00",
+        }
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/revisions/revision-1/nodes/node-1/mark-reviewed"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "reviewed")
+        fake_manager.mark_revision_node_reviewed.assert_called_once_with(
+            revision_id="revision-1",
+            node_id="node-1",
+        )
+
+    def test_mark_revision_node_reviewed_returns_400_for_quiz_only(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.mark_revision_node_reviewed.side_effect = ValueError(
+            "mark-reviewed is only allowed for full_review revisions"
+        )
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/revisions/revision-1/nodes/node-1/mark-reviewed"
+            )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_submit_revision_quiz_returns_quiz_result(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.submit_revision_quiz.return_value = {
+            "is_correct": True,
+            "correct_option_id": "opt-a",
+            "explanation": "Correct.",
+            "revision_node_status": "quiz_passed",
+        }
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/revisions/revision-1/nodes/node-1/submit-quiz",
+                json={"selected_option_id": "opt-a", "quiz_index": 0},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["is_correct"])
+        self.assertEqual(payload["revision_node_status"], "quiz_passed")
+        fake_manager.submit_revision_quiz.assert_called_once_with(
+            revision_id="revision-1",
+            node_id="node-1",
+            selected_option_id="opt-a",
+            quiz_index=0,
+        )
+
+    def test_submit_revision_quiz_returns_404_for_missing_revision(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.submit_revision_quiz.side_effect = LookupError(
+            "Revision session not found"
+        )
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.post(
+                "/learning/revisions/missing/nodes/node-1/submit-quiz",
+                json={"selected_option_id": "opt-a"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_get_revision_summary_returns_complete_metrics(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_revision_summary.return_value = {
+            "revision_id": "revision-1",
+            "mode": "full_review",
+            "progress_percent": 100,
+            "total_quiz_score_percent": 75,
+            "nodes_reviewed": 4,
+            "nodes_total": 4,
+            "quizzes_passed": 3,
+            "quizzes_failed": 1,
+            "quizzes_total": 4,
+            "time_spent_seconds": 120,
+            "comparison": {
+                "original_quiz_score_percent": 50,
+                "improvement_percent": 25,
+            },
+        }
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get("/learning/revisions/revision-1/summary")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["progress_percent"], 100)
+        self.assertEqual(payload["comparison"]["improvement_percent"], 25)

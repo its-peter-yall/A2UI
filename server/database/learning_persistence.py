@@ -832,6 +832,386 @@ class LearningManager:
         finally:
             conn.close()
 
+    def mark_revision_node_reviewed(
+        self,
+        revision_id: str,
+        node_id: str,
+    ) -> Dict[str, Any]:
+        """Mark a revision node as reviewed for full-review sessions."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, mode
+                FROM revision_sessions
+                WHERE id = ?
+                """,
+                (revision_id,),
+            )
+            revision_row = cursor.fetchone()
+            if revision_row is None:
+                raise LookupError(f"Revision session not found: {revision_id}")
+            if revision_row["mode"] != "full_review":
+                raise ValueError(
+                    "mark-reviewed is only allowed for full_review revisions"
+                )
+
+            now = datetime.now(timezone.utc).isoformat()
+            cursor.execute(
+                """
+                UPDATE revision_node_progress
+                SET status = 'reviewed', reviewed_at = ?
+                WHERE revision_session_id = ? AND node_id = ?
+                """,
+                (now, revision_id, node_id),
+            )
+            if cursor.rowcount == 0:
+                raise LookupError(
+                    f"Revision node not found for revision {revision_id}: {node_id}"
+                )
+
+            self._update_revision_progress(revision_id, conn)
+            cursor.execute(
+                """
+                SELECT id, revision_session_id, node_id, status, reviewed_at
+                FROM revision_node_progress
+                WHERE revision_session_id = ? AND node_id = ?
+                """,
+                (revision_id, node_id),
+            )
+            row = cursor.fetchone()
+            conn.commit()
+            if row is None:
+                raise LookupError(
+                    f"Revision node not found for revision {revision_id}: {node_id}"
+                )
+
+            return {
+                "id": row["id"],
+                "revision_session_id": row["revision_session_id"],
+                "node_id": row["node_id"],
+                "status": row["status"],
+                "reviewed_at": row["reviewed_at"],
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error marking revision node reviewed: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def submit_revision_quiz(
+        self,
+        revision_id: str,
+        node_id: str,
+        selected_option_id: str,
+        quiz_index: int = 0,
+    ) -> Dict[str, Any]:
+        """Submit quiz answer for a revision node and track progress."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id
+                FROM revision_sessions
+                WHERE id = ?
+                """,
+                (revision_id,),
+            )
+            if cursor.fetchone() is None:
+                raise LookupError(f"Revision session not found: {revision_id}")
+
+            cursor.execute(
+                """
+                SELECT status
+                FROM revision_node_progress
+                WHERE revision_session_id = ? AND node_id = ?
+                """,
+                (revision_id, node_id),
+            )
+            progress_row = cursor.fetchone()
+            if progress_row is None:
+                raise LookupError(
+                    f"Revision node not found for revision {revision_id}: {node_id}"
+                )
+
+            quiz_result = self.create_quiz_attempt(
+                node_id=node_id,
+                selected_option_id=selected_option_id,
+                quiz_index=quiz_index,
+                revision_session_id=revision_id,
+            )
+
+            next_status = "quiz_passed" if quiz_result["is_correct"] else "quiz_failed"
+            if progress_row["status"] == "quiz_passed":
+                next_status = "quiz_passed"
+
+            now = datetime.now(timezone.utc).isoformat()
+            cursor.execute(
+                """
+                UPDATE revision_node_progress
+                SET status = ?,
+                    reviewed_at = CASE
+                        WHEN ? = 'quiz_passed'
+                            THEN COALESCE(reviewed_at, ?)
+                        ELSE reviewed_at
+                    END
+                WHERE revision_session_id = ? AND node_id = ?
+                """,
+                (next_status, next_status, now, revision_id, node_id),
+            )
+
+            self._update_revision_progress(revision_id, conn)
+            conn.commit()
+            return {
+                "is_correct": bool(quiz_result["is_correct"]),
+                "correct_option_id": quiz_result.get("correct_option_id"),
+                "explanation": quiz_result.get("explanation"),
+                "revision_node_status": next_status,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error submitting revision quiz: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def _update_revision_progress(
+        self,
+        revision_id: str,
+        conn: Optional[sqlite3.Connection] = None,
+    ) -> Dict[str, Any]:
+        """Recalculate and persist revision-level progress metadata."""
+        owns_connection = conn is None
+        active_conn = conn or self._get_connection()
+        try:
+            cursor = active_conn.cursor()
+            cursor.execute(
+                """
+                SELECT id
+                FROM revision_sessions
+                WHERE id = ?
+                """,
+                (revision_id,),
+            )
+            if cursor.fetchone() is None:
+                raise LookupError(f"Revision session not found: {revision_id}")
+
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_nodes,
+                    SUM(CASE WHEN status != 'pending' THEN 1 ELSE 0 END)
+                        AS completed_nodes,
+                    SUM(CASE WHEN status = 'quiz_passed' THEN 1 ELSE 0 END)
+                        AS quizzes_passed,
+                    SUM(CASE WHEN status = 'quiz_failed' THEN 1 ELSE 0 END)
+                        AS quizzes_failed
+                FROM revision_node_progress
+                WHERE revision_session_id = ?
+                """,
+                (revision_id,),
+            )
+            row = cursor.fetchone()
+            total_nodes = int(row["total_nodes"] or 0) if row else 0
+            completed_nodes = int(row["completed_nodes"] or 0) if row else 0
+            quizzes_passed = int(row["quizzes_passed"] or 0) if row else 0
+            quizzes_failed = int(row["quizzes_failed"] or 0) if row else 0
+
+            progress_percent = self._calculate_progress_percent(
+                completed_nodes=completed_nodes,
+                total_nodes=total_nodes,
+            )
+            quiz_attempted = quizzes_passed + quizzes_failed
+            total_quiz_score_percent = (
+                (quizzes_passed * 100) // quiz_attempted if quiz_attempted > 0 else None
+            )
+            revision_status = (
+                "completed"
+                if total_nodes > 0 and completed_nodes >= total_nodes
+                else "in_progress"
+            )
+            now = datetime.now(timezone.utc).isoformat()
+
+            cursor.execute(
+                """
+                UPDATE revision_sessions
+                SET status = ?,
+                    progress_percent = ?,
+                    total_quiz_score_percent = ?,
+                    completed_at = CASE
+                        WHEN ? = 'completed'
+                            THEN COALESCE(completed_at, ?)
+                        ELSE completed_at
+                    END
+                WHERE id = ?
+                """,
+                (
+                    revision_status,
+                    progress_percent,
+                    total_quiz_score_percent,
+                    revision_status,
+                    now,
+                    revision_id,
+                ),
+            )
+
+            if owns_connection:
+                active_conn.commit()
+
+            return {
+                "revision_id": revision_id,
+                "status": revision_status,
+                "progress_percent": progress_percent,
+                "total_quiz_score_percent": total_quiz_score_percent,
+            }
+        finally:
+            if owns_connection:
+                active_conn.close()
+
+    def get_revision_summary(self, revision_id: str) -> Dict[str, Any]:
+        """Return summary metrics for a revision session."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    mode,
+                    progress_percent,
+                    total_quiz_score_percent,
+                    started_at,
+                    completed_at
+                FROM revision_sessions
+                WHERE id = ?
+                """,
+                (revision_id,),
+            )
+            revision_row = cursor.fetchone()
+            if revision_row is None:
+                raise LookupError(f"Revision session not found: {revision_id}")
+
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS nodes_total,
+                    SUM(CASE WHEN status != 'pending' THEN 1 ELSE 0 END)
+                        AS nodes_reviewed
+                FROM revision_node_progress
+                WHERE revision_session_id = ?
+                """,
+                (revision_id,),
+            )
+            nodes_row = cursor.fetchone()
+            nodes_total = int(nodes_row["nodes_total"] or 0) if nodes_row else 0
+            nodes_reviewed = (
+                int(nodes_row["nodes_reviewed"] or 0) if nodes_row else 0
+            )
+
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS quizzes_total,
+                    SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END)
+                        AS quizzes_passed
+                FROM quiz_attempts
+                WHERE revision_session_id = ?
+                """,
+                (revision_id,),
+            )
+            revision_attempts_row = cursor.fetchone()
+            quizzes_total = (
+                int(revision_attempts_row["quizzes_total"] or 0)
+                if revision_attempts_row
+                else 0
+            )
+            quizzes_passed = (
+                int(revision_attempts_row["quizzes_passed"] or 0)
+                if revision_attempts_row
+                else 0
+            )
+            quizzes_failed = max(quizzes_total - quizzes_passed, 0)
+
+            revision_quiz_score_percent = (
+                (quizzes_passed * 100) // quizzes_total
+                if quizzes_total > 0
+                else None
+            )
+            total_quiz_score_percent = (
+                revision_quiz_score_percent
+                if revision_quiz_score_percent is not None
+                else revision_row["total_quiz_score_percent"]
+            )
+
+            cursor.execute(
+                """
+                SELECT node_id
+                FROM revision_node_progress
+                WHERE revision_session_id = ?
+                """,
+                (revision_id,),
+            )
+            node_ids = [row["node_id"] for row in cursor.fetchall()]
+
+            comparison = None
+            if quizzes_total > 0 and node_ids:
+                placeholders = ",".join("?" for _ in node_ids)
+                cursor.execute(
+                    f"""
+                    SELECT
+                        COUNT(*) AS quizzes_total,
+                        SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END)
+                            AS quizzes_passed
+                    FROM quiz_attempts
+                    WHERE revision_session_id IS NULL
+                      AND node_id IN ({placeholders})
+                    """,
+                    tuple(node_ids),
+                )
+                original_row = cursor.fetchone()
+                original_total = int(original_row["quizzes_total"] or 0)
+                if original_total > 0 and revision_quiz_score_percent is not None:
+                    original_passed = int(original_row["quizzes_passed"] or 0)
+                    original_score = (original_passed * 100) // original_total
+                    comparison = {
+                        "original_quiz_score_percent": original_score,
+                        "improvement_percent": (
+                            revision_quiz_score_percent - original_score
+                        ),
+                    }
+
+            started_at = revision_row["started_at"]
+            completed_at = revision_row["completed_at"]
+            time_spent_seconds = None
+            if started_at and completed_at:
+                try:
+                    started_dt = datetime.fromisoformat(str(started_at))
+                    completed_dt = datetime.fromisoformat(str(completed_at))
+                    delta_seconds = int((completed_dt - started_dt).total_seconds())
+                    time_spent_seconds = max(delta_seconds, 0)
+                except ValueError:
+                    time_spent_seconds = None
+
+            return {
+                "revision_id": revision_row["id"],
+                "mode": revision_row["mode"],
+                "progress_percent": int(revision_row["progress_percent"] or 0),
+                "total_quiz_score_percent": total_quiz_score_percent,
+                "nodes_reviewed": nodes_reviewed,
+                "nodes_total": nodes_total,
+                "quizzes_passed": quizzes_passed,
+                "quizzes_failed": quizzes_failed,
+                "quizzes_total": quizzes_total,
+                "time_spent_seconds": time_spent_seconds,
+                "comparison": comparison,
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error getting revision summary: {e}")
+            raise
+        finally:
+            conn.close()
+
     def create_concept_node(
         self,
         session_id: str,
@@ -1664,6 +2044,7 @@ class LearningManager:
         node_id: str,
         selected_option_id: str,
         quiz_index: int = 0,
+        revision_session_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Record a quiz attempt and return result with mastery status.
 
@@ -1674,6 +2055,7 @@ class LearningManager:
             node_id: The concept node identifier
             selected_option_id: The selected option UUID (stable ID)
             quiz_index: Index of quiz in set (0-based, default 0)
+            revision_session_id: Optional revision session identifier
 
         Returns:
             Dict with attempt details including is_correct, score_percent,
@@ -1740,9 +2122,9 @@ class LearningManager:
                 """
                 INSERT INTO quiz_attempts (
                     id, node_id, attempt_number, quiz_index, selected_option_id,
-                    is_correct, score_percent, created_at
+                    revision_session_id, is_correct, score_percent, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     attempt_id,
@@ -1750,6 +2132,7 @@ class LearningManager:
                     attempt_number,
                     quiz_index,
                     selected_option_id,
+                    revision_session_id,
                     1 if is_correct else 0,
                     score_percent,
                     now,

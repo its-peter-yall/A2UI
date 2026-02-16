@@ -72,6 +72,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from typing import Dict, List
 
 from server.database.learning_persistence import LearningManager
 from server.schemas.learning import (
@@ -2071,6 +2072,291 @@ class TestRevisionSessionPersistence(unittest.TestCase):
             self.assertEqual(row["count"], 0)
         finally:
             conn.close()
+
+
+class TestRevisionProgressAndSummary(unittest.TestCase):
+    """Tests revision progress tracking and summary metrics."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "revision_progress_learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _make_node_quiz(self, prefix: str, correct_label: str = "A") -> QuizCard:
+        options = []
+        for label in ("A", "B", "C", "D"):
+            options.append(
+                QuizOption(
+                    option_id=_make_stable_uuid(f"{prefix}-{label}"),
+                    display_label=label,
+                    text=f"{prefix} option {label}",
+                    is_correct=label == correct_label,
+                    explanation=f"{prefix} explanation {label}",
+                )
+            )
+        return QuizCard(
+            question_text=f"Question for {prefix}",
+            options=options,
+            difficulty=QuizDifficulty.MEDIUM,
+        )
+
+    def _create_completed_session_with_quizzes(
+        self,
+        node_count: int = 2,
+    ) -> tuple[str, List[Dict[str, str]]]:
+        session = self.manager.create_learning_session(
+            query="Revision progress topic",
+            course_title="Revision progress course",
+            user_id="user-1",
+        )
+        node_infos: List[Dict[str, str]] = []
+        for index in range(node_count):
+            quiz = self._make_node_quiz(f"node-{index}", correct_label="A")
+            created = self.manager.create_concept_node(
+                session_id=session["id"],
+                sequence_index=index,
+                title=f"Node {index}",
+                content_markdown=f"Content {index}",
+                status=NodeStatus.COMPLETED,
+                quiz=quiz,
+            )
+            correct_option_id = next(
+                option.option_id for option in quiz.options if option.is_correct
+            )
+            incorrect_option_id = next(
+                option.option_id for option in quiz.options if not option.is_correct
+            )
+            node_infos.append(
+                {
+                    "id": created["id"],
+                    "correct_option_id": correct_option_id,
+                    "incorrect_option_id": incorrect_option_id,
+                }
+            )
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE learning_sessions
+                SET status = 'completed',
+                    progress_percent = 100,
+                    completed_at = '2026-02-16T00:00:00+00:00'
+                WHERE id = ?
+                """,
+                (session["id"],),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return session["id"], node_infos
+
+    def test_mark_reviewed_updates_progress_and_auto_completes(self) -> None:
+        session_id, node_infos = self._create_completed_session_with_quizzes(2)
+        revision = self.manager.create_revision_session(session_id, mode="full_review")
+
+        first = self.manager.mark_revision_node_reviewed(
+            revision_id=revision["id"],
+            node_id=node_infos[0]["id"],
+        )
+        self.assertEqual(first["status"], "reviewed")
+        self.assertIsNotNone(first["reviewed_at"])
+
+        mid = self.manager.get_revision_session(revision["id"])
+        self.assertIsNotNone(mid)
+        assert mid is not None
+        self.assertEqual(mid["progress_percent"], 50)
+        self.assertEqual(mid["status"], "in_progress")
+
+        second = self.manager.mark_revision_node_reviewed(
+            revision_id=revision["id"],
+            node_id=node_infos[1]["id"],
+        )
+        self.assertEqual(second["status"], "reviewed")
+
+        done = self.manager.get_revision_session(revision["id"])
+        self.assertIsNotNone(done)
+        assert done is not None
+        self.assertEqual(done["progress_percent"], 100)
+        self.assertEqual(done["status"], "completed")
+        self.assertIsNotNone(done["completed_at"])
+
+    def test_mark_reviewed_rejected_for_quiz_only_mode(self) -> None:
+        session_id, node_infos = self._create_completed_session_with_quizzes(1)
+        revision = self.manager.create_revision_session(session_id, mode="quiz_only")
+
+        with self.assertRaises(ValueError):
+            self.manager.mark_revision_node_reviewed(
+                revision_id=revision["id"],
+                node_id=node_infos[0]["id"],
+            )
+
+    def test_submit_revision_quiz_tracks_attempts_and_retry_status(self) -> None:
+        session_id, node_infos = self._create_completed_session_with_quizzes(1)
+        revision = self.manager.create_revision_session(session_id, mode="full_review")
+        node_info = node_infos[0]
+
+        failed = self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["incorrect_option_id"],
+        )
+        self.assertFalse(failed["is_correct"])
+        self.assertEqual(failed["revision_node_status"], "quiz_failed")
+
+        failed_retry = self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["incorrect_option_id"],
+        )
+        self.assertEqual(failed_retry["revision_node_status"], "quiz_failed")
+
+        passed = self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+        self.assertTrue(passed["is_correct"])
+        self.assertEqual(passed["revision_node_status"], "quiz_passed")
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT revision_session_id, is_correct
+                FROM quiz_attempts
+                WHERE node_id = ?
+                ORDER BY attempt_number ASC
+                """,
+                (node_info["id"],),
+            )
+            rows = cursor.fetchall()
+            self.assertEqual(len(rows), 3)
+            self.assertTrue(all(row["revision_session_id"] == revision["id"] for row in rows))
+            self.assertEqual([row["is_correct"] for row in rows], [0, 0, 1])
+        finally:
+            conn.close()
+
+        updated_revision = self.manager.get_revision_session(revision["id"])
+        self.assertIsNotNone(updated_revision)
+        assert updated_revision is not None
+        self.assertEqual(updated_revision["progress_percent"], 100)
+        self.assertEqual(updated_revision["status"], "completed")
+
+    def test_get_revision_summary_positive_improvement_with_time_spent(self) -> None:
+        session_id, node_infos = self._create_completed_session_with_quizzes(1)
+        node_info = node_infos[0]
+
+        self.manager.create_quiz_attempt(
+            node_id=node_info["id"],
+            selected_option_id=node_info["incorrect_option_id"],
+        )
+        self.manager.create_quiz_attempt(
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+
+        revision = self.manager.create_revision_session(session_id, mode="full_review")
+        self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE revision_sessions
+                SET started_at = ?, completed_at = ?, status = 'completed'
+                WHERE id = ?
+                """,
+                (
+                    "2026-02-16T00:00:00+00:00",
+                    "2026-02-16T00:01:30+00:00",
+                    revision["id"],
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        summary = self.manager.get_revision_summary(revision["id"])
+        self.assertEqual(summary["progress_percent"], 100)
+        self.assertEqual(summary["nodes_reviewed"], 1)
+        self.assertEqual(summary["nodes_total"], 1)
+        self.assertEqual(summary["quizzes_total"], 1)
+        self.assertEqual(summary["quizzes_passed"], 1)
+        self.assertEqual(summary["quizzes_failed"], 0)
+        self.assertEqual(summary["total_quiz_score_percent"], 100)
+        self.assertEqual(summary["time_spent_seconds"], 90)
+        self.assertIsNotNone(summary["comparison"])
+        assert summary["comparison"] is not None
+        self.assertEqual(summary["comparison"]["original_quiz_score_percent"], 50)
+        self.assertEqual(summary["comparison"]["improvement_percent"], 50)
+
+    def test_get_revision_summary_negative_improvement(self) -> None:
+        session_id, node_infos = self._create_completed_session_with_quizzes(1)
+        node_info = node_infos[0]
+
+        self.manager.create_quiz_attempt(
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+        revision = self.manager.create_revision_session(session_id, mode="full_review")
+        self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["incorrect_option_id"],
+        )
+
+        summary = self.manager.get_revision_summary(revision["id"])
+        self.assertEqual(summary["total_quiz_score_percent"], 0)
+        self.assertIsNotNone(summary["comparison"])
+        assert summary["comparison"] is not None
+        self.assertEqual(summary["comparison"]["original_quiz_score_percent"], 100)
+        self.assertEqual(summary["comparison"]["improvement_percent"], -100)
+
+    def test_get_revision_summary_zero_improvement(self) -> None:
+        session_id, node_infos = self._create_completed_session_with_quizzes(1)
+        node_info = node_infos[0]
+
+        self.manager.create_quiz_attempt(
+            node_id=node_info["id"],
+            selected_option_id=node_info["incorrect_option_id"],
+        )
+        self.manager.create_quiz_attempt(
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+        revision = self.manager.create_revision_session(session_id, mode="full_review")
+        self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["incorrect_option_id"],
+        )
+        self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+
+        summary = self.manager.get_revision_summary(revision["id"])
+        self.assertEqual(summary["total_quiz_score_percent"], 50)
+        self.assertEqual(summary["quizzes_total"], 2)
+        self.assertEqual(summary["quizzes_passed"], 1)
+        self.assertEqual(summary["quizzes_failed"], 1)
+        self.assertIsNotNone(summary["comparison"])
+        assert summary["comparison"] is not None
+        self.assertEqual(summary["comparison"]["original_quiz_score_percent"], 50)
+        self.assertEqual(summary["comparison"]["improvement_percent"], 0)
 
 
 class TestRevisionQuizAttemptsMigration(unittest.TestCase):

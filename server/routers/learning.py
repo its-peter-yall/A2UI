@@ -87,9 +87,12 @@ from server.schemas.learning import (
     QuizAttemptHistory,
     QuizAttemptResponse,
     RevisionCreateRequest,
+    RevisionNodeProgress,
+    RevisionQuizSubmissionResult,
     RevisionSessionListResponse,
     RevisionSessionResponse,
     RevisionSessionWithProgress,
+    RevisionSummary,
     SessionProgress,
     SessionListResponse,
 )
@@ -542,6 +545,103 @@ def delete_revision(revision_id: str) -> DeleteRevisionResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete revision session: {str(e)}",
+        )
+
+
+@router.post(
+    "/revisions/{revision_id}/nodes/{node_id}/mark-reviewed",
+    response_model=RevisionNodeProgress,
+    summary="Mark revision node reviewed",
+    description="Mark a revision node as reviewed in full_review mode.",
+)
+def mark_revision_node_reviewed(
+    revision_id: str,
+    node_id: str,
+) -> RevisionNodeProgress:
+    """Mark a revision node as reviewed."""
+    try:
+        progress = learning_manager.mark_revision_node_reviewed(
+            revision_id=revision_id,
+            node_id=node_id,
+        )
+        return RevisionNodeProgress(**progress)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error marking revision node reviewed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to mark revision node reviewed: {str(e)}",
+        )
+
+
+@router.post(
+    "/revisions/{revision_id}/nodes/{node_id}/submit-quiz",
+    response_model=RevisionQuizSubmissionResult,
+    summary="Submit revision quiz answer",
+    description="Submit a quiz answer for a node in a revision session.",
+)
+def submit_revision_quiz(
+    revision_id: str,
+    node_id: str,
+    request: QuizSubmitRequest,
+) -> RevisionQuizSubmissionResult:
+    """Submit a revision quiz answer and return evaluation result."""
+    try:
+        result = learning_manager.submit_revision_quiz(
+            revision_id=revision_id,
+            node_id=node_id,
+            selected_option_id=request.selected_option_id,
+            quiz_index=request.quiz_index,
+        )
+        return RevisionQuizSubmissionResult(**result)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error submitting revision quiz: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit revision quiz: {str(e)}",
+        )
+
+
+@router.get(
+    "/revisions/{revision_id}/summary",
+    response_model=RevisionSummary,
+    summary="Get revision summary",
+    description="Get aggregate progress and quiz metrics for a revision session.",
+)
+def get_revision_summary(revision_id: str) -> RevisionSummary:
+    """Get summary metrics for a revision session."""
+    try:
+        summary = learning_manager.get_revision_summary(revision_id)
+        return RevisionSummary(**summary)
+    except LookupError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"Error getting revision summary: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get revision summary: {str(e)}",
         )
 
 
