@@ -2,16 +2,56 @@
 // Tests for CourseCard component rendering and interactions
 
 // Validates both in-progress and completed states, action button callbacks,
-// progress bar width, revision badge visibility, and last active node display.
+// progress bar width, revision history section visibility, and last active
+// node display.
 
 // @see: client/src/features/learning/CourseCard.tsx
+// @see: client/src/features/learning/RevisionHistoryList.tsx
 // @see: client/src/types/learning.ts (LearningSessionSummary)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 import { CourseCard } from './CourseCard';
 import type { LearningSessionSummary } from '@/types/learning';
+
+// Mock learningApi for RevisionHistoryList lazy loading
+vi.mock('@/lib/learningApi', () => ({
+  getRevisionsList: vi.fn(),
+}));
+
+// Mock framer-motion to avoid animation issues in tests
+vi.mock('framer-motion', () => ({
+  motion: {
+    article: ({ children, ...props }: Record<string, unknown>) => {
+      const filtered: Record<string, unknown> = {};
+      const motionKeys = ['variants', 'initial', 'animate', 'exit', 'custom',
+        'transition', 'whileHover', 'whileTap', 'layout'];
+      for (const [key, value] of Object.entries(props)) {
+        if (!motionKeys.includes(key)) {
+          filtered[key] = value;
+        }
+      }
+      return <article {...filtered}>{children as ReactNode}</article>;
+    },
+    div: ({ children, ...props }: Record<string, unknown>) => {
+      const filtered: Record<string, unknown> = {};
+      const motionKeys = ['variants', 'initial', 'animate', 'exit', 'custom',
+        'transition', 'whileHover', 'whileTap', 'layout'];
+      for (const [key, value] of Object.entries(props)) {
+        if (!motionKeys.includes(key)) {
+          filtered[key] = value;
+        }
+      }
+      return <div {...filtered}>{children as ReactNode}</div>;
+    },
+  },
+  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+import * as api from '@/lib/learningApi';
 
 const mockInProgressSession: LearningSessionSummary = {
   id: 'session-1',
@@ -43,9 +83,23 @@ const mockCompletedSession: LearningSessionSummary = {
   revision_count: 2,
 };
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 describe('CourseCard', () => {
   const defaultOnResume = vi.fn();
   const defaultOnRevise = vi.fn();
+  const defaultOnViewRevision = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -57,7 +111,8 @@ describe('CourseCard', () => {
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('Quantum Computing Fundamentals')).toBeInTheDocument();
@@ -74,7 +129,8 @@ describe('CourseCard', () => {
         session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('Machine Learning Essentials')).toBeInTheDocument();
@@ -88,7 +144,8 @@ describe('CourseCard', () => {
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     fireEvent.click(screen.getByText('Resume Course'));
@@ -102,7 +159,8 @@ describe('CourseCard', () => {
         session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     fireEvent.click(screen.getByText('Revise Course'));
@@ -116,7 +174,8 @@ describe('CourseCard', () => {
         session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     fireEvent.click(screen.getByText('Practice Quizzes'));
@@ -130,53 +189,87 @@ describe('CourseCard', () => {
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText('60%')).toBeInTheDocument();
     expect(screen.getByText('3/5 topics completed')).toBeInTheDocument();
   });
 
-  it('revision count badge hidden when 0', () => {
+  it('revision history section hidden when revision_count is 0', () => {
     render(
       <CourseCard
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
-    expect(screen.queryByTestId('revision-badge')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('revision-history-section')).not.toBeInTheDocument();
   });
 
-  it('revision count badge shown when > 0', () => {
+  it('revision history section shown when revision_count > 0', () => {
     render(
       <CourseCard
         session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+        onViewRevision={defaultOnViewRevision}
+      />,
+      { wrapper: createWrapper() }
     );
 
-    expect(screen.getByTestId('revision-badge')).toBeInTheDocument();
-    expect(screen.getByText('Revised 2 times')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-history-section')).toBeInTheDocument();
+    expect(screen.getByText('Revision History')).toBeInTheDocument();
   });
 
-  it('shows singular "time" when revision_count is 1', () => {
-    const sessionWithOneRevision: LearningSessionSummary = {
-      ...mockCompletedSession,
-      revision_count: 1,
-    };
+  it('revision history is expandable when revision_count > 0', async () => {
+    (api.getRevisionsList as ReturnType<typeof vi.fn>).mockResolvedValue({
+      revisions: [
+        {
+          id: 'rev-1',
+          original_session_id: 'session-2',
+          revision_number: 1,
+          mode: 'full_review',
+          status: 'completed',
+          progress_percent: 100,
+          total_quiz_score_percent: 85,
+          started_at: '2025-02-10T10:00:00Z',
+          completed_at: '2025-02-10T10:30:00Z',
+        },
+      ],
+      total_count: 1,
+    });
 
     render(
       <CourseCard
-        session={sessionWithOneRevision}
+        session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+        onViewRevision={defaultOnViewRevision}
+      />,
+      { wrapper: createWrapper() }
     );
 
-    expect(screen.getByText('Revised 1 time')).toBeInTheDocument();
+    // Toggle should be collapsed
+    const toggle = screen.getByTestId('revision-history-toggle');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    // Click to expand
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    // Should fetch revisions
+    await waitFor(() => {
+      expect(api.getRevisionsList).toHaveBeenCalledWith('session-2');
+    });
+
+    // Should show revision row
+    await waitFor(() => {
+      expect(screen.getByTestId('revision-row')).toBeInTheDocument();
+    });
   });
 
   it('last active node title shown for in-progress', () => {
@@ -185,7 +278,8 @@ describe('CourseCard', () => {
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.getByText("Newton's Third Law")).toBeInTheDocument();
@@ -198,7 +292,8 @@ describe('CourseCard', () => {
         session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.queryByText('Last active:')).not.toBeInTheDocument();
@@ -210,7 +305,8 @@ describe('CourseCard', () => {
         session={mockCompletedSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.queryByText('Resume Course')).not.toBeInTheDocument();
@@ -222,7 +318,8 @@ describe('CourseCard', () => {
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     expect(screen.queryByText('Revise Course')).not.toBeInTheDocument();
@@ -235,7 +332,8 @@ describe('CourseCard', () => {
         session={mockInProgressSession}
         onResume={defaultOnResume}
         onRevise={defaultOnRevise}
-      />
+      />,
+      { wrapper: createWrapper() }
     );
 
     const progressBar = screen.getByRole('progressbar');

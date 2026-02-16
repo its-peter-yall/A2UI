@@ -2,9 +2,10 @@
 // Integration tests for RevisionPage component
 
 // Tests header rendering for both modes, data loading, navigation,
-// and revision-specific progress bar.
+// revision-specific progress bar, and completion summary modal.
 
 // @see: RevisionPage.tsx
+// @see: RevisionSummaryModal.tsx
 // @see: LearningPage.test.tsx (pattern reference)
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -16,12 +17,15 @@ import type {
   LearningSessionWithNodes,
   RevisionSessionWithProgress,
   RevisionNodeProgressWithDetails,
+  RevisionSummary,
 } from '@/types/learning';
 
 // Mock learningApi
 vi.mock('@/lib/learningApi', () => ({
   getLearningSession: vi.fn(),
   getRevisionSession: vi.fn(),
+  getRevisionSummary: vi.fn(),
+  createRevisionSession: vi.fn(),
   markNodeReviewed: vi.fn(),
   submitRevisionQuiz: vi.fn(),
 }));
@@ -399,6 +403,116 @@ describe('RevisionPage', () => {
       render(<RevisionPage />, { wrapper: createWrapper() });
 
       expect(await screen.findByText('Topic 1 of 2')).toBeInTheDocument();
+    });
+  });
+
+  describe('Completion summary modal', () => {
+    const mockSummary: RevisionSummary = {
+      revision_id: 'revision-1',
+      mode: 'full_review',
+      progress_percent: 100,
+      total_quiz_score_percent: 90,
+      nodes_reviewed: 2,
+      nodes_total: 2,
+      quizzes_passed: 2,
+      quizzes_failed: 0,
+      quizzes_total: 2,
+      time_spent_seconds: 180,
+      comparison: {
+        original_quiz_score_percent: 70,
+        improvement_percent: 20,
+      },
+    };
+
+    it('shows summary modal when revision is completed', async () => {
+      const originalSession = createOriginalSession();
+      const completedRevision = createRevisionSession({
+        status: 'completed',
+        progress_percent: 100,
+        nodes: createRevisionNodes([
+          { nodeId: 'node-0', status: 'quiz_passed' },
+          { nodeId: 'node-1', status: 'quiz_passed' },
+        ]),
+      });
+
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(originalSession);
+      (api.getRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue(completedRevision);
+      (api.getRevisionSummary as ReturnType<typeof vi.fn>).mockResolvedValue(mockSummary);
+
+      render(<RevisionPage />, { wrapper: createWrapper() });
+
+      // Wait for summary modal to appear
+      await waitFor(() => {
+        expect(api.getRevisionSummary).toHaveBeenCalledWith('revision-1');
+      });
+
+      expect(await screen.findByText('Revision Complete!')).toBeInTheDocument();
+    });
+
+    it('renders summary data correctly in the modal', async () => {
+      const originalSession = createOriginalSession();
+      const completedRevision = createRevisionSession({
+        status: 'completed',
+        progress_percent: 100,
+        nodes: createRevisionNodes([
+          { nodeId: 'node-0', status: 'quiz_passed' },
+          { nodeId: 'node-1', status: 'quiz_passed' },
+        ]),
+      });
+
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(originalSession);
+      (api.getRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue(completedRevision);
+      (api.getRevisionSummary as ReturnType<typeof vi.fn>).mockResolvedValue(mockSummary);
+
+      render(<RevisionPage />, { wrapper: createWrapper() });
+
+      // Wait for modal to render with summary data
+      expect(await screen.findByText('Revision Complete!')).toBeInTheDocument();
+      expect(screen.getByText('2/2')).toBeInTheDocument();
+      expect(screen.getByText('90%')).toBeInTheDocument();
+      expect(screen.getByText('Full Review')).toBeInTheDocument();
+    });
+
+    it('does not show summary modal when revision is in_progress', async () => {
+      const originalSession = createOriginalSession();
+      const inProgressRevision = createRevisionSession({
+        status: 'in_progress',
+      });
+
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(originalSession);
+      (api.getRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue(inProgressRevision);
+
+      render(<RevisionPage />, { wrapper: createWrapper() });
+
+      // Wait for the page to render
+      await screen.findByText('Test Course Title');
+
+      // Summary should NOT appear
+      expect(screen.queryByText('Revision Complete!')).not.toBeInTheDocument();
+      expect(api.getRevisionSummary).not.toHaveBeenCalled();
+    });
+
+    it('"Back to Dashboard" navigates to /learn', async () => {
+      const originalSession = createOriginalSession();
+      const completedRevision = createRevisionSession({
+        status: 'completed',
+        progress_percent: 100,
+        nodes: createRevisionNodes([
+          { nodeId: 'node-0', status: 'quiz_passed' },
+          { nodeId: 'node-1', status: 'quiz_passed' },
+        ]),
+      });
+
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(originalSession);
+      (api.getRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue(completedRevision);
+      (api.getRevisionSummary as ReturnType<typeof vi.fn>).mockResolvedValue(mockSummary);
+
+      render(<RevisionPage />, { wrapper: createWrapper() });
+
+      const dashboardBtn = await screen.findByTestId('back-to-dashboard-btn');
+      fireEvent.click(dashboardBtn);
+
+      expect(mockNavigate).toHaveBeenCalledWith('/learn');
     });
   });
 });

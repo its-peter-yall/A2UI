@@ -5,9 +5,10 @@
 // - In-progress: Shows progress bar, "Resume Course" button, last active topic
 // - Completed: Shows green checkmark, "Revise Course" and "Practice Quizzes" buttons
 // Key features include Cyber Yellow progress bar, glassmorphism styling,
-// Framer Motion hover animation, and revision count badge.
+// Framer Motion hover animation, and expandable revision history list.
 
 // @see: client/src/types/learning.ts (LearningSessionSummary)
+// @see: RevisionHistoryList.tsx (expandable revision history)
 // @see: conductor/product-guidelines.md (visual identity)
 // @note: onRevise accepts a mode param ('full_review' | 'quiz_only')
 
@@ -16,11 +17,13 @@ import { CheckCircle } from 'lucide-react';
 
 import type { LearningSessionSummary } from '@/types/learning';
 import { cn } from '@/lib/utils';
+import { RevisionHistoryList } from './RevisionHistoryList';
 
 export interface CourseCardProps {
   session: LearningSessionSummary;
   onResume: (sessionId: string) => void;
   onRevise: (sessionId: string, mode: 'full_review' | 'quiz_only') => void;
+  onViewRevision?: (revisionId: string) => void;
 }
 
 function formatDate(isoString: string): string {
@@ -31,7 +34,7 @@ function formatDate(isoString: string): string {
   });
 }
 
-export function CourseCard({ session, onResume, onRevise }: CourseCardProps) {
+export function CourseCard({ session, onResume, onRevise, onViewRevision }: CourseCardProps) {
   const isCompleted = session.status === 'completed';
 
   return (
@@ -148,16 +151,12 @@ export function CourseCard({ session, onResume, onRevise }: CourseCardProps) {
         </span>
       </div>
 
-      {/* Revision count badge */}
+      {/* Revision history section */}
       {session.revision_count > 0 && (
-        <div
-          className="border-t border-white/10 pt-2 mt-1"
-          data-testid="revision-badge"
-        >
-          <span className="text-xs text-primary font-medium">
-            Revised {session.revision_count} {session.revision_count === 1 ? 'time' : 'times'}
-          </span>
-        </div>
+        <RevisionHistoryList
+          sessionId={session.id}
+          onViewRevision={onViewRevision ?? (() => {})}
+        />
       )}
     </motion.article>
   );

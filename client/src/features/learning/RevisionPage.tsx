@@ -4,17 +4,19 @@
 
 // @see: LearningPage.tsx (original learning page)
 // @see: RevisionConceptCard.tsx (revision card component)
+// @see: RevisionSummaryModal.tsx (completion summary modal)
 // @see: useRevisionSession.ts, useRevisionMutations.ts (hooks)
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getLearningSession } from '@/lib/learningApi';
+import { getLearningSession, getRevisionSummary, createRevisionSession } from '@/lib/learningApi';
 import { useRevisionSession } from './useRevisionSession';
 import { useRevisionMutations } from './useRevisionMutations';
 import { RevisionConceptCard } from './RevisionConceptCard';
+import { RevisionSummaryModal } from './RevisionSummaryModal';
 import { cn } from '@/lib/utils';
 import {
   carouselSlideVariants,
@@ -69,6 +71,52 @@ export function RevisionPage() {
       console.error(`Revision mutation error (${context}):`, error);
     },
   });
+
+  // Completion summary modal state
+  const queryClient = useQueryClient();
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
+
+  // Fetch revision summary when revision is completed (via React Query)
+  const isCompleted = revisionSession?.status === 'completed';
+  const { data: summaryData } = useQuery({
+    queryKey: ['revision-summary', revisionId],
+    queryFn: () => getRevisionSummary(revisionId!),
+    enabled: !!revisionId && isCompleted && !summaryDismissed,
+    staleTime: Infinity,
+  });
+
+  // Derive whether to show modal from query result + dismissal flag
+  const showSummary = !!summaryData && !summaryDismissed;
+
+  // Invalidate course list when summary data first becomes available
+  useEffect(() => {
+    if (summaryData) {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    }
+  }, [summaryData, queryClient]);
+
+  // Summary modal actions
+  const handleBackToDashboard = useCallback(() => {
+    setSummaryDismissed(true);
+    navigate('/learn');
+  }, [navigate]);
+
+  const handleReviseAgain = useCallback(async () => {
+    if (!sessionId || !revisionSession) return;
+    try {
+      const newRevision = await createRevisionSession(sessionId, {
+        mode: revisionSession.mode,
+      });
+      setSummaryDismissed(true);
+      navigate(`/learn/${sessionId}/revision/${newRevision.id}`);
+    } catch (err) {
+      console.error('Failed to create new revision:', err);
+    }
+  }, [sessionId, revisionSession, navigate]);
+
+  const handleCloseSummary = useCallback(() => {
+    setSummaryDismissed(true);
+  }, []);
 
   // Carousel navigation
   const goToSlide = useCallback(
@@ -357,6 +405,16 @@ export function RevisionPage() {
       <footer className="border-t py-4 text-center text-sm text-muted-foreground">
         <p>Revision mode &mdash; your original progress is preserved</p>
       </footer>
+
+      {/* Revision summary modal */}
+      {showSummary && summaryData && (
+        <RevisionSummaryModal
+          revisionSummary={summaryData}
+          onClose={handleCloseSummary}
+          onReviseAgain={handleReviseAgain}
+          onBackToDashboard={handleBackToDashboard}
+        />
+      )}
     </div>
   );
 }

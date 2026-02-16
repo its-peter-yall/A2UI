@@ -30,6 +30,7 @@ vi.mock('@/lib/learningApi', () => ({
   regenerateNode: vi.fn(),
   getQuizAttempts: vi.fn(),
   getSessionsList: vi.fn(),
+  getRevisionsList: vi.fn(),
 }));
 
 // Mock react-router-dom navigation
