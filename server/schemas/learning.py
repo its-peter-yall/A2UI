@@ -528,6 +528,27 @@ class SessionListResponse(BaseModel):
     has_more: bool = Field(..., description="Whether more pages are available")
 
 
+class SessionProgress(BaseModel):
+    """Progress payload for a single learning session."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    progress_percent: int = Field(
+        ..., description="Session progress percentage", ge=0, le=100
+    )
+    status: str = Field(..., description="Session status")
+    completed_nodes: int = Field(..., description="Completed concept nodes", ge=0)
+    total_nodes: int = Field(..., description="Total concept nodes", ge=0)
+    last_active_node_id: Optional[str] = Field(
+        default=None,
+        description="Identifier of the last active node",
+    )
+    last_active_node_title: Optional[str] = Field(
+        default=None,
+        description="Title of the last active node",
+    )
+
+
 RevisionMode = Literal["full_review", "quiz_only"]
 RevisionSessionStatus = Literal["in_progress", "completed"]
 RevisionNodeStatus = Literal["pending", "reviewed", "quiz_passed", "quiz_failed"]

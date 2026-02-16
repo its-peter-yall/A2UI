@@ -1,29 +1,31 @@
-# Phase 10-01 Summary
+# Phase 10-02 Re-Run Summary
 
 ## Completed Work
-- Added `LearningSessionSummary` and `SessionListResponse` schemas in
-  `server/schemas/learning.py`.
-- Added `LearningManager.get_sessions_list(...)` in
-  `server/database/learning_persistence.py` with safe parameterization, status
-  filtering, sortable whitelisted order fields, pagination, node counts, last
-  active node title join, and revision count aggregation.
-- Added `GET /learning/sessions` endpoint in `server/routers/learning.py` with
-  query validation, limit capping (max 100), pagination `has_more`, and error
-  handling.
-- Added comprehensive schema, persistence, and router tests for session listing
-  behavior.
-- Updated `.planning/ROADMAP.md` Phase 10 status from `pending` to
-  `in_progress`.
+- Re-ran and executed `10-02-PLAN.md` end-to-end with autonomous flow.
+- Updated `server/database/learning_persistence.py`:
+  - Added `get_session_progress(session_id)` for explicit progress reads.
+  - Added `_update_last_active_node(session_id, node_id, conn)` helper.
+  - Updated `update_node_status(...)` to refresh progress on every transition
+    and update last-active node on `LOCKED -> VIEWING_EXPLANATION`.
+  - Updated `create_quiz_attempt(...)` to track last-active node on quiz
+    submission.
+  - Updated `_update_session_progress(...)` to return computed progress percent.
+- Updated `server/schemas/learning.py` with `SessionProgress` schema.
+- Updated `server/routers/learning.py` with
+  `GET /learning/sessions/{session_id}/progress` endpoint.
+- Expanded tests in:
+  - `server/tests/test_learning_persistence.py`
+  - `server/tests/test_learning_router.py`
+- Updated `.planning/ROADMAP.md` Phase 10 status to `completed` and synchronized
+  the v1.1 summary table status for Phase 10.
 
 ## Verification Evidence
-- `python -m unittest server.tests.test_learning_schemas -v`  
-  Result: **35 tests passed**
 - `python -m unittest server.tests.test_learning_persistence -v`  
-  Result: **54 tests passed**
+  Result: **58 tests passed**
 - `python -m unittest server.tests.test_learning_router -v`  
-  Result: **9 tests passed**
+  Result: **11 tests passed**
 - `python -m unittest`  
-  Result: **190 tests passed, 1 skipped**
+  Result: **196 tests passed, 1 skipped**
 
 ## Deviations
 - Plan verification commands were executed from repo root (`AgUI`) so Python

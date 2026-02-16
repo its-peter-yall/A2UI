@@ -384,3 +384,41 @@ class TestLearningRouterSessionListing(unittest.TestCase):
             limit=100,
             offset=0,
         )
+
+
+class TestLearningRouterSessionProgress(unittest.TestCase):
+    """Tests for GET /learning/sessions/{id}/progress endpoint."""
+
+    def test_get_learning_session_progress_returns_payload(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_session_progress.return_value = {
+            "progress_percent": 60,
+            "status": "in_progress",
+            "completed_nodes": 3,
+            "total_nodes": 5,
+            "last_active_node_id": "node-3",
+            "last_active_node_title": "Node 3",
+        }
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get("/learning/sessions/session-1/progress")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["progress_percent"], 60)
+        self.assertEqual(payload["completed_nodes"], 3)
+        self.assertEqual(payload["total_nodes"], 5)
+        self.assertEqual(payload["last_active_node_id"], "node-3")
+
+    def test_get_learning_session_progress_returns_404_for_missing_session(
+        self,
+    ) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_session_progress.return_value = None
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get("/learning/sessions/missing/progress")
+
+        self.assertEqual(response.status_code, 404)

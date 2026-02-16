@@ -1098,6 +1098,33 @@ class TestSessionProgressHelpers(unittest.TestCase):
         self.assertEqual(self.manager._calculate_progress_percent(0, 5), 0)
         self.assertEqual(self.manager._calculate_progress_percent(3, 5), 60)
         self.assertEqual(self.manager._calculate_progress_percent(5, 5), 100)
+        self.assertEqual(self.manager._calculate_progress_percent(7, 5), 100)
+
+    def test_update_session_progress_zero_percent(self) -> None:
+        session_id, _ = self._create_session_with_nodes(total_nodes=5)
+
+        conn = self.manager._get_connection()
+        try:
+            progress = self.manager._update_session_progress(session_id, conn)
+            conn.commit()
+            self.assertEqual(progress, 0)
+
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT status, progress_percent, completed_at
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            self.assertEqual(row["status"], "in_progress")
+            self.assertEqual(row["progress_percent"], 0)
+            self.assertIsNone(row["completed_at"])
+        finally:
+            conn.close()
 
     def test_update_session_progress_tracks_completion_and_last_active(self) -> None:
         session_id, node_ids = self._create_session_with_nodes(total_nodes=5)
@@ -1218,6 +1245,126 @@ class TestSessionProgressHelpers(unittest.TestCase):
             self.assertEqual(session_row["last_active_node_id"], node_id)
         finally:
             conn.close()
+
+    def test_started_at_not_overwritten_on_subsequent_views(self) -> None:
+        _, node_ids = self._create_session_with_nodes(total_nodes=1)
+        node_id = node_ids[0]
+
+        self.manager.update_node_status(node_id, NodeStatus.VIEWING_EXPLANATION)
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT started_at FROM concept_nodes WHERE id = ?",
+                (node_id,),
+            )
+            first_started_at = cursor.fetchone()["started_at"]
+            self.assertIsNotNone(first_started_at)
+
+            cursor.execute(
+                "UPDATE concept_nodes SET status = ? WHERE id = ?",
+                (NodeStatus.LOCKED.value, node_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        self.manager.update_node_status(node_id, NodeStatus.VIEWING_EXPLANATION)
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT started_at FROM concept_nodes WHERE id = ?",
+                (node_id,),
+            )
+            second_started_at = cursor.fetchone()["started_at"]
+            self.assertEqual(second_started_at, first_started_at)
+        finally:
+            conn.close()
+
+    def test_last_active_updates_on_quiz_submission(self) -> None:
+        session = self.manager.create_learning_session(
+            query="Quiz tracking",
+            course_title="Quiz Tracking 101",
+            user_id="user-1",
+        )
+        session_id = session["id"]
+        quiz_node = self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=0,
+            title="Quiz Node",
+            content_markdown="Content",
+            status=NodeStatus.LOCKED,
+            quiz=_make_quiz_card(),
+        )
+        other_node = self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=1,
+            title="Other Node",
+            content_markdown="Content",
+            status=NodeStatus.LOCKED,
+        )
+
+        self.manager.update_node_status(quiz_node["id"], NodeStatus.VIEWING_EXPLANATION)
+        self.manager.update_node_status(quiz_node["id"], NodeStatus.IN_QUIZ)
+        self.manager.update_node_status(
+            other_node["id"], NodeStatus.VIEWING_EXPLANATION
+        )
+
+        self.manager.create_quiz_attempt(
+            node_id=quiz_node["id"],
+            selected_option_id=_make_stable_uuid("A"),
+            quiz_index=0,
+        )
+
+        progress = self.manager.get_session_progress(session_id)
+        self.assertIsNotNone(progress)
+        if progress is None:
+            self.fail("Expected session progress to exist")
+
+        self.assertEqual(progress["last_active_node_id"], quiz_node["id"])
+
+    def test_get_session_progress_returns_progress_summary(self) -> None:
+        session_id, node_ids = self._create_session_with_nodes(total_nodes=5)
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE concept_nodes
+                SET status = ?
+                WHERE id IN (?, ?, ?)
+                """,
+                (
+                    NodeStatus.COMPLETED.value,
+                    node_ids[0],
+                    node_ids[1],
+                    node_ids[2],
+                ),
+            )
+            self.manager._update_session_progress(
+                session_id=session_id,
+                conn=conn,
+                last_active_node_id=node_ids[2],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        summary = self.manager.get_session_progress(session_id)
+        self.assertIsNotNone(summary)
+        if summary is None:
+            self.fail("Expected session progress summary")
+
+        self.assertEqual(summary["progress_percent"], 60)
+        self.assertEqual(summary["status"], "in_progress")
+        self.assertEqual(summary["completed_nodes"], 3)
+        self.assertEqual(summary["total_nodes"], 5)
+        self.assertEqual(summary["last_active_node_id"], node_ids[2])
+        self.assertEqual(summary["last_active_node_title"], "Node 2")
 
 
 class TestSessionListingPersistence(unittest.TestCase):

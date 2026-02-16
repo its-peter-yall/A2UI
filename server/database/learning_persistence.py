@@ -355,6 +355,53 @@ class LearningManager:
         finally:
             conn.close()
 
+    def get_session_progress(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get progress summary for a single learning session."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                WITH node_counts AS (
+                    SELECT
+                        learning_session_id,
+                        COUNT(*) AS total_nodes,
+                        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed_nodes
+                    FROM concept_nodes
+                    WHERE learning_session_id = ?
+                    GROUP BY learning_session_id
+                )
+                SELECT
+                    ls.progress_percent,
+                    ls.status,
+                    COALESCE(nc.completed_nodes, 0) AS completed_nodes,
+                    COALESCE(nc.total_nodes, 0) AS total_nodes,
+                    ls.last_active_node_id,
+                    cn.title AS last_active_node_title
+                FROM learning_sessions ls
+                LEFT JOIN node_counts nc ON ls.id = nc.learning_session_id
+                LEFT JOIN concept_nodes cn ON ls.last_active_node_id = cn.id
+                WHERE ls.id = ?
+                """,
+                (NodeStatus.COMPLETED.value, session_id, session_id),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "progress_percent": int(row["progress_percent"] or 0),
+                "status": row["status"] or "in_progress",
+                "completed_nodes": int(row["completed_nodes"] or 0),
+                "total_nodes": int(row["total_nodes"] or 0),
+                "last_active_node_id": row["last_active_node_id"],
+                "last_active_node_title": row["last_active_node_title"],
+            }
+        except sqlite3.Error as e:
+            logger.error(f"Error getting session progress: {e}")
+            raise
+        finally:
+            conn.close()
+
     def get_sessions_list(
         self,
         user_id: Optional[str] = None,
@@ -728,8 +775,13 @@ class LearningManager:
             self._update_session_progress(
                 session_id=session_id,
                 conn=conn,
-                last_active_node_id=node_id,
             )
+            if status == NodeStatus.VIEWING_EXPLANATION:
+                self._update_last_active_node(
+                    session_id=session_id,
+                    node_id=node_id,
+                    conn=conn,
+                )
             conn.commit()
             return self._get_node_by_id(node_id, conn)
         except sqlite3.Error as e:
@@ -1330,6 +1382,10 @@ class LearningManager:
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
+            node = self._get_node_by_id(node_id, conn)
+            if node is None:
+                raise ValueError(f"Concept node not found: {node_id}")
+            session_id = node["learning_session_id"]
 
             # Get QuizSet data to determine quiz structure
             quiz_set_data = self.get_quiz_set_for_node(node_id)
@@ -1395,6 +1451,11 @@ class LearningManager:
                     score_percent,
                     now,
                 ),
+            )
+            self._update_last_active_node(
+                session_id=session_id,
+                node_id=node_id,
+                conn=conn,
             )
             conn.commit()
 
@@ -1746,7 +1807,7 @@ class LearningManager:
         session_id: str,
         conn: sqlite3.Connection,
         last_active_node_id: Optional[str] = None,
-    ) -> None:
+    ) -> int:
         """Update cached session progress and completion metadata."""
         cursor = conn.cursor()
         cursor.execute(
@@ -1761,7 +1822,7 @@ class LearningManager:
         )
         row = cursor.fetchone()
         if row is None:
-            return
+            return 0
 
         total_nodes = row["total_nodes"] or 0
         completed_nodes = row["completed_nodes"] or 0
@@ -1795,6 +1856,26 @@ class LearningManager:
                 now,
                 session_id,
             ),
+        )
+        return progress_percent
+
+    def _update_last_active_node(
+        self,
+        session_id: str,
+        node_id: str,
+        conn: sqlite3.Connection,
+    ) -> None:
+        """Update the last active node pointer for a learning session."""
+        cursor = conn.cursor()
+        now = datetime.now(timezone.utc).isoformat()
+        cursor.execute(
+            """
+            UPDATE learning_sessions
+            SET last_active_node_id = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (node_id, now, session_id),
         )
 
     def _ensure_concept_node_columns(self, conn: sqlite3.Connection) -> None:

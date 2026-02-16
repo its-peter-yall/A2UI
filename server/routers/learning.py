@@ -86,6 +86,7 @@ from server.schemas.learning import (
     NodeStatus,
     QuizAttemptHistory,
     QuizAttemptResponse,
+    SessionProgress,
     SessionListResponse,
 )
 from server.services.course_orchestrator import course_orchestrator
@@ -346,6 +347,35 @@ def get_learning_sessions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list learning sessions: {str(e)}",
+        )
+
+
+@router.get(
+    "/sessions/{session_id}/progress",
+    response_model=SessionProgress,
+    summary="Get learning session progress",
+    description=(
+        "Get progress summary for a learning session, including completed node "
+        "counts and last active node."
+    ),
+)
+def get_learning_session_progress(session_id: str) -> SessionProgress:
+    """Get progress summary for a learning session."""
+    try:
+        progress = learning_manager.get_session_progress(session_id)
+        if not progress:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Learning session not found: {session_id}",
+            )
+        return SessionProgress(**progress)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting learning session progress: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get learning session progress: {str(e)}",
         )
 
 
