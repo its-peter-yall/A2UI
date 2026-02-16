@@ -2249,6 +2249,66 @@ class TestRevisionProgressAndSummary(unittest.TestCase):
         self.assertEqual(updated_revision["progress_percent"], 100)
         self.assertEqual(updated_revision["status"], "completed")
 
+    def test_submit_revision_quiz_does_not_update_original_session(
+        self,
+    ) -> None:
+        """Revision quiz submissions must not update the original
+        session's last_active_node_id or updated_at timestamp."""
+        session_id, node_infos = self._create_completed_session_with_quizzes(2)
+        node_info = node_infos[0]
+
+        # Snapshot original session metadata before revision
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT last_active_node_id, updated_at
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            before = cursor.fetchone()
+        finally:
+            conn.close()
+
+        revision = self.manager.create_revision_session(
+            session_id, mode="full_review"
+        )
+        self.manager.submit_revision_quiz(
+            revision_id=revision["id"],
+            node_id=node_info["id"],
+            selected_option_id=node_info["correct_option_id"],
+        )
+
+        # Verify original session metadata is unchanged
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT last_active_node_id, updated_at
+                FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            after = cursor.fetchone()
+        finally:
+            conn.close()
+
+        self.assertEqual(
+            before["last_active_node_id"],
+            after["last_active_node_id"],
+            "Revision quiz must not change original session last_active_node_id",
+        )
+        self.assertEqual(
+            before["updated_at"],
+            after["updated_at"],
+            "Revision quiz must not change original session updated_at",
+        )
+
     def test_get_revision_summary_positive_improvement_with_time_spent(self) -> None:
         session_id, node_infos = self._create_completed_session_with_quizzes(1)
         node_info = node_infos[0]

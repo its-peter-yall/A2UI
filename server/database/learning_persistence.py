@@ -941,6 +941,7 @@ class LearningManager:
                 selected_option_id=selected_option_id,
                 quiz_index=quiz_index,
                 revision_session_id=revision_id,
+                conn=conn,
             )
 
             next_status = "quiz_passed" if quiz_result["is_correct"] else "quiz_failed"
@@ -2045,6 +2046,7 @@ class LearningManager:
         selected_option_id: str,
         quiz_index: int = 0,
         revision_session_id: Optional[str] = None,
+        conn: Optional[sqlite3.Connection] = None,
     ) -> Dict[str, Any]:
         """Record a quiz attempt and return result with mastery status.
 
@@ -2056,6 +2058,9 @@ class LearningManager:
             selected_option_id: The selected option UUID (stable ID)
             quiz_index: Index of quiz in set (0-based, default 0)
             revision_session_id: Optional revision session identifier
+            conn: Optional database connection for transactional
+                grouping. When provided the caller is responsible
+                for committing and closing the connection.
 
         Returns:
             Dict with attempt details including is_correct, score_percent,
@@ -2064,10 +2069,11 @@ class LearningManager:
         Raises:
             ValueError: If node_id not found, has no quiz, or quiz_index invalid
         """
-        conn = self._get_connection()
+        owns_connection = conn is None
+        active_conn = conn or self._get_connection()
         try:
-            cursor = conn.cursor()
-            node = self._get_node_by_id(node_id, conn)
+            cursor = active_conn.cursor()
+            node = self._get_node_by_id(node_id, active_conn)
             if node is None:
                 raise ValueError(f"Concept node not found: {node_id}")
             session_id = node["learning_session_id"]
@@ -2138,12 +2144,17 @@ class LearningManager:
                     now,
                 ),
             )
-            self._update_last_active_node(
-                session_id=session_id,
-                node_id=node_id,
-                conn=conn,
-            )
-            conn.commit()
+            # Only update original session metadata for non-revision
+            # quiz submissions. Revision activity must not contaminate
+            # the original session's last_active_node_id or updated_at.
+            if revision_session_id is None:
+                self._update_last_active_node(
+                    session_id=session_id,
+                    node_id=node_id,
+                    conn=active_conn,
+                )
+            if owns_connection:
+                active_conn.commit()
 
             # Calculate mastery for multi-quiz scenario
             # For single quiz: mastery = this attempt is correct
@@ -2154,7 +2165,7 @@ class LearningManager:
             else:
                 # Check if all quizzes have at least one correct attempt
                 is_mastered = self._check_multi_quiz_mastery(
-                    node_id, total_quizzes, conn
+                    node_id, total_quizzes, active_conn
                 )
 
             logger.info(
@@ -2183,7 +2194,8 @@ class LearningManager:
             logger.error(f"Error creating quiz attempt: {e}")
             raise
         finally:
-            conn.close()
+            if owns_connection:
+                active_conn.close()
 
     def _check_multi_quiz_mastery(
         self, node_id: str, total_quizzes: int, conn: sqlite3.Connection
