@@ -416,7 +416,7 @@ CREATE INDEX idx_revision_node_session ON revision_node_progress(revision_sessio
 ---
 
 ### Phase 10: Backend — Session Listing & Progress API
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/10-session-listing-api/`
 **Estimated Plans**: 2
 
@@ -1438,7 +1438,7 @@ npm run build                   # Production build succeeds
 | Phase | Name | Plans | Status | Dependencies |
 |-------|------|-------|--------|--------------|
 | 09 | Database Schema Extensions | 2 | in_progress | - |
-| 10 | Session Listing & Progress API | 2 | pending | 09 |
+| 10 | Session Listing & Progress API | 2 | in_progress | 09 |
 | 11 | Revision & Quiz Re-attendance API | 2 | pending | 10 |
 | 12 | Course Dashboard Components | 2 | pending | 10 |
 | 13 | Course Resume & Navigation | 2 | pending | 12 |

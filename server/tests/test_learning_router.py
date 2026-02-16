@@ -29,10 +29,14 @@ NOTES:
 import unittest
 from unittest.mock import MagicMock, patch
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from server.routers.learning import (
     QuizSubmitRequest,
     TransitionRequest,
     get_learning_session,
+    router as learning_router,
     retry_quiz,
     submit_quiz,
     transition_node,
@@ -275,4 +279,108 @@ class TestLearningRouterShuffleSeedEvents(unittest.TestCase):
         mock_shuffle.assert_called_once()
         fake_manager.update_quiz_shuffle_seed.assert_called_once_with(
             "node-1", "retry-seed"
+        )
+
+
+def _create_client() -> TestClient:
+    app = FastAPI()
+    app.include_router(learning_router)
+    return TestClient(app)
+
+
+class TestLearningRouterSessionListing(unittest.TestCase):
+    """Tests for GET /learning/sessions listing endpoint."""
+
+    def _make_summary(self, session_id: str) -> dict:
+        return {
+            "id": session_id,
+            "query": "Learn SQL",
+            "course_title": "SQL Basics",
+            "status": "in_progress",
+            "progress_percent": 40,
+            "total_nodes": 5,
+            "completed_nodes": 2,
+            "last_active_node_title": "Indexes",
+            "created_at": "2026-02-16T00:00:00+00:00",
+            "updated_at": "2026-02-16T00:30:00+00:00",
+            "completed_at": None,
+            "revision_count": 0,
+        }
+
+    def test_get_learning_sessions_returns_200_with_response_payload(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_sessions_list.return_value = ([self._make_summary("s-1")], 1)
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get("/learning/sessions")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["total_count"], 1)
+        self.assertFalse(payload["has_more"])
+        self.assertEqual(len(payload["sessions"]), 1)
+        self.assertEqual(payload["sessions"][0]["id"], "s-1")
+
+    def test_get_learning_sessions_passes_filters_to_persistence(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_sessions_list.return_value = ([self._make_summary("s-1")], 41)
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get(
+                "/learning/sessions",
+                params={
+                    "user_id": "user-1",
+                    "status": "completed",
+                    "sort_by": "progress_percent",
+                    "sort_order": "asc",
+                    "limit": 20,
+                    "offset": 20,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        fake_manager.get_sessions_list.assert_called_once_with(
+            user_id="user-1",
+            status="completed",
+            sort_by="progress_percent",
+            sort_order="asc",
+            limit=20,
+            offset=20,
+        )
+        self.assertTrue(response.json()["has_more"])
+
+    def test_get_learning_sessions_invalid_sort_by_returns_422(self) -> None:
+        fake_manager = MagicMock()
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get(
+                "/learning/sessions",
+                params={"sort_by": "invalid_field"},
+            )
+
+        self.assertEqual(response.status_code, 422)
+        fake_manager.get_sessions_list.assert_not_called()
+
+    def test_get_learning_sessions_caps_limit_to_100(self) -> None:
+        fake_manager = MagicMock()
+        fake_manager.get_sessions_list.return_value = ([], 0)
+        client = _create_client()
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            response = client.get(
+                "/learning/sessions",
+                params={"limit": 500},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        fake_manager.get_sessions_list.assert_called_once_with(
+            user_id=None,
+            status="all",
+            sort_by="updated_at",
+            sort_order="desc",
+            limit=100,
+            offset=0,
         )

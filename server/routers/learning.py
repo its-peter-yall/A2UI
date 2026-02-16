@@ -76,7 +76,7 @@ NOTES:
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
@@ -86,6 +86,7 @@ from server.schemas.learning import (
     NodeStatus,
     QuizAttemptHistory,
     QuizAttemptResponse,
+    SessionListResponse,
 )
 from server.services.course_orchestrator import course_orchestrator
 from server.services.quiz_randomization import (
@@ -282,6 +283,69 @@ async def generate_course(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate course: {str(e)}",
+        )
+
+
+@router.get(
+    "/sessions",
+    response_model=SessionListResponse,
+    summary="List learning sessions",
+    description=(
+        "Get a paginated, filterable learning session list with progress "
+        "and revision counts."
+    ),
+)
+def get_learning_sessions(
+    user_id: Optional[str] = Query(default=None),
+    status_filter: str = Query(default="all", alias="status"),
+    sort_by: str = Query(default="updated_at"),
+    sort_order: str = Query(default="desc"),
+    limit: int = Query(default=20, ge=0),
+    offset: int = Query(default=0, ge=0),
+) -> SessionListResponse:
+    """List learning sessions with filtering, sorting, and pagination."""
+    allowed_status = {"all", "in_progress", "completed"}
+    allowed_sort_by = {"updated_at", "created_at", "progress_percent"}
+    allowed_sort_order = {"asc", "desc"}
+    try:
+        if status_filter not in allowed_status:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Invalid status filter",
+            )
+        if sort_by not in allowed_sort_by:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Invalid sort_by field",
+            )
+        if sort_order not in allowed_sort_order:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Invalid sort_order field",
+            )
+
+        safe_limit = min(limit, 100)
+        sessions, total_count = learning_manager.get_sessions_list(
+            user_id=user_id,
+            status=status_filter,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=safe_limit,
+            offset=offset,
+        )
+        has_more = total_count > (offset + safe_limit)
+        return SessionListResponse(
+            sessions=sessions,
+            total_count=total_count,
+            has_more=has_more,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error listing learning sessions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list learning sessions: {str(e)}",
         )
 
 

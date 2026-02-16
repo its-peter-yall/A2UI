@@ -484,6 +484,50 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
     completed_nodes: int = Field(default=0, description="Number of completed nodes")
 
 
+class LearningSessionSummary(BaseModel):
+    """Compact session summary for dashboard listing responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="Learning session identifier")
+    query: str = Field(..., description="Original learning query")
+    course_title: str = Field(..., description="Generated course title")
+    status: Literal["in_progress", "completed"] = Field(
+        ..., description="Session status"
+    )
+    progress_percent: int = Field(
+        ..., description="Progress percentage", ge=0, le=100
+    )
+    total_nodes: int = Field(..., description="Total number of concept nodes", ge=0)
+    completed_nodes: int = Field(
+        ..., description="Number of completed concept nodes", ge=0
+    )
+    last_active_node_title: Optional[str] = Field(
+        default=None, description="Title of the last active node for resume"
+    )
+    created_at: str = Field(..., description="Session creation timestamp (ISO)")
+    updated_at: str = Field(..., description="Session update timestamp (ISO)")
+    completed_at: Optional[str] = Field(
+        default=None, description="Completion timestamp (ISO) if completed"
+    )
+    revision_count: int = Field(
+        default=0, description="Number of revision sessions", ge=0
+    )
+
+
+class SessionListResponse(BaseModel):
+    """Paginated response payload for session listing endpoint."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    sessions: List[LearningSessionSummary] = Field(
+        default_factory=list,
+        description="Session summaries for current page",
+    )
+    total_count: int = Field(..., description="Total matching sessions", ge=0)
+    has_more: bool = Field(..., description="Whether more pages are available")
+
+
 RevisionMode = Literal["full_review", "quiz_only"]
 RevisionSessionStatus = Literal["in_progress", "completed"]
 RevisionNodeStatus = Literal["pending", "reviewed", "quiz_passed", "quiz_failed"]

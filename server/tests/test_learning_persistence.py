@@ -1220,6 +1220,282 @@ class TestSessionProgressHelpers(unittest.TestCase):
             conn.close()
 
 
+class TestSessionListingPersistence(unittest.TestCase):
+    """Tests for session listing persistence query behavior."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "session_listing.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_session_with_progress(
+        self,
+        query: str,
+        course_title: str,
+        total_nodes: int,
+        completed_nodes: int,
+        user_id: str = "user-1",
+    ) -> tuple[str, list[str]]:
+        session = self.manager.create_learning_session(
+            query=query,
+            course_title=course_title,
+            user_id=user_id,
+        )
+        node_ids: list[str] = []
+        for index in range(total_nodes):
+            node = self.manager.create_concept_node(
+                session_id=session["id"],
+                sequence_index=index,
+                title=f"{course_title} Node {index}",
+                content_markdown="Content",
+                status=NodeStatus.LOCKED,
+            )
+            node_ids.append(node["id"])
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            if completed_nodes > 0:
+                placeholders = ",".join("?" for _ in range(completed_nodes))
+                cursor.execute(
+                    f"""
+                    UPDATE concept_nodes
+                    SET status = ?
+                    WHERE id IN ({placeholders})
+                    """,
+                    (NodeStatus.COMPLETED.value, *node_ids[:completed_nodes]),
+                )
+            last_active_node_id = None
+            if node_ids:
+                last_active_node_id = node_ids[min(completed_nodes, total_nodes) - 1]
+            self.manager._update_session_progress(
+                session_id=session["id"],
+                conn=conn,
+                last_active_node_id=last_active_node_id,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        return session["id"], node_ids
+
+    def _set_session_timestamps(
+        self, session_id: str, created_at: str, updated_at: str
+    ) -> None:
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE learning_sessions
+                SET created_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (created_at, updated_at, session_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def _insert_revision(self, session_id: str, revision_number: int) -> None:
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO revision_sessions (
+                    id, original_session_id, revision_number, mode, status,
+                    progress_percent, started_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    session_id,
+                    revision_number,
+                    "full_review",
+                    "completed",
+                    100,
+                    "2026-02-16T00:00:00+00:00",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_get_sessions_list_empty_returns_no_rows(self) -> None:
+        sessions, total_count = self.manager.get_sessions_list()
+        self.assertEqual(sessions, [])
+        self.assertEqual(total_count, 0)
+
+    def test_get_sessions_list_returns_progress_and_counts(self) -> None:
+        self._create_session_with_progress(
+            query="Topic A",
+            course_title="Course A",
+            total_nodes=2,
+            completed_nodes=0,
+        )
+        self._create_session_with_progress(
+            query="Topic B",
+            course_title="Course B",
+            total_nodes=2,
+            completed_nodes=1,
+        )
+        self._create_session_with_progress(
+            query="Topic C",
+            course_title="Course C",
+            total_nodes=2,
+            completed_nodes=2,
+        )
+
+        sessions, total_count = self.manager.get_sessions_list(
+            sort_by="progress_percent",
+            sort_order="asc",
+        )
+
+        self.assertEqual(total_count, 3)
+        self.assertEqual(len(sessions), 3)
+        self.assertEqual([row["progress_percent"] for row in sessions], [0, 50, 100])
+        self.assertEqual([row["completed_nodes"] for row in sessions], [0, 1, 2])
+        self.assertEqual([row["total_nodes"] for row in sessions], [2, 2, 2])
+
+    def test_get_sessions_list_filters_by_status(self) -> None:
+        self._create_session_with_progress(
+            query="Topic A",
+            course_title="Course A",
+            total_nodes=2,
+            completed_nodes=0,
+        )
+        self._create_session_with_progress(
+            query="Topic B",
+            course_title="Course B",
+            total_nodes=2,
+            completed_nodes=2,
+        )
+
+        in_progress_sessions, in_progress_total = self.manager.get_sessions_list(
+            status="in_progress"
+        )
+        completed_sessions, completed_total = self.manager.get_sessions_list(
+            status="completed"
+        )
+
+        self.assertEqual(in_progress_total, 1)
+        self.assertEqual(completed_total, 1)
+        self.assertEqual(len(in_progress_sessions), 1)
+        self.assertEqual(len(completed_sessions), 1)
+        self.assertEqual(in_progress_sessions[0]["status"], "in_progress")
+        self.assertEqual(completed_sessions[0]["status"], "completed")
+
+    def test_get_sessions_list_sorts_by_progress_percent_ascending(self) -> None:
+        self._create_session_with_progress(
+            query="Topic A",
+            course_title="Course A",
+            total_nodes=2,
+            completed_nodes=2,
+        )
+        self._create_session_with_progress(
+            query="Topic B",
+            course_title="Course B",
+            total_nodes=2,
+            completed_nodes=0,
+        )
+        self._create_session_with_progress(
+            query="Topic C",
+            course_title="Course C",
+            total_nodes=2,
+            completed_nodes=1,
+        )
+
+        sessions, _ = self.manager.get_sessions_list(
+            sort_by="progress_percent",
+            sort_order="asc",
+        )
+
+        self.assertEqual([row["progress_percent"] for row in sessions], [0, 50, 100])
+
+    def test_get_sessions_list_supports_pagination(self) -> None:
+        session_a, _ = self._create_session_with_progress(
+            query="Topic A",
+            course_title="Course A",
+            total_nodes=1,
+            completed_nodes=0,
+        )
+        session_b, _ = self._create_session_with_progress(
+            query="Topic B",
+            course_title="Course B",
+            total_nodes=1,
+            completed_nodes=0,
+        )
+        session_c, _ = self._create_session_with_progress(
+            query="Topic C",
+            course_title="Course C",
+            total_nodes=1,
+            completed_nodes=0,
+        )
+        self._set_session_timestamps(
+            session_a, "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"
+        )
+        self._set_session_timestamps(
+            session_b, "2026-01-02T00:00:00+00:00", "2026-01-02T00:00:00+00:00"
+        )
+        self._set_session_timestamps(
+            session_c, "2026-01-03T00:00:00+00:00", "2026-01-03T00:00:00+00:00"
+        )
+
+        first_page, total_count = self.manager.get_sessions_list(
+            sort_by="created_at",
+            sort_order="asc",
+            limit=2,
+            offset=0,
+        )
+        second_page, second_total = self.manager.get_sessions_list(
+            sort_by="created_at",
+            sort_order="asc",
+            limit=2,
+            offset=2,
+        )
+
+        self.assertEqual(total_count, 3)
+        self.assertEqual(second_total, 3)
+        self.assertEqual([row["id"] for row in first_page], [session_a, session_b])
+        self.assertEqual([row["id"] for row in second_page], [session_c])
+
+    def test_get_sessions_list_includes_revision_count(self) -> None:
+        session_a, _ = self._create_session_with_progress(
+            query="Topic A",
+            course_title="Course A",
+            total_nodes=1,
+            completed_nodes=1,
+        )
+        session_b, _ = self._create_session_with_progress(
+            query="Topic B",
+            course_title="Course B",
+            total_nodes=1,
+            completed_nodes=1,
+        )
+        session_c, _ = self._create_session_with_progress(
+            query="Topic C",
+            course_title="Course C",
+            total_nodes=1,
+            completed_nodes=1,
+        )
+        self._insert_revision(session_b, 1)
+        self._insert_revision(session_c, 1)
+        self._insert_revision(session_c, 2)
+
+        sessions, total_count = self.manager.get_sessions_list()
+
+        self.assertEqual(total_count, 3)
+        revision_counts = {row["id"]: row["revision_count"] for row in sessions}
+        self.assertEqual(revision_counts[session_a], 0)
+        self.assertEqual(revision_counts[session_b], 1)
+        self.assertEqual(revision_counts[session_c], 2)
+
+
 class TestRevisionPersistenceSchema(unittest.TestCase):
     """Tests revision persistence tables and related constraints."""
 

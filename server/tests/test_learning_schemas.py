@@ -79,7 +79,9 @@ from pydantic import ValidationError
 from server.schemas.learning import (
     ConceptNodeCreate,
     CourseOutline,
+    LearningSessionSummary,
     LearningSessionCreate,
+    SessionListResponse,
     NodeStatus,
     QuizCard,
     QuizCardHidden,
@@ -322,6 +324,51 @@ class TestSessionSchemas(unittest.TestCase):
         )
         self.assertEqual(node.learning_session_id, "session-1")
         self.assertEqual(node.status, NodeStatus.LOCKED)
+
+
+class TestSessionListSchemas(unittest.TestCase):
+    """Tests for session listing API response schemas."""
+
+    def test_learning_session_summary_valid(self) -> None:
+        summary = LearningSessionSummary(
+            id="session-1",
+            query="Learn SQL",
+            course_title="SQL Basics",
+            status="in_progress",
+            progress_percent=40,
+            total_nodes=5,
+            completed_nodes=2,
+            last_active_node_title="Indexes",
+            created_at="2026-02-15T00:00:00+00:00",
+            updated_at="2026-02-15T01:00:00+00:00",
+            completed_at=None,
+        )
+        self.assertEqual(summary.id, "session-1")
+        self.assertEqual(summary.revision_count, 0)
+
+    def test_session_list_response_valid(self) -> None:
+        summary = LearningSessionSummary(
+            id="session-1",
+            query="Learn SQL",
+            course_title="SQL Basics",
+            status="completed",
+            progress_percent=100,
+            total_nodes=5,
+            completed_nodes=5,
+            last_active_node_title="Joins",
+            created_at="2026-02-15T00:00:00+00:00",
+            updated_at="2026-02-15T01:00:00+00:00",
+            completed_at="2026-02-15T01:00:00+00:00",
+            revision_count=2,
+        )
+        response = SessionListResponse(
+            sessions=[summary],
+            total_count=1,
+            has_more=False,
+        )
+        self.assertEqual(len(response.sessions), 1)
+        self.assertEqual(response.total_count, 1)
+        self.assertFalse(response.has_more)
 
 
 class TestRevisionSchemas(unittest.TestCase):

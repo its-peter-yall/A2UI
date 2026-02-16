@@ -355,6 +355,133 @@ class LearningManager:
         finally:
             conn.close()
 
+    def get_sessions_list(
+        self,
+        user_id: Optional[str] = None,
+        status: str = "all",
+        sort_by: str = "updated_at",
+        sort_order: str = "desc",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """Get paginated learning sessions with progress and revision data."""
+        conn = self._get_connection()
+        try:
+            normalized_status = status.lower()
+            if normalized_status not in {"all", "in_progress", "completed"}:
+                normalized_status = "all"
+
+            sort_columns = {
+                "updated_at": "ls.updated_at",
+                "created_at": "ls.created_at",
+                "progress_percent": "progress_percent",
+            }
+            order_column = sort_columns.get(sort_by, "ls.updated_at")
+            order_direction = "ASC" if sort_order.lower() == "asc" else "DESC"
+
+            safe_limit = max(limit, 0)
+            safe_offset = max(offset, 0)
+
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS total_count
+                FROM learning_sessions ls
+                WHERE (? IS NULL OR ls.user_id = ?)
+                    AND (? = 'all' OR ls.status = ?)
+                """,
+                (
+                    user_id,
+                    user_id,
+                    normalized_status,
+                    normalized_status,
+                ),
+            )
+            total_row = cursor.fetchone()
+            total_count = int(total_row["total_count"]) if total_row else 0
+
+            cursor.execute(
+                f"""
+                WITH node_counts AS (
+                    SELECT
+                        learning_session_id,
+                        COUNT(*) AS total_nodes,
+                        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed_nodes
+                    FROM concept_nodes
+                    GROUP BY learning_session_id
+                ),
+                revision_counts AS (
+                    SELECT
+                        original_session_id,
+                        COUNT(*) AS revision_count
+                    FROM revision_sessions
+                    GROUP BY original_session_id
+                )
+                SELECT
+                    ls.id,
+                    ls.query,
+                    ls.course_title,
+                    ls.status,
+                    CASE
+                        WHEN COALESCE(nc.total_nodes, 0) = 0 THEN 0
+                        ELSE (
+                            COALESCE(nc.completed_nodes, 0) * 100
+                        ) / nc.total_nodes
+                    END AS progress_percent,
+                    COALESCE(nc.total_nodes, 0) AS total_nodes,
+                    COALESCE(nc.completed_nodes, 0) AS completed_nodes,
+                    cn2.title AS last_active_node_title,
+                    ls.created_at,
+                    ls.updated_at,
+                    ls.completed_at,
+                    COALESCE(rc.revision_count, 0) AS revision_count
+                FROM learning_sessions ls
+                LEFT JOIN node_counts nc
+                    ON ls.id = nc.learning_session_id
+                LEFT JOIN concept_nodes cn2
+                    ON ls.last_active_node_id = cn2.id
+                LEFT JOIN revision_counts rc
+                    ON ls.id = rc.original_session_id
+                WHERE (? IS NULL OR ls.user_id = ?)
+                    AND (? = 'all' OR ls.status = ?)
+                ORDER BY {order_column} {order_direction}
+                LIMIT ? OFFSET ?
+                """,
+                (
+                    NodeStatus.COMPLETED.value,
+                    user_id,
+                    user_id,
+                    normalized_status,
+                    normalized_status,
+                    safe_limit,
+                    safe_offset,
+                ),
+            )
+            rows = cursor.fetchall()
+            sessions = [
+                {
+                    "id": row["id"],
+                    "query": row["query"],
+                    "course_title": row["course_title"],
+                    "status": row["status"],
+                    "progress_percent": int(row["progress_percent"] or 0),
+                    "total_nodes": int(row["total_nodes"] or 0),
+                    "completed_nodes": int(row["completed_nodes"] or 0),
+                    "last_active_node_title": row["last_active_node_title"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "completed_at": row["completed_at"],
+                    "revision_count": int(row["revision_count"] or 0),
+                }
+                for row in rows
+            ]
+            return sessions, total_count
+        except sqlite3.Error as e:
+            logger.error(f"Error listing learning sessions: {e}")
+            raise
+        finally:
+            conn.close()
+
     def create_concept_node(
         self,
         session_id: str,
