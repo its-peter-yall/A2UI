@@ -1218,3 +1218,407 @@ class TestSessionProgressHelpers(unittest.TestCase):
             self.assertEqual(session_row["last_active_node_id"], node_id)
         finally:
             conn.close()
+
+
+class TestRevisionPersistenceSchema(unittest.TestCase):
+    """Tests revision persistence tables and related constraints."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "revision_learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_session_and_node(self) -> tuple[str, str]:
+        session = self.manager.create_learning_session(
+            query="Revision topic",
+            course_title="Revision course",
+            user_id="user-1",
+        )
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node 0",
+            content_markdown="Content",
+            status=NodeStatus.LOCKED,
+        )
+        return session["id"], node["id"]
+
+    def test_revision_tables_and_indexes_created(self) -> None:
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(revision_sessions)")
+            revision_columns = {row["name"] for row in cursor.fetchall()}
+            self.assertEqual(
+                revision_columns,
+                {
+                    "id",
+                    "original_session_id",
+                    "revision_number",
+                    "mode",
+                    "status",
+                    "progress_percent",
+                    "total_quiz_score_percent",
+                    "started_at",
+                    "completed_at",
+                },
+            )
+
+            cursor.execute("PRAGMA index_list(revision_sessions)")
+            revision_indexes = {row["name"] for row in cursor.fetchall()}
+            self.assertIn("idx_revision_original_session_id", revision_indexes)
+
+            cursor.execute("PRAGMA table_info(revision_node_progress)")
+            node_progress_columns = {row["name"] for row in cursor.fetchall()}
+            self.assertEqual(
+                node_progress_columns,
+                {
+                    "id",
+                    "revision_session_id",
+                    "node_id",
+                    "status",
+                    "reviewed_at",
+                },
+            )
+
+            cursor.execute("PRAGMA index_list(revision_node_progress)")
+            node_progress_indexes = {row["name"] for row in cursor.fetchall()}
+            self.assertIn(
+                "idx_revision_node_progress_session_id", node_progress_indexes
+            )
+        finally:
+            conn.close()
+
+    def test_revision_node_progress_cascades_on_revision_delete(self) -> None:
+        session_id, node_id = self._create_session_and_node()
+
+        revision_session_id = str(uuid.uuid4())
+        revision_node_progress_id = str(uuid.uuid4())
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO revision_sessions (
+                    id, original_session_id, revision_number, mode, status, progress_percent
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    revision_session_id,
+                    session_id,
+                    1,
+                    "full_review",
+                    "in_progress",
+                    0,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO revision_node_progress (
+                    id, revision_session_id, node_id, status
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    revision_node_progress_id,
+                    revision_session_id,
+                    node_id,
+                    "pending",
+                ),
+            )
+            conn.commit()
+
+            cursor.execute(
+                "DELETE FROM revision_sessions WHERE id = ?",
+                (revision_session_id,),
+            )
+            conn.commit()
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM revision_node_progress WHERE id = ?",
+                (revision_node_progress_id,),
+            )
+            self.assertEqual(cursor.fetchone()[0], 0)
+        finally:
+            conn.close()
+
+    def test_revision_foreign_keys_enforced(self) -> None:
+        _, node_id = self._create_session_and_node()
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            with self.assertRaises(sqlite3.IntegrityError):
+                cursor.execute(
+                    """
+                    INSERT INTO revision_sessions (
+                        id, original_session_id, revision_number, mode, status, progress_percent
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        "missing-session-id",
+                        1,
+                        "full_review",
+                        "in_progress",
+                        0,
+                    ),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                cursor.execute(
+                    """
+                    INSERT INTO revision_node_progress (
+                        id, revision_session_id, node_id, status
+                    )
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        "missing-revision-session",
+                        node_id,
+                        "pending",
+                    ),
+                )
+        finally:
+            conn.close()
+
+    def test_quiz_attempts_revision_session_id_accepts_null(self) -> None:
+        _, node_id = self._create_session_and_node()
+        attempt_id = str(uuid.uuid4())
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(quiz_attempts)")
+            columns = {row["name"] for row in cursor.fetchall()}
+            self.assertIn("revision_session_id", columns)
+
+            cursor.execute(
+                """
+                INSERT INTO quiz_attempts (
+                    id, node_id, attempt_number, quiz_index, revision_session_id,
+                    selected_option_id, is_correct, score_percent
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    node_id,
+                    1,
+                    0,
+                    None,
+                    "option-a",
+                    0,
+                    0,
+                ),
+            )
+            conn.commit()
+
+            cursor.execute(
+                "SELECT revision_session_id FROM quiz_attempts WHERE id = ?",
+                (attempt_id,),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            self.assertIsNone(row["revision_session_id"])
+        finally:
+            conn.close()
+
+    def test_get_next_revision_number_counts_per_session(self) -> None:
+        first_session_id, _ = self._create_session_and_node()
+        second_session_id, _ = self._create_session_and_node()
+
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO revision_sessions (
+                    id, original_session_id, revision_number, mode, status, progress_percent
+                )
+                VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    first_session_id,
+                    1,
+                    "full_review",
+                    "completed",
+                    100,
+                    str(uuid.uuid4()),
+                    first_session_id,
+                    2,
+                    "quiz_only",
+                    "completed",
+                    100,
+                    str(uuid.uuid4()),
+                    second_session_id,
+                    1,
+                    "full_review",
+                    "in_progress",
+                    0,
+                ),
+            )
+            conn.commit()
+
+            first_next = self.manager._get_next_revision_number(first_session_id, conn)
+            second_next = self.manager._get_next_revision_number(second_session_id, conn)
+            self.assertEqual(first_next, 3)
+            self.assertEqual(second_next, 2)
+        finally:
+            conn.close()
+
+
+class TestRevisionQuizAttemptsMigration(unittest.TestCase):
+    """Tests migration behavior for quiz_attempts.revision_session_id."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "legacy_revision_learning.db"
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_legacy_database_with_attempt(self) -> tuple[str, str]:
+        session_id = str(uuid.uuid4())
+        node_id = str(uuid.uuid4())
+        attempt_id = str(uuid.uuid4())
+
+        conn = sqlite3.connect(str(self.db_path))
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute(
+                """
+                CREATE TABLE learning_sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    query TEXT NOT NULL,
+                    course_title TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE concept_nodes (
+                    id TEXT PRIMARY KEY,
+                    learning_session_id TEXT NOT NULL,
+                    sequence_index INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    content_markdown TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (learning_session_id)
+                        REFERENCES learning_sessions(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE quiz_data (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (node_id)
+                        REFERENCES concept_nodes(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE quiz_attempts (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL,
+                    attempt_number INTEGER NOT NULL,
+                    selected_option_id TEXT NOT NULL,
+                    is_correct INTEGER NOT NULL,
+                    score_percent INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (node_id)
+                        REFERENCES concept_nodes(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                INSERT INTO learning_sessions (id, user_id, query, course_title)
+                VALUES (?, ?, ?, ?)
+                """,
+                (session_id, "user-1", "Legacy topic", "Legacy course"),
+            )
+            cursor.execute(
+                """
+                INSERT INTO concept_nodes (
+                    id, learning_session_id, sequence_index, title, content_markdown, status
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    node_id,
+                    session_id,
+                    0,
+                    "Legacy node",
+                    "Legacy content",
+                    NodeStatus.IN_QUIZ.value,
+                ),
+            )
+            cursor.execute(
+                """
+                INSERT INTO quiz_attempts (
+                    id, node_id, attempt_number, selected_option_id, is_correct, score_percent
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt_id,
+                    node_id,
+                    1,
+                    "legacy-option",
+                    0,
+                    0,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        return node_id, attempt_id
+
+    def test_migration_adds_revision_session_id_and_preserves_rows(self) -> None:
+        node_id, attempt_id = self._create_legacy_database_with_attempt()
+        manager = LearningManager(self.db_path)
+        manager.init_learning_tables()
+
+        conn = manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(quiz_attempts)")
+            columns = {row["name"] for row in cursor.fetchall()}
+            self.assertIn("revision_session_id", columns)
+
+            cursor.execute(
+                """
+                SELECT node_id, revision_session_id
+                FROM quiz_attempts
+                WHERE id = ?
+                """,
+                (attempt_id,),
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            self.assertEqual(row["node_id"], node_id)
+            self.assertIsNone(row["revision_session_id"])
+        finally:
+            conn.close()

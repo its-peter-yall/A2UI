@@ -284,10 +284,10 @@ End-to-end integration, testing, and polish.
 ---
 
 ### Phase 09: Database Schema Extensions for Progress & Revision
-**Status**: `in_progress`
+**Status**: `completed`
 **Directory**: `phases/09-database-progress-revision/`
 **Estimated Plans**: 2
-**Plans Completed**: 1/2
+**Plans Completed**: 2/2
 
 Extend the SQLite schema to support session-level progress tracking, course
 status management, and a separate revision system that preserves original

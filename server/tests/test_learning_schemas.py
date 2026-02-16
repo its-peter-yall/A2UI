@@ -70,6 +70,7 @@ NOTES:
 # @see: server/schemas/learning.py - Schema definitions under test
 # @note: Invalid payloads should raise Pydantic ValidationError
 
+from datetime import datetime, timezone
 import unittest
 import uuid
 
@@ -88,6 +89,11 @@ from server.schemas.learning import (
     QuizSubmission,
     QuizSet,
     QuizSetHidden,
+    RevisionCreateRequest,
+    RevisionNodeProgress,
+    RevisionNodeProgressWithDetails,
+    RevisionSessionResponse,
+    RevisionSessionWithProgress,
     TopicNode,
     convert_legacy_quiz_option,
 )
@@ -316,6 +322,87 @@ class TestSessionSchemas(unittest.TestCase):
         )
         self.assertEqual(node.learning_session_id, "session-1")
         self.assertEqual(node.status, NodeStatus.LOCKED)
+
+
+class TestRevisionSchemas(unittest.TestCase):
+    """Tests revision-related schema validation."""
+
+    def test_revision_create_request_mode_values(self) -> None:
+        full_review = RevisionCreateRequest(mode="full_review")
+        quiz_only = RevisionCreateRequest(mode="quiz_only")
+
+        self.assertEqual(full_review.mode, "full_review")
+        self.assertEqual(quiz_only.mode, "quiz_only")
+
+        with self.assertRaises(ValidationError):
+            RevisionCreateRequest(mode="invalid")
+
+    def test_revision_session_response_validates_fields(self) -> None:
+        started_at = datetime.now(timezone.utc)
+        completed_at = datetime.now(timezone.utc)
+        revision = RevisionSessionResponse(
+            id="revision-1",
+            original_session_id="session-1",
+            revision_number=2,
+            mode="quiz_only",
+            status="completed",
+            progress_percent=100,
+            total_quiz_score_percent=92,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+        self.assertEqual(revision.id, "revision-1")
+        self.assertEqual(revision.revision_number, 2)
+        self.assertEqual(revision.mode, "quiz_only")
+        self.assertEqual(revision.status, "completed")
+        self.assertEqual(revision.progress_percent, 100)
+        self.assertEqual(revision.total_quiz_score_percent, 92)
+        self.assertEqual(revision.started_at, started_at)
+        self.assertEqual(revision.completed_at, completed_at)
+
+    def test_revision_node_progress_status_values(self) -> None:
+        progress = RevisionNodeProgress(
+            id="progress-1",
+            revision_session_id="revision-1",
+            node_id="node-1",
+            status="quiz_passed",
+            reviewed_at=None,
+        )
+        self.assertEqual(progress.status, "quiz_passed")
+
+        with self.assertRaises(ValidationError):
+            RevisionNodeProgress(
+                id="progress-2",
+                revision_session_id="revision-1",
+                node_id="node-1",
+                status="invalid_status",
+                reviewed_at=None,
+            )
+
+    def test_revision_session_with_progress_nodes(self) -> None:
+        revision_with_progress = RevisionSessionWithProgress(
+            id="revision-1",
+            original_session_id="session-1",
+            revision_number=1,
+            mode="full_review",
+            status="in_progress",
+            progress_percent=50,
+            total_quiz_score_percent=None,
+            started_at=datetime.now(timezone.utc),
+            completed_at=None,
+            nodes=[
+                RevisionNodeProgressWithDetails(
+                    id="progress-1",
+                    node_id="node-1",
+                    node_title="Node 1",
+                    sequence_index=0,
+                    status="reviewed",
+                    reviewed_at=datetime.now(timezone.utc),
+                )
+            ],
+        )
+        self.assertEqual(len(revision_with_progress.nodes), 1)
+        self.assertEqual(revision_with_progress.nodes[0].status, "reviewed")
 
 
 class TestQuizSubmission(unittest.TestCase):

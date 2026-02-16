@@ -184,6 +184,24 @@ class LearningManager:
                 """
             )
 
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS revision_sessions (
+                    id TEXT PRIMARY KEY,
+                    original_session_id TEXT NOT NULL,
+                    revision_number INTEGER NOT NULL DEFAULT 1,
+                    mode TEXT NOT NULL DEFAULT 'full_review',
+                    status TEXT NOT NULL DEFAULT 'in_progress',
+                    progress_percent INTEGER NOT NULL DEFAULT 0,
+                    total_quiz_score_percent INTEGER,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    FOREIGN KEY (original_session_id)
+                        REFERENCES learning_sessions(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
             # Quiz attempts table for mastery tracking
             cursor.execute(
                 """
@@ -192,10 +210,31 @@ class LearningManager:
                     node_id TEXT NOT NULL,
                     attempt_number INTEGER NOT NULL,
                     quiz_index INTEGER DEFAULT 0,
+                    revision_session_id TEXT,
                     selected_option_id TEXT NOT NULL,
                     is_correct INTEGER NOT NULL,
                     score_percent INTEGER NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (node_id)
+                        REFERENCES concept_nodes(id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (revision_session_id)
+                        REFERENCES revision_sessions(id)
+                        ON DELETE CASCADE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS revision_node_progress (
+                    id TEXT PRIMARY KEY,
+                    revision_session_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    reviewed_at TIMESTAMP,
+                    FOREIGN KEY (revision_session_id)
+                        REFERENCES revision_sessions(id)
+                        ON DELETE CASCADE,
                     FOREIGN KEY (node_id)
                         REFERENCES concept_nodes(id)
                         ON DELETE CASCADE
@@ -214,12 +253,25 @@ class LearningManager:
                 ON quiz_attempts(node_id, attempt_number)
                 """
             )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_revision_original_session_id
+                ON revision_sessions(original_session_id)
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_revision_node_progress_session_id
+                ON revision_node_progress(revision_session_id)
+                """
+            )
 
             self._ensure_concept_node_columns(conn)
             self._ensure_session_progress_columns(conn)
             self._ensure_node_timestamp_columns(conn)
             self._ensure_quiz_data_columns(conn)
             self._ensure_quiz_attempts_columns(conn)
+            self._ensure_quiz_attempts_revision_column(conn)
 
             conn.commit()
             logger.info("Learning tables initialized successfully")
@@ -1768,6 +1820,39 @@ class LearningManager:
             cursor.execute(
                 "ALTER TABLE quiz_attempts ADD COLUMN quiz_index INTEGER DEFAULT 0"
             )
+
+    def _ensure_quiz_attempts_revision_column(
+        self, conn: sqlite3.Connection
+    ) -> None:
+        """Migrate quiz_attempts table to include revision_session_id."""
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(quiz_attempts)")
+        existing_columns = {row["name"] for row in cursor.fetchall()}
+
+        if "revision_session_id" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE quiz_attempts "
+                "ADD COLUMN revision_session_id TEXT "
+                "REFERENCES revision_sessions(id)"
+            )
+
+    def _get_next_revision_number(
+        self, original_session_id: str, conn: sqlite3.Connection
+    ) -> int:
+        """Get the next revision number for an original learning session."""
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(revision_number), 0) + 1 AS next_revision
+            FROM revision_sessions
+            WHERE original_session_id = ?
+            """,
+            (original_session_id,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return 1
+        return int(row["next_revision"])
 
 
 learning_manager = LearningManager()

@@ -69,7 +69,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -482,6 +482,82 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
 
     total_nodes: int = Field(default=0, description="Total nodes in the session")
     completed_nodes: int = Field(default=0, description="Number of completed nodes")
+
+
+RevisionMode = Literal["full_review", "quiz_only"]
+RevisionSessionStatus = Literal["in_progress", "completed"]
+RevisionNodeStatus = Literal["pending", "reviewed", "quiz_passed", "quiz_failed"]
+
+
+class RevisionCreateRequest(BaseModel):
+    """Schema for creating a revision session."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    mode: RevisionMode = Field(
+        default="full_review", description="Revision mode selection"
+    )
+
+
+class RevisionSessionResponse(BaseModel):
+    """Response schema for revision sessions."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="Revision session identifier")
+    original_session_id: str = Field(
+        ..., description="Original learning session identifier"
+    )
+    revision_number: int = Field(..., description="Revision iteration number", ge=1)
+    mode: RevisionMode = Field(..., description="Revision mode")
+    status: RevisionSessionStatus = Field(..., description="Revision session status")
+    progress_percent: int = Field(..., description="Revision progress percentage")
+    total_quiz_score_percent: Optional[int] = Field(
+        default=None,
+        description="Overall quiz accuracy for the revision session",
+    )
+    started_at: datetime = Field(..., description="Revision start timestamp")
+    completed_at: Optional[datetime] = Field(
+        default=None, description="Revision completion timestamp"
+    )
+
+
+class RevisionNodeProgress(BaseModel):
+    """Progress status for a node within a revision session."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="Revision node progress identifier")
+    revision_session_id: str = Field(..., description="Revision session identifier")
+    node_id: str = Field(..., description="Concept node identifier")
+    status: RevisionNodeStatus = Field(..., description="Revision node status")
+    reviewed_at: Optional[datetime] = Field(
+        default=None, description="Timestamp when node was reviewed"
+    )
+
+
+class RevisionNodeProgressWithDetails(BaseModel):
+    """Revision node progress enriched with concept node metadata."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., description="Revision node progress identifier")
+    node_id: str = Field(..., description="Concept node identifier")
+    node_title: str = Field(..., description="Concept node title")
+    sequence_index: int = Field(..., description="Concept node order", ge=0)
+    status: RevisionNodeStatus = Field(..., description="Revision node status")
+    reviewed_at: Optional[datetime] = Field(
+        default=None, description="Timestamp when node was reviewed"
+    )
+
+
+class RevisionSessionWithProgress(RevisionSessionResponse):
+    """Revision session response with node-level progress details."""
+
+    nodes: List[RevisionNodeProgressWithDetails] = Field(
+        default_factory=list,
+        description="Node-level revision progress list",
+    )
 
 
 class QuizSubmission(BaseModel):
