@@ -76,11 +76,12 @@ export function RevisionConceptCard({
     switch (revisionProgress.status) {
       case 'quiz_passed':
       case 'reviewed':
-        return 'border-green-500 bg-green-50 dark:bg-green-950';
+        return 'border-green-500 border-l-4 border-l-green-500 bg-green-50 dark:bg-green-950';
       case 'quiz_failed':
-        return 'border-red-500 bg-red-50 dark:bg-red-950';
+        return 'border-red-500 border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950';
       default:
-        return 'border-border bg-card';
+        // Default revision style: subtle blue left border
+        return 'border-border border-l-4 border-l-blue-500/50 bg-card';
     }
   })();
 

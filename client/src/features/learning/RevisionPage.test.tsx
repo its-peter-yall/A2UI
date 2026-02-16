@@ -470,7 +470,8 @@ describe('RevisionPage', () => {
       expect(await screen.findByText('Revision Complete!')).toBeInTheDocument();
       expect(screen.getByText('2/2')).toBeInTheDocument();
       expect(screen.getByText('90%')).toBeInTheDocument();
-      expect(screen.getByText('Full Review')).toBeInTheDocument();
+      // "Full Review" appears in both the page header and the summary modal
+      expect(screen.getAllByText('Full Review')).toHaveLength(2);
     });
 
     it('does not show summary modal when revision is in_progress', async () => {

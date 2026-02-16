@@ -180,6 +180,11 @@ export function useLearningMutations({
     queryClient.invalidateQueries({ queryKey });
   };
 
+  const retryConfig = {
+    retry: process.env.NODE_ENV === 'test' ? false : 3,
+    retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  };
+
   // ============================================================
   // TRANSITION: VIEWING_EXPLANATION → IN_QUIZ
   // User clicks "I understand, proceed to quiz"
@@ -192,6 +197,7 @@ export function useLearningMutations({
       nodeId: string;
       targetStatus: NodeStatus;
     }) => transitionNode(nodeId, targetStatus),
+    ...retryConfig,
     
     onMutate: async ({ nodeId, targetStatus }): Promise<MutationContext> => {
       // Best Practice: Cancel outgoing refetches to prevent race conditions
@@ -237,6 +243,7 @@ export function useLearningMutations({
       // Server handles status transition internally
       return submitQuiz(nodeId, selectedOptionId, quizIndex);
     },
+    ...retryConfig,
     
     onMutate: async ({ nodeId }): Promise<MutationContext> => {
       await queryClient.cancelQueries({ queryKey });
@@ -333,6 +340,7 @@ export function useLearningMutations({
         await transitionNode(nextNodeId, 'VIEWING_EXPLANATION');
       }
     },
+    ...retryConfig,
 
     onMutate: async ({ nodeId }): Promise<MutationContext> => {
       await queryClient.cancelQueries({ queryKey });

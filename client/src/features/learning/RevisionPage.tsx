@@ -7,7 +7,7 @@
 // @see: RevisionSummaryModal.tsx (completion summary modal)
 // @see: useRevisionSession.ts, useRevisionMutations.ts (hooks)
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
@@ -33,6 +33,9 @@ export function RevisionPage() {
   }>();
   const navigate = useNavigate();
 
+  // Focus management
+  const carouselRef = useRef<HTMLDivElement>(null);
+
   // Carousel state
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(0);
@@ -57,6 +60,13 @@ export function RevisionPage() {
     isError: isRevisionError,
     error: revisionError,
   } = useRevisionSession(revisionId ?? '');
+
+  useEffect(() => {
+    // Focus the carousel container for keyboard navigation
+    if (!isLoadingOriginal && !isLoadingRevision && carouselRef.current) {
+      carouselRef.current.focus();
+    }
+  }, [isLoadingOriginal, isLoadingRevision]);
 
   // Revision mutations
   const {
@@ -208,10 +218,12 @@ export function RevisionPage() {
   }
 
   // Determine header text based on mode
-  const modeIcon = revisionSession.mode === 'full_review' ? '\uD83D\uDCD6' : '\uD83D\uDCDD';
   const modeLabel =
     revisionSession.mode === 'full_review' ? 'Full Review' : 'Quiz Only';
-  const headerTitle = `${modeIcon} Revision #${revisionSession.revision_number} \u2014 ${modeLabel}`;
+  const modeBadgeColor =
+    revisionSession.mode === 'full_review'
+      ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400'
+      : 'bg-green-500/20 text-green-600 dark:text-green-400';
 
   // Calculate revision-specific progress
   const totalNodes = revisionSession.nodes.length;
@@ -247,12 +259,25 @@ export function RevisionPage() {
               <span aria-hidden="true">&larr;</span>
               <span>Dashboard</span>
             </button>
-            <h1
-              className="text-sm font-medium text-foreground truncate max-w-xs"
+            
+            <div
+              className="flex items-center gap-2 overflow-hidden"
               data-testid="revision-header"
             >
-              {headerTitle}
-            </h1>
+              <span className="text-sm font-medium text-foreground truncate max-w-[200px]">
+                Revision #{revisionSession.revision_number}
+              </span>
+              <span
+                className={cn(
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
+                  modeBadgeColor
+                )}
+                data-testid="revision-mode-badge"
+              >
+                {modeLabel}
+              </span>
+            </div>
+            
             <div className="w-24" /> {/* Spacer for alignment */}
           </div>
 
@@ -260,7 +285,7 @@ export function RevisionPage() {
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span>Revision Progress</span>
-              <span>
+              <span aria-live="polite">
                 {completedNodes} / {totalNodes} completed
               </span>
             </div>
@@ -329,10 +354,12 @@ export function RevisionPage() {
 
           {/* Carousel */}
           <div
-            className="relative overflow-hidden"
+            className="relative overflow-hidden outline-none"
             role="region"
             aria-roledescription="carousel"
             aria-label="Revision carousel"
+            ref={carouselRef}
+            tabIndex={-1}
           >
             <AnimatePresence mode="wait" custom={direction} initial={false}>
               {currentNode && currentRevisionProgress && (

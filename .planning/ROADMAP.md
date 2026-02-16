@@ -1299,10 +1299,10 @@ function useRevisionHistory(sessionId: string) {
 ---
 
 ### Phase 15: Integration, Testing & Polish
-**Status**: `in_progress`
+**Status**: `completed`
 **Directory**: `phases/15-integration-polish/`
 **Estimated Plans**: 2
-**Plans Completed**: 1/2
+**Plans Completed**: 2/2
 
 End-to-end integration testing, edge case handling, animation polish, and
 final quality verification for the entire v1.1 feature set.
@@ -1442,13 +1442,13 @@ npm run build                   # Production build succeeds
 
 | Phase | Name | Plans | Status | Dependencies |
 |-------|------|-------|--------|--------------|
-| 09 | Database Schema Extensions | 2 | in_progress | - |
+| 09 | Database Schema Extensions | 2 | completed | - |
 | 10 | Session Listing & Progress API | 2 | completed | 09 |
 | 11 | Revision & Quiz Re-attendance API | 2 | completed | 10 |
 | 12 | Course Dashboard Components | 2 | completed | 10 |
 | 13 | Course Resume & Navigation | 2 | completed | 12 |
 | 14 | Revision Mode UI | 2 | completed | 11, 12 |
-| 15 | Integration, Testing & Polish | 2 | in_progress | 09-14 |
+| 15 | Integration, Testing & Polish | 2 | completed | 09-14 |
 
 **Total Estimated Plans (v1.1)**: 14
 **Total Estimated Plans (v1.0 + v1.1)**: 34

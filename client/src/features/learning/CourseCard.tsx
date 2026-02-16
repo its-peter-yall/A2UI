@@ -27,15 +27,26 @@ export interface CourseCardProps {
 }
 
 function formatDate(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString('en-US', {
+  return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
-  });
+  }).format(new Date(isoString));
 }
 
 export function CourseCard({ session, onResume, onRevise, onViewRevision }: CourseCardProps) {
   const isCompleted = session.status === 'completed';
+  const progressPercent = Math.floor(session.progress_percent);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (isCompleted) {
+        onRevise(session.id, 'full_review');
+      } else {
+        onResume(session.id);
+      }
+    }
+  };
 
   return (
     <motion.article
@@ -43,23 +54,41 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
         'relative rounded-xl border border-white/10 p-5',
         'bg-card/80 backdrop-blur-sm',
         'flex flex-col gap-3',
-        'w-full'
+        'w-full',
+        'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2'
       )}
       whileHover={{ scale: 1.02 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       data-testid="course-card"
+      role="article"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onClick={(e) => {
+        // Prevent triggering if clicking specific buttons/interactive elements
+        if ((e.target as HTMLElement).closest('button')) return;
+        if (isCompleted) {
+          // For completed, maybe don't trigger main action on card click to avoid ambiguity?
+          // Or default to full_review?
+          // The buttons are clearer. Let's keep card click for resume only or explicit buttons.
+          // But for accessibility, the card itself is focusable.
+          // Let's make the card click trigger resume if in progress.
+        } else {
+          onResume(session.id);
+        }
+      }}
     >
       {/* Header: title + status */}
       <div className="flex items-start justify-between gap-3">
-        <h3 className="text-base font-semibold text-foreground truncate flex-1">
+        <h3 className="text-base font-semibold text-foreground line-clamp-2 flex-1">
           {session.course_title}
         </h3>
         {isCompleted && (
           <span
             className="flex items-center gap-1 shrink-0 text-green-400"
             data-testid="completed-badge"
+            aria-label="Course Completed"
           >
-            <CheckCircle className="h-4 w-4" />
+            <CheckCircle className="h-4 w-4" aria-hidden="true" />
             <span className="text-xs font-medium">Completed</span>
           </span>
         )}
@@ -75,17 +104,17 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
         <div
           className="h-2 w-full rounded-full bg-muted overflow-hidden"
           role="progressbar"
-          aria-valuenow={session.progress_percent}
+          aria-valuenow={progressPercent}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label={`Course progress: ${session.progress_percent}%`}
+          aria-label={`Course progress: ${progressPercent}%`}
         >
           <div
             className={cn(
               'h-full rounded-full transition-all duration-500 ease-out',
               isCompleted ? 'bg-green-400' : 'bg-[#FFD400]'
             )}
-            style={{ width: `${session.progress_percent}%` }}
+            style={{ width: `${progressPercent}%` }}
             data-testid="progress-bar-fill"
           />
         </div>
@@ -93,7 +122,7 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision }: Cour
           <span>
             {session.completed_nodes}/{session.total_nodes} topics completed
           </span>
-          <span>{session.progress_percent}%</span>
+          <span>{progressPercent}%</span>
         </div>
       </div>
 
