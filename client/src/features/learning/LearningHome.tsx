@@ -65,6 +65,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
 
 import { createRevisionSession, deleteSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
@@ -88,6 +89,7 @@ export function LearningHome() {
   const [sortBy, setSortBy] = useState<SortField>('updated_at');
   const [offset, setOffset] = useState(0);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [coursesCollapsed, setCoursesCollapsed] = useState(false);
 
   // Fetch current page for "Load More" pagination
   const { data, isLoading, isFetching } = useCourseList({
@@ -278,91 +280,121 @@ export function LearningHome() {
             className="max-w-4xl w-full mb-12"
             aria-labelledby="your-courses-heading"
           >
-            <h2
-              id="your-courses-heading"
-              className="text-xl font-semibold mb-4"
+            <button
+              onClick={() => setCoursesCollapsed((prev) => !prev)}
+              className={cn(
+                'flex items-center gap-2 w-full text-left mb-4',
+                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-lg'
+              )}
+              aria-expanded={!coursesCollapsed}
+              aria-controls="courses-content"
             >
-              Your Courses
-            </h2>
-
-            {/* Filter and sort controls */}
-            <div className="mb-6">
-              <CourseFilter
-                status={filterStatus}
-                sortBy={sortBy}
-                onStatusChange={handleStatusChange}
-                onSortChange={handleSortChange}
-              />
-            </div>
-
-            {/* Course cards grid */}
-            {isInitialLoad ? (
-              <div
-                className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                data-testid="skeleton-grid"
+              <h2
+                id="your-courses-heading"
+                className="text-xl font-semibold"
               >
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <CourseCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : showEmptyFilterState ? (
-              <div className="text-center py-12" data-testid="empty-filter-state">
-                <p className="text-muted-foreground">
-                  No {statusLabel} courses found
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <AnimatePresence mode="popLayout">
-                    {sessions.map((session, index) => (
-                      <motion.div
-                        key={session.id}
-                        layout
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{
-                          type: 'spring',
-                          stiffness: 300,
-                          damping: 25,
-                          delay: index < COURSES_PER_PAGE ? index * 0.05 : 0,
-                        }}
-                      >
-                        <CourseCard
-                          session={session}
-                          onResume={handleResume}
-                          onRevise={handleRevise}
-                          onViewRevision={(revisionId) => {
-                            handleViewRevision(session.id, revisionId);
-                          }}
-                          onDelete={handleDelete}
-                        />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
-
-                {/* Load More button */}
-                {hasMore && (
-                  <div className="flex justify-center mt-6">
-                    <button
-                      onClick={handleLoadMore}
-                      disabled={isFetching}
-                      className={cn(
-                        'rounded-lg px-6 py-2 text-sm font-medium',
-                        'border border-primary/50 text-primary',
-                        'hover:bg-primary/10 transition-colors',
-                        'disabled:opacity-50 disabled:cursor-not-allowed',
-                        'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
-                      )}
-                    >
-                      {isFetching ? 'Loading...' : 'Load More'}
-                    </button>
-                  </div>
+                Your Courses
+              </h2>
+              <ChevronDown
+                className={cn(
+                  'h-5 w-5 text-muted-foreground transition-transform duration-200',
+                  coursesCollapsed && '-rotate-90'
                 )}
-              </>
-            )}
+                aria-hidden="true"
+              />
+            </button>
+
+            <AnimatePresence initial={false}>
+              {!coursesCollapsed && (
+                <motion.div
+                  id="courses-content"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="overflow-hidden"
+                >
+                  {/* Filter and sort controls */}
+                  <div className="mb-6">
+                    <CourseFilter
+                      status={filterStatus}
+                      sortBy={sortBy}
+                      onStatusChange={handleStatusChange}
+                      onSortChange={handleSortChange}
+                    />
+                  </div>
+
+                  {/* Course cards grid */}
+                  {isInitialLoad ? (
+                    <div
+                      className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      data-testid="skeleton-grid"
+                    >
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <CourseCardSkeleton key={i} />
+                      ))}
+                    </div>
+                  ) : showEmptyFilterState ? (
+                    <div className="text-center py-12" data-testid="empty-filter-state">
+                      <p className="text-muted-foreground">
+                        No {statusLabel} courses found
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <AnimatePresence mode="popLayout">
+                          {sessions.map((session, index) => (
+                            <motion.div
+                              key={session.id}
+                              layout
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{
+                                type: 'spring',
+                                stiffness: 300,
+                                damping: 25,
+                                delay: index < COURSES_PER_PAGE ? index * 0.05 : 0,
+                              }}
+                            >
+                              <CourseCard
+                                session={session}
+                                onResume={handleResume}
+                                onRevise={handleRevise}
+                                onViewRevision={(revisionId) => {
+                                  handleViewRevision(session.id, revisionId);
+                                }}
+                                onDelete={handleDelete}
+                              />
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Load More button */}
+                      {hasMore && (
+                        <div className="flex justify-center mt-6">
+                          <button
+                            onClick={handleLoadMore}
+                            disabled={isFetching}
+                            className={cn(
+                              'rounded-lg px-6 py-2 text-sm font-medium',
+                              'border border-primary/50 text-primary',
+                              'hover:bg-primary/10 transition-colors',
+                              'disabled:opacity-50 disabled:cursor-not-allowed',
+                              'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
+                            )}
+                          >
+                            {isFetching ? 'Loading...' : 'Load More'}
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </section>
         )}
 
