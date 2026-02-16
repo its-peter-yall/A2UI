@@ -38,7 +38,6 @@ describe('CourseFilter', () => {
 
     expect(screen.getByText('Recent')).toBeInTheDocument();
     expect(screen.getByText('Progress')).toBeInTheDocument();
-    expect(screen.getByText('Date Created')).toBeInTheDocument();
   });
 
   it('marks active status pill with aria-selected', () => {
@@ -58,11 +57,9 @@ describe('CourseFilter', () => {
 
     const recentSort = screen.getByText('Recent');
     const progressSort = screen.getByText('Progress');
-    const dateSort = screen.getByText('Date Created');
 
     expect(progressSort).toHaveAttribute('aria-selected', 'true');
     expect(recentSort).toHaveAttribute('aria-selected', 'false');
-    expect(dateSort).toHaveAttribute('aria-selected', 'false');
   });
 
   it('click on status pill calls onStatusChange', () => {
@@ -88,13 +85,6 @@ describe('CourseFilter', () => {
     expect(defaultProps.onStatusChange).toHaveBeenCalledWith('completed');
   });
 
-  it('click on "Date Created" calls onSortChange with created_at', () => {
-    render(<CourseFilter {...defaultProps} />);
-
-    fireEvent.click(screen.getByText('Date Created'));
-    expect(defaultProps.onSortChange).toHaveBeenCalledWith('created_at');
-  });
-
   it('has tablist role for filter buttons', () => {
     render(<CourseFilter {...defaultProps} />);
 
@@ -106,7 +96,7 @@ describe('CourseFilter', () => {
     render(<CourseFilter {...defaultProps} />);
 
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(6); // 3 status + 3 sort
+    expect(tabs.length).toBe(5); // 3 status + 2 sort
   });
 
   it('shows "Sort by:" label', () => {

@@ -254,7 +254,6 @@ describe('LearningHome', () => {
         expect(screen.getByText('Recent')).toBeInTheDocument();
       });
       expect(screen.getByText('Progress')).toBeInTheDocument();
-      expect(screen.getByText('Date Created')).toBeInTheDocument();
     });
 
     it('"How it works" is a disclosure button when courses exist', async () => {

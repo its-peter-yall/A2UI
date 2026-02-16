@@ -372,22 +372,37 @@ export function LearningHome() {
                         </AnimatePresence>
                       </div>
 
-                      {/* Load More button */}
-                      {hasMore && (
-                        <div className="flex justify-center mt-6">
-                          <button
-                            onClick={handleLoadMore}
-                            disabled={isFetching}
-                            className={cn(
-                              'rounded-lg px-6 py-2 text-sm font-medium',
-                              'border border-primary/50 text-primary',
-                              'hover:bg-primary/10 transition-colors',
-                              'disabled:opacity-50 disabled:cursor-not-allowed',
-                              'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
-                            )}
-                          >
-                            {isFetching ? 'Loading...' : 'Load More'}
-                          </button>
+                      {/* Load More / Show Less buttons */}
+                      {(hasMore || offset > 0) && (
+                        <div className="flex justify-center gap-3 mt-6">
+                          {offset > 0 && (
+                            <button
+                              onClick={() => setOffset(0)}
+                              className={cn(
+                                'rounded-lg px-6 py-2 text-sm font-medium',
+                                'border border-border text-muted-foreground',
+                                'hover:bg-muted transition-colors',
+                                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
+                              )}
+                            >
+                              Show Less
+                            </button>
+                          )}
+                          {hasMore && (
+                            <button
+                              onClick={handleLoadMore}
+                              disabled={isFetching}
+                              className={cn(
+                                'rounded-lg px-6 py-2 text-sm font-medium',
+                                'border border-primary/50 text-primary',
+                                'hover:bg-primary/10 transition-colors',
+                                'disabled:opacity-50 disabled:cursor-not-allowed',
+                                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background'
+                              )}
+                            >
+                              {isFetching ? 'Loading...' : 'Load More'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </>

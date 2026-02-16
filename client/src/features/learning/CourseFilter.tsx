@@ -2,7 +2,7 @@
 // Filter and sort controls for the course dashboard
 
 // Provides pill-style status filter buttons (All, In Progress, Completed)
-// and a sort selector (Recent, Progress, Date Created) for filtering
+// and a sort selector (Recent, Progress) for filtering
 // the course list. Active pill uses Cyber Yellow (#FFD400) styling.
 // Accessible with role="tablist" and aria-selected on active pills.
 
@@ -13,7 +13,7 @@
 import { cn } from '@/lib/utils';
 
 export type FilterStatus = 'all' | 'in_progress' | 'completed';
-export type SortField = 'updated_at' | 'created_at' | 'progress_percent';
+export type SortField = 'updated_at' | 'progress_percent';
 
 export interface CourseFilterProps {
   status: FilterStatus;
@@ -31,7 +31,6 @@ const STATUS_OPTIONS: { value: FilterStatus; label: string }[] = [
 const SORT_OPTIONS: { value: SortField; label: string }[] = [
   { value: 'updated_at', label: 'Recent' },
   { value: 'progress_percent', label: 'Progress' },
-  { value: 'created_at', label: 'Date Created' },
 ];
 
 export function CourseFilter({
