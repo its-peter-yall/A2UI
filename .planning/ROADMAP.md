@@ -977,7 +977,7 @@ interface CourseFilterProps {
 ---
 
 ### Phase 13: Frontend — Course Resume & Multi-Session Navigation
-**Status**: `pending`
+**Status**: `in_progress`
 **Directory**: `phases/13-resume-navigation/`
 **Estimated Plans**: 2
 
