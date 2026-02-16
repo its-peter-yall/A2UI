@@ -58,7 +58,7 @@
 import { useState, useId } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { generateCourse } from '@/lib/learningApi';
 
@@ -80,12 +80,14 @@ export function TopicInput({
   userId,
 }: TopicInputProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const inputId = useId();
 
   const generateMutation = useMutation({
     mutationFn: generateCourse,
     onSuccess: (session) => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
       // Navigate on success - best practice from TanStack Query
       navigate(`/learn/${session.id}`);
     },

@@ -192,7 +192,7 @@ describe('Learning feature integration flow', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Newton’s Laws of Motion')).toBeInTheDocument();
+      expect(screen.getAllByText('Newton’s Laws of Motion').length).toBeGreaterThan(0);
     });
   });
 

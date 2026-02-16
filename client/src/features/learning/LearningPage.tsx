@@ -50,7 +50,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { LearningPathContainer } from './LearningPathContainer';
 import { getLearningSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,7 @@ import { cn } from '@/lib/utils';
 export function LearningPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [dismissedSessionId, setDismissedSessionId] = useState<string | null>(null);
   const [showResumeBanner, setShowResumeBanner] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -69,13 +71,38 @@ export function LearningPage() {
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   // Fetch session for progress bar
-  const { data: session, refetch } = useQuery({
+  const { data: session, refetch, isError, error: sessionError } = useQuery({
     queryKey: ['learningSession', sessionId],
     queryFn: () => getLearningSession(sessionId!),
     enabled: !!sessionId,
+    staleTime: 60_000,
     // Refetch to sync progress bar with LearningPathContainer
     refetchInterval: 2000,
   });
+
+  // Invalidate course list on unmount so dashboard is fresh
+  useEffect(() => {
+    return () => {
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+    };
+  }, [queryClient]);
+
+  // Flush last-active node via sendBeacon on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (sessionId && session?.last_active_node_id) {
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const url = `${baseUrl}/learning/sessions/${sessionId}/last-active`;
+        const blob = new Blob(
+          [JSON.stringify({ node_id: session.last_active_node_id })],
+          { type: 'application/json' }
+        );
+        navigator.sendBeacon(url, blob);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [sessionId, session?.last_active_node_id]);
 
   // Show resume banner when session has a last active node
   useEffect(() => {
@@ -142,6 +169,32 @@ export function LearningPage() {
     );
   }
 
+  // Handle session not found (404)
+  const isNotFound =
+    isError &&
+    axios.isAxiosError(sessionError) &&
+    sessionError.response?.status === 404;
+
+  if (isNotFound) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <p className="text-xl font-semibold">Course not found</p>
+        <p className="text-muted-foreground">
+          This course doesn&apos;t exist or has been removed.
+        </p>
+        <Link
+          to="/learn"
+          className={cn(
+            'flex items-center gap-2 text-primary hover:text-primary/80 transition-colors',
+            'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1'
+          )}
+        >
+          ← Dashboard
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header with navigation */}
@@ -149,19 +202,24 @@ export function LearningPage() {
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between mb-3">
             <button
-              onClick={() => navigate(-1)}
+              onClick={() => navigate('/learn')}
               className={cn(
                 'flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors',
                 'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1'
               )}
-              aria-label="Go back"
+              aria-label="Go to dashboard"
             >
               <span aria-hidden="true">←</span>
-              <span>Back</span>
+              <span>Dashboard</span>
             </button>
+            {session?.course_title && (
+              <h1 className="text-sm font-medium text-foreground truncate max-w-xs">
+                {session.course_title}
+              </h1>
+            )}
             <nav className="flex items-center gap-4" aria-label="Main navigation">
               <Link
-                to="/learn"
+                to="/learn?new=true"
                 className={cn(
                   'text-sm text-muted-foreground hover:text-foreground transition-colors',
                   'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1'

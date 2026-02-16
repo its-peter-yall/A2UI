@@ -1095,13 +1095,13 @@ Dashboard > Course Title > Topic N
 **Dependencies**: Phase 12 (dashboard must exist)
 
 **Verification**:
-- [ ] Resume scrolls to correct node
-- [ ] Progress persists across session switches
-- [ ] Cache invalidation keeps dashboard fresh
-- [ ] No data loss when navigating between sessions
-- [ ] Debounced PATCH isn't too aggressive (check network tab)
-- [ ] Browser refresh correctly loads session state
-- [ ] All tests pass
+- [x] Resume scrolls to correct node
+- [x] Progress persists across session switches
+- [x] Cache invalidation keeps dashboard fresh
+- [x] No data loss when navigating between sessions
+- [x] Debounced PATCH isn't too aggressive (check network tab)
+- [x] Browser refresh correctly loads session state
+- [x] All tests pass
 
 ---
 

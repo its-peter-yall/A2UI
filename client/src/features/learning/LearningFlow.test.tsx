@@ -426,7 +426,7 @@ describe('LearningPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /new topic/i })).toHaveAttribute(
         'href',
-        '/learn'
+        '/learn?new=true'
       );
     });
   });
