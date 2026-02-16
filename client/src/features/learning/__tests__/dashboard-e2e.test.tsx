@@ -348,7 +348,7 @@ describe('Dashboard e2e flows', () => {
 
     await waitFor(() => {
       expect(learningApi.getSessionsList).toHaveBeenCalledWith(
-        expect.objectContaining({ limit: 20, offset: 20 })
+        expect.objectContaining({ limit: 4, offset: 4 })
       );
       expect(screen.getByText('Second Page Course')).toBeInTheDocument();
     });

@@ -76,7 +76,7 @@ import type { FilterStatus, SortField } from './CourseFilter';
 import { CourseCardSkeleton } from './CourseCardSkeleton';
 import { useCourseList } from './useCourseList';
 
-const COURSES_PER_PAGE = 20;
+const COURSES_PER_PAGE = 4;
 
 export function LearningHome() {
   const navigate = useNavigate();

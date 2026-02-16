@@ -534,7 +534,7 @@ describe('LearningHome', () => {
 
       await waitFor(() => {
         expect(learningApi.getSessionsList).toHaveBeenCalledWith(
-          expect.objectContaining({ limit: 20, offset: 20 })
+          expect.objectContaining({ limit: 4, offset: 4 })
         );
       });
     });
