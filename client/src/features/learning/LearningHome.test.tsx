@@ -106,7 +106,7 @@ const page2Response: SessionListResponse = {
   has_more: false,
 };
 
-function renderWithProviders(ui: ReactNode) {
+function renderWithProviders(ui: ReactNode, route: string = '/learn') {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -116,7 +116,7 @@ function renderWithProviders(ui: ReactNode) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/learn']}>
+      <MemoryRouter initialEntries={[route]}>
         {ui}
       </MemoryRouter>
     </QueryClientProvider>
@@ -186,6 +186,16 @@ describe('LearningHome', () => {
         expect(
           screen.getByPlaceholderText(/what do you want to learn/i)
         ).toBeInTheDocument();
+      });
+    });
+
+    it('auto-focuses topic input when ?new=true is present', async () => {
+      renderWithProviders(<LearningHome />, '/learn?new=true');
+
+      await waitFor(() => {
+        expect(
+          screen.getByPlaceholderText(/what do you want to learn/i)
+        ).toHaveFocus();
       });
     });
   });

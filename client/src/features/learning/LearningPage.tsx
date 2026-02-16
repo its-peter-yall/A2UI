@@ -87,17 +87,20 @@ export function LearningPage() {
     };
   }, [queryClient]);
 
-  // Flush last-active node via sendBeacon on page unload
+  // Flush last-active node with keepalive request on page unload
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (sessionId && session?.last_active_node_id) {
         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
         const url = `${baseUrl}/learning/sessions/${sessionId}/last-active`;
-        const blob = new Blob(
-          [JSON.stringify({ node_id: session.last_active_node_id })],
-          { type: 'application/json' }
-        );
-        navigator.sendBeacon(url, blob);
+        void fetch(url, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ node_id: session.last_active_node_id }),
+          keepalive: true,
+        }).catch(() => undefined);
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);

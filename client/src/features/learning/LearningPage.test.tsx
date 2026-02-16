@@ -117,14 +117,19 @@ function createWrapper() {
 }
 
 describe('LearningPage', () => {
+  let fetchSpy: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockSessionId = 'test-session';
     mockNavigate.mockReset();
+    fetchSpy = vi.fn().mockResolvedValue(new Response(null));
+    vi.stubGlobal('fetch', fetchSpy);
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   describe('Navigation', () => {
@@ -288,6 +293,30 @@ describe('LearningPage', () => {
           screen.getByText(/resuming where you left off/i)
         ).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('beforeunload handling', () => {
+    it('sends keepalive PATCH request for last active node on page unload', async () => {
+      const session = createSession({
+        last_active_node_id: 'node-1',
+      });
+      (api.getLearningSession as ReturnType<typeof vi.fn>)
+        .mockResolvedValue(session);
+
+      render(<LearningPage />, { wrapper: createWrapper() });
+
+      await screen.findByText('Topic 1');
+
+      window.dispatchEvent(new Event('beforeunload'));
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'http://localhost:8000/learning/sessions/test-session/last-active',
+        expect.objectContaining({
+          method: 'PATCH',
+          keepalive: true,
+        })
+      );
     });
   });
 });

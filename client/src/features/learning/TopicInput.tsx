@@ -66,6 +66,7 @@ interface TopicInputProps {
   className?: string;
   placeholder?: string;
   userId?: string;
+  autoFocus?: boolean;
 }
 
 const TOPIC_SUGGESTIONS = [
@@ -78,6 +79,7 @@ export function TopicInput({
   className,
   placeholder = 'What do you want to learn today?',
   userId,
+  autoFocus = false,
 }: TopicInputProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -121,6 +123,7 @@ export function TopicInput({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          autoFocus={autoFocus}
           placeholder={placeholder}
           disabled={isLoading}
           aria-describedby={error ? `${inputId}-error` : undefined}

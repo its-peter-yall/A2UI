@@ -63,7 +63,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { createRevisionSession } from '@/lib/learningApi';
@@ -80,6 +80,7 @@ const COURSES_PER_PAGE = 20;
 
 export function LearningHome() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
   // Filter, sort, and pagination state
@@ -182,6 +183,7 @@ export function LearningHome() {
   const isInitialLoad = isLoading && offset === 0 && sessions.length === 0;
   const showDashboard = hasCourses;
   const hasMore = latestResponse?.has_more ?? false;
+  const shouldAutoFocusTopicInput = searchParams.get('new') === 'true';
 
   // Empty filter state: server has courses but current filter matches none
   const showEmptyFilterState =
@@ -244,7 +246,10 @@ export function LearningHome() {
         </div>
 
         {/* Topic input */}
-        <TopicInput className={showDashboard ? 'mb-8' : 'mb-12'} />
+        <TopicInput
+          className={showDashboard ? 'mb-8' : 'mb-12'}
+          autoFocus={shouldAutoFocusTopicInput}
+        />
 
         {/* Course Dashboard (shown when courses exist) */}
         {showDashboard && (

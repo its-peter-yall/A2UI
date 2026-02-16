@@ -49,7 +49,7 @@
 // Tests for LearningPathContainer component
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import axios from 'axios';
 import { MemoryRouter } from 'react-router-dom';
@@ -238,6 +238,21 @@ describe('initialNodeId and resume navigation', () => {
     expect(await screen.findByText('Topic 1')).toBeInTheDocument();
   });
 
+  it('uses initialNodeId for completed sessions with no active node', async () => {
+    const session = createSessionWithNodes(4);
+    session.nodes.forEach((node) => {
+      node.status = 'COMPLETED';
+    });
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+    render(
+      <LearningPathContainer sessionId="session-1" initialNodeId="node-2" />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(await screen.findByText('Topic 3')).toBeInTheDocument();
+  });
+
   it('debounced PATCH fires after 2s of no carousel movement', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const session = createSessionWithNodes(3);
@@ -255,7 +270,9 @@ describe('initialNodeId and resume navigation', () => {
     });
 
     // Advance past debounce timeout
-    await vi.advanceTimersByTimeAsync(2500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500);
+    });
 
     // The debounced call should eventually fire
     await waitFor(() => {
@@ -263,5 +280,58 @@ describe('initialNodeId and resume navigation', () => {
     });
 
     vi.useRealTimers();
+  });
+
+  it('does not requeue PATCH when query refresh keeps the same active node', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const session = createSessionWithNodes(3);
+      session.nodes[0].status = 'VIEWING_EXPLANATION';
+      session.nodes[1].status = 'LOCKED';
+      (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry: false },
+        },
+      });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <LearningPathContainer sessionId="session-1" />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Topic 1')).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2500);
+      });
+      await waitFor(() => {
+        expect(api.updateLastActiveNode).toHaveBeenCalledTimes(1);
+      });
+
+      const refreshedSession: LearningSessionWithNodes = {
+        ...session,
+        nodes: session.nodes.map((node) => ({ ...node })),
+        updated_at: '2025-02-01T00:00:00Z',
+      };
+
+      act(() => {
+        queryClient.setQueryData(['learningSession', 'session-1'], refreshedSession);
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2500);
+      });
+      expect(api.updateLastActiveNode).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

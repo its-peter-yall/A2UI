@@ -155,10 +155,12 @@ export function LearningPathContainer({
 
   // Highlight state for initial node glow effect
   const [highlightNodeId, setHighlightNodeId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounced last-active tracking
   const lastActiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingNodeIdRef = useRef<string | null>(null);
+  const lastFlushedNodeIdRef = useRef<string | null>(null);
 
   // Fetch existing session
   const {
@@ -260,20 +262,28 @@ export function LearningPathContainer({
   // Initialize carousel index to active node when session loads/changes
   // Also auto-advance when active node changes (e.g., after completing a topic)
   useEffect(() => {
-    if (session && activeNodeIndex >= 0) {
+    if (session && session.nodes.length > 0) {
+      const fallbackIndex = activeNodeIndex >= 0 ? activeNodeIndex : 0;
+
       // Check if we haven't initialized this session yet
       if (!initializedSessionsRef.current.has(activeSessionKey)) {
         initializedSessionsRef.current.add(activeSessionKey);
 
         // Determine initial index: prefer initialNodeId if found
-        let startIndex = activeNodeIndex;
+        let startIndex = fallbackIndex;
         if (initialNodeId) {
           const foundIndex = session.nodes.findIndex((n) => n.id === initialNodeId);
           if (foundIndex >= 0) {
             startIndex = foundIndex;
             // Trigger glow highlight on the initial node
             queueMicrotask(() => setHighlightNodeId(initialNodeId));
-            setTimeout(() => setHighlightNodeId(null), 1500);
+            if (highlightTimeoutRef.current) {
+              clearTimeout(highlightTimeoutRef.current);
+            }
+            highlightTimeoutRef.current = setTimeout(() => {
+              setHighlightNodeId(null);
+              highlightTimeoutRef.current = null;
+            }, 1500);
           }
           // If not found, fall back to activeNodeIndex (existing behavior)
         }
@@ -287,7 +297,10 @@ export function LearningPathContainer({
             [activeSessionKey]: { currentIndex: startIndex, direction: 0 },
           }));
         });
-      } else if (activeNodeIndex !== previousActiveNodeIndexRef.current) {
+      } else if (
+        activeNodeIndex >= 0 &&
+        activeNodeIndex !== previousActiveNodeIndexRef.current
+      ) {
         // Only auto-advance if the active node index has ACTUALLY changed
         // This prevents locking the user to the active node during manual navigation
         previousActiveNodeIndexRef.current = activeNodeIndex;
@@ -303,12 +316,23 @@ export function LearningPathContainer({
     }
   }, [session, activeNodeIndex, activeSessionKey, carouselState.currentIndex, initialNodeId]);
 
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Flush pending last-active update to the server
   const flushLastActive = useCallback(() => {
-    if (pendingNodeIdRef.current && activeSessionId) {
-      updateLastActiveNode(activeSessionId, pendingNodeIdRef.current).catch(
-        (err) => console.error('Failed to update last active node:', err)
-      );
+    const nodeIdToFlush = pendingNodeIdRef.current;
+    if (nodeIdToFlush && activeSessionId) {
+      updateLastActiveNode(activeSessionId, nodeIdToFlush)
+        .then(() => {
+          lastFlushedNodeIdRef.current = nodeIdToFlush;
+        })
+        .catch((err) => console.error('Failed to update last active node:', err));
       pendingNodeIdRef.current = null;
     }
     if (lastActiveTimeoutRef.current) {
@@ -318,14 +342,24 @@ export function LearningPathContainer({
   }, [activeSessionId]);
 
   // Track carousel changes with debounce
+  const currentNodeId = session?.nodes[carouselState.currentIndex]?.id;
+
   useEffect(() => {
-    const currentNode = session?.nodes[carouselState.currentIndex];
-    if (!currentNode || !activeSessionId) return;
+    if (!currentNodeId || !activeSessionId) return;
 
     // Don't track during initial mount
     if (!initializedSessionsRef.current.has(activeSessionKey)) return;
+    // Avoid duplicate scheduling when periodic refetches replace session arrays.
+    if (
+      pendingNodeIdRef.current === currentNodeId &&
+      lastActiveTimeoutRef.current
+    ) {
+      return;
+    }
+    // Skip writes when this node is already persisted.
+    if (lastFlushedNodeIdRef.current === currentNodeId) return;
 
-    pendingNodeIdRef.current = currentNode.id;
+    pendingNodeIdRef.current = currentNodeId;
 
     if (lastActiveTimeoutRef.current) {
       clearTimeout(lastActiveTimeoutRef.current);
@@ -334,7 +368,7 @@ export function LearningPathContainer({
     lastActiveTimeoutRef.current = setTimeout(() => {
       flushLastActive();
     }, 2000);
-  }, [carouselState.currentIndex, session?.nodes, activeSessionId, activeSessionKey, flushLastActive]);
+  }, [currentNodeId, activeSessionId, activeSessionKey, flushLastActive]);
 
   // Flush on unmount
   useEffect(() => {
