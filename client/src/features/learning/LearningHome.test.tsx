@@ -23,6 +23,7 @@ import * as learningApi from '@/lib/learningApi';
 vi.mock('@/lib/learningApi', () => ({
   generateCourse: vi.fn(),
   getLearningSession: vi.fn(),
+  createRevisionSession: vi.fn(),
   transitionNode: vi.fn(),
   submitQuiz: vi.fn(),
   retryQuiz: vi.fn(),
@@ -292,6 +293,10 @@ describe('LearningHome', () => {
       (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
         singleCourseResponse
       );
+      (learningApi.createRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'revision-1',
+        mode: 'full_review',
+      });
     });
 
     it('navigates to session on Resume click', async () => {
@@ -303,6 +308,62 @@ describe('LearningHome', () => {
 
       fireEvent.click(screen.getByText('Resume Course'));
       expect(mockNavigate).toHaveBeenCalledWith('/learn/session-1');
+    });
+
+    it('creates revision session before navigation on Revise click', async () => {
+      (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
+        multiCourseResponse
+      );
+
+      renderWithProviders(<LearningHome />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Revise Course')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Revise Course'));
+
+      await waitFor(() => {
+        expect(learningApi.createRevisionSession).toHaveBeenCalledWith(
+          'session-2',
+          { mode: 'full_review' }
+        );
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/learn/session-2', {
+        state: {
+          revisionId: 'revision-1',
+          revisionMode: 'full_review',
+        },
+      });
+    });
+
+    it('does not navigate when revision creation fails', async () => {
+      const consoleErrorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
+        multiCourseResponse
+      );
+      (learningApi.createRevisionSession as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('create failed')
+      );
+
+      renderWithProviders(<LearningHome />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Revise Course')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Revise Course'));
+
+      await waitFor(() => {
+        expect(learningApi.createRevisionSession).toHaveBeenCalledWith(
+          'session-2',
+          { mode: 'full_review' }
+        );
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -409,7 +470,7 @@ describe('LearningHome', () => {
       expect(screen.queryByText('Load More')).not.toBeInTheDocument();
     });
 
-    it('"Load More" fetches next page with increased limit', async () => {
+    it('"Load More" fetches next page with offset pagination', async () => {
       (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(paginatedResponse)
         .mockResolvedValueOnce(page2Response);
@@ -424,7 +485,7 @@ describe('LearningHome', () => {
 
       await waitFor(() => {
         expect(learningApi.getSessionsList).toHaveBeenCalledWith(
-          expect.objectContaining({ limit: 40 })
+          expect.objectContaining({ limit: 20, offset: 20 })
         );
       });
     });

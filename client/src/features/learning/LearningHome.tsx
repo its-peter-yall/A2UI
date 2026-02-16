@@ -61,11 +61,14 @@
  * ============================================================================
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { createRevisionSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
+import type { SessionListResponse } from '@/types/learning';
 import { TopicInput } from './TopicInput';
 import { CourseCard } from './CourseCard';
 import { CourseFilter } from './CourseFilter';
@@ -77,33 +80,76 @@ const COURSES_PER_PAGE = 20;
 
 export function LearningHome() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Filter, sort, and pagination state
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [sortBy, setSortBy] = useState<SortField>('updated_at');
-  const [loadedCount, setLoadedCount] = useState(COURSES_PER_PAGE);
+  const [offset, setOffset] = useState(0);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
 
-  // Fetch courses using increasing limit for "Load More" pagination
+  // Fetch current page for "Load More" pagination
   const { data, isLoading, isFetching } = useCourseList({
     status: filterStatus,
     sortBy,
-    limit: loadedCount,
+    limit: COURSES_PER_PAGE,
+    offset,
   });
+
+  const pageResponses = useMemo(() => {
+    const responses: SessionListResponse[] = [];
+    let hasCurrentOffsetData = false;
+    for (
+      let pageOffset = 0;
+      pageOffset <= offset;
+      pageOffset += COURSES_PER_PAGE
+    ) {
+      const response = queryClient.getQueryData<SessionListResponse>([
+        'courses',
+        {
+          status: filterStatus,
+          sortBy,
+          limit: COURSES_PER_PAGE,
+          offset: pageOffset,
+        },
+      ]);
+      if (response) {
+        responses.push(response);
+        if (pageOffset === offset) {
+          hasCurrentOffsetData = true;
+        }
+      }
+    }
+    if (!hasCurrentOffsetData && data) {
+      responses.push(data);
+    }
+    return responses;
+  }, [filterStatus, sortBy, offset, queryClient, data]);
+
+  const sessions = useMemo(() => {
+    const mergedSessions = pageResponses.flatMap((response) => response.sessions);
+    const uniqueSessions = new Map(
+      mergedSessions.map((session) => [session.id, session] as const)
+    );
+    return Array.from(uniqueSessions.values());
+  }, [pageResponses]);
+
+  const latestResponse = pageResponses[pageResponses.length - 1] ?? data;
+  const totalCount = latestResponse?.total_count ?? 0;
 
   // Reset pagination when filters change
   const handleStatusChange = useCallback((newStatus: FilterStatus) => {
     setFilterStatus(newStatus);
-    setLoadedCount(COURSES_PER_PAGE);
+    setOffset(0);
   }, []);
 
   const handleSortChange = useCallback((newSort: SortField) => {
     setSortBy(newSort);
-    setLoadedCount(COURSES_PER_PAGE);
+    setOffset(0);
   }, []);
 
   const handleLoadMore = useCallback(() => {
-    setLoadedCount((prev) => prev + COURSES_PER_PAGE);
+    setOffset((previousOffset) => previousOffset + COURSES_PER_PAGE);
   }, []);
 
   // Navigation callbacks
@@ -115,20 +161,27 @@ export function LearningHome() {
   );
 
   const handleRevise = useCallback(
-    (sessionId: string, _mode: 'full_review' | 'quiz_only') => {
-      // TODO: Call revision API to create revision session, then navigate
-      // For now, navigate to the session directly
-      navigate(`/learn/${sessionId}`);
+    async (sessionId: string, mode: 'full_review' | 'quiz_only') => {
+      try {
+        const revisionSession = await createRevisionSession(sessionId, { mode });
+        navigate(`/learn/${sessionId}`, {
+          state: {
+            revisionId: revisionSession.id,
+            revisionMode: revisionSession.mode,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to create revision session:', error);
+      }
     },
     [navigate]
   );
 
-  // Derived state from data (no useEffect needed)
-  const sessions = data?.sessions ?? [];
-  const hasCourses = data !== undefined && data.total_count > 0;
-  const isInitialLoad = isLoading && !data;
+  // Derived state for rendering
+  const hasCourses = totalCount > 0;
+  const isInitialLoad = isLoading && offset === 0 && sessions.length === 0;
   const showDashboard = hasCourses;
-  const hasMore = data?.has_more ?? false;
+  const hasMore = latestResponse?.has_more ?? false;
 
   // Empty filter state: server has courses but current filter matches none
   const showEmptyFilterState =

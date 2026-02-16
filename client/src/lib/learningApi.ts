@@ -83,6 +83,8 @@ import type {
   GenerateCourseRequest,
   LearningSessionWithNodes,
   QuizAttemptHistory,
+  RevisionCreateRequest,
+  RevisionSessionResponse,
   QuizSubmitRequest,
   QuizSubmitResponse,
   SessionListResponse,
@@ -145,6 +147,17 @@ export const getLearningSession = async (
 ): Promise<LearningSessionWithNodes> => {
   const response = await api.get<LearningSessionWithNodes>(
     `/learning/sessions/${sessionId}`
+  );
+  return response.data;
+};
+
+export const createRevisionSession = async (
+  sessionId: string,
+  data: RevisionCreateRequest
+): Promise<RevisionSessionResponse> => {
+  const response = await api.post<RevisionSessionResponse>(
+    `/learning/sessions/${sessionId}/revisions`,
+    data
   );
   return response.data;
 };

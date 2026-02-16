@@ -246,3 +246,21 @@ export interface SessionListResponse {
   total_count: number;
   has_more: boolean;
 }
+
+export type RevisionMode = 'full_review' | 'quiz_only';
+
+export interface RevisionCreateRequest {
+  mode: RevisionMode;
+}
+
+export interface RevisionSessionResponse {
+  id: string;
+  original_session_id: string;
+  revision_number: number;
+  mode: RevisionMode;
+  status: 'in_progress' | 'completed';
+  progress_percent: number;
+  total_quiz_score_percent: number | null;
+  started_at: string;
+  completed_at: string | null;
+}

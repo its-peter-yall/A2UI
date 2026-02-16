@@ -78,6 +78,7 @@ describe('useCourseList', () => {
       status: 'in_progress' as const,
       sortBy: 'progress_percent' as const,
       limit: 10,
+      offset: 20,
     };
 
     const { result } = renderHook(() => useCourseList(options), {
@@ -92,6 +93,7 @@ describe('useCourseList', () => {
       status: 'in_progress',
       sort_by: 'progress_percent',
       limit: 10,
+      offset: 20,
     });
   });
 
@@ -108,6 +110,7 @@ describe('useCourseList', () => {
       status: undefined,
       sort_by: undefined,
       limit: undefined,
+      offset: undefined,
     });
   });
 
