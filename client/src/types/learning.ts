@@ -223,3 +223,26 @@ export interface QuizSubmitResponse {
 export interface TransitionRequest {
   target_status: NodeStatus;
 }
+
+// Session listing types for course dashboard
+
+export interface LearningSessionSummary {
+  id: string;
+  query: string;
+  course_title: string;
+  status: 'in_progress' | 'completed';
+  progress_percent: number;
+  total_nodes: number;
+  completed_nodes: number;
+  last_active_node_title: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  revision_count: number;
+}
+
+export interface SessionListResponse {
+  sessions: LearningSessionSummary[];
+  total_count: number;
+  has_more: boolean;
+}

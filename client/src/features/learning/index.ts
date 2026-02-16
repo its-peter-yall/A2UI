@@ -65,6 +65,8 @@ export { ProgressBar } from './ProgressBar';
 export { LearningPage } from './LearningPage';
 export { LearningHome } from './LearningHome';
 export { LearningErrorBoundary } from './LearningErrorBoundary';
+export { CourseCard } from './CourseCard';
+export type { CourseCardProps } from './CourseCard';
 export {
   ErrorState,
   NotFoundState,
@@ -78,6 +80,8 @@ export { useQuizFeedback } from './useQuizFeedback';
 export { useNodeState, isValidTransition, getNextStatus } from './useNodeState';
 export { useLearningMutations } from './useLearningMutations';
 export { useErrorToast, ToastContainer } from './useErrorToast';
+export { useCourseList } from './useCourseList';
+export type { UseCourseListOptions } from './useCourseList';
 export type { UseLearningMutationsProps } from './useLearningMutations';
 export type { NodeActions, NodeStateResult } from './useNodeState';
 
@@ -100,6 +104,8 @@ export {
 export type {
   LearningSession,
   LearningSessionWithNodes,
+  LearningSessionSummary,
+  SessionListResponse,
   ConceptNode,
   NodeStatus,
   QuizCard,

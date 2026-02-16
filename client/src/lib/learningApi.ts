@@ -85,6 +85,7 @@ import type {
   QuizAttemptHistory,
   QuizSubmitRequest,
   QuizSubmitResponse,
+  SessionListResponse,
   TransitionRequest,
   NodeStatus,
 } from '../types/learning';
@@ -211,6 +212,26 @@ export const regenerateNode = async (
 ): Promise<ConceptNode> => {
   const response = await api.post<ConceptNode>(
     `/learning/nodes/${nodeId}/regenerate`
+  );
+  return response.data;
+};
+
+// --- Session Listing ---
+
+export interface SessionListParams {
+  status?: string;
+  sort_by?: string;
+  sort_order?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const getSessionsList = async (
+  params?: SessionListParams
+): Promise<SessionListResponse> => {
+  const response = await api.get<SessionListResponse>(
+    '/learning/sessions',
+    { params }
   );
   return response.data;
 };

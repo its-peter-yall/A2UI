@@ -760,6 +760,7 @@ GET /learning/revisions/{revision_id}/summary
 **Status**: `pending`
 **Directory**: `phases/12-course-dashboard/`
 **Estimated Plans**: 2
+**Plans Completed**: 1/2
 
 Build the React components for displaying the course dashboard on the
 LearningHome page, showing all courses with progress indicators.
