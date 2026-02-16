@@ -187,11 +187,6 @@ export function LearningHome() {
 
   const handleDelete = useCallback(
     async (sessionId: string) => {
-      const confirmed = window.confirm(
-        'Are you sure you want to delete this course? This action cannot be undone.'
-      );
-      if (!confirmed) return;
-
       try {
         await deleteSession(sessionId);
         // Invalidate React Query cache to refresh the course list
