@@ -198,7 +198,7 @@ export function LearningHome() {
         queryClient.invalidateQueries({ queryKey: ['courses'] });
       } catch (error) {
         console.error('Failed to delete course:', error);
-        alert('Failed to delete course. Please try again.');
+        // Error is logged to console; UI remains unchanged on failure
       }
     },
     [queryClient]
