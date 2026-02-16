@@ -423,11 +423,11 @@ class LearningManager:
                 normalized_status = "all"
 
             sort_columns = {
-                "updated_at": "ls.updated_at",
-                "created_at": "ls.created_at",
-                "progress_percent": "progress_percent",
+                "updated_at": "ss.updated_at",
+                "created_at": "ss.created_at",
+                "progress_percent": "ss.progress_percent",
             }
-            order_column = sort_columns.get(sort_by, "ls.updated_at")
+            order_column = sort_columns.get(sort_by, "ss.updated_at")
             order_direction = "ASC" if sort_order.lower() == "asc" else "DESC"
 
             safe_limit = max(limit, 0)
@@ -436,12 +436,36 @@ class LearningManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
+                WITH node_counts AS (
+                    SELECT
+                        learning_session_id,
+                        COUNT(*) AS total_nodes,
+                        SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed_nodes
+                    FROM concept_nodes
+                    GROUP BY learning_session_id
+                ),
+                session_status AS (
+                    SELECT
+                        ls.id,
+                        ls.user_id,
+                        CASE
+                            WHEN COALESCE(nc.total_nodes, 0) = 0 THEN 'in_progress'
+                            WHEN COALESCE(nc.completed_nodes, 0) * 100
+                                / nc.total_nodes = 100
+                            THEN 'completed'
+                            ELSE 'in_progress'
+                        END AS computed_status
+                    FROM learning_sessions ls
+                    LEFT JOIN node_counts nc
+                        ON ls.id = nc.learning_session_id
+                )
                 SELECT COUNT(*) AS total_count
-                FROM learning_sessions ls
-                WHERE (? IS NULL OR ls.user_id = ?)
-                    AND (? = 'all' OR ls.status = ?)
+                FROM session_status ss
+                WHERE (? IS NULL OR ss.user_id = ?)
+                    AND (? = 'all' OR ss.computed_status = ?)
                 """,
                 (
+                    NodeStatus.COMPLETED.value,
                     user_id,
                     user_id,
                     normalized_status,
@@ -461,6 +485,34 @@ class LearningManager:
                     FROM concept_nodes
                     GROUP BY learning_session_id
                 ),
+                session_status AS (
+                    SELECT
+                        ls.id,
+                        ls.query,
+                        ls.course_title,
+                        ls.user_id,
+                        ls.created_at,
+                        ls.updated_at,
+                        ls.completed_at,
+                        ls.last_active_node_id,
+                        COALESCE(nc.total_nodes, 0) AS total_nodes,
+                        COALESCE(nc.completed_nodes, 0) AS completed_nodes,
+                        CASE
+                            WHEN COALESCE(nc.total_nodes, 0) = 0 THEN 0
+                            ELSE (COALESCE(nc.completed_nodes, 0) * 100)
+                                / nc.total_nodes
+                        END AS progress_percent,
+                        CASE
+                            WHEN COALESCE(nc.total_nodes, 0) = 0 THEN 'in_progress'
+                            WHEN COALESCE(nc.completed_nodes, 0) * 100
+                                / nc.total_nodes = 100
+                            THEN 'completed'
+                            ELSE 'in_progress'
+                        END AS computed_status
+                    FROM learning_sessions ls
+                    LEFT JOIN node_counts nc
+                        ON ls.id = nc.learning_session_id
+                ),
                 revision_counts AS (
                     SELECT
                         original_session_id,
@@ -469,32 +521,25 @@ class LearningManager:
                     GROUP BY original_session_id
                 )
                 SELECT
-                    ls.id,
-                    ls.query,
-                    ls.course_title,
-                    ls.status,
-                    CASE
-                        WHEN COALESCE(nc.total_nodes, 0) = 0 THEN 0
-                        ELSE (
-                            COALESCE(nc.completed_nodes, 0) * 100
-                        ) / nc.total_nodes
-                    END AS progress_percent,
-                    COALESCE(nc.total_nodes, 0) AS total_nodes,
-                    COALESCE(nc.completed_nodes, 0) AS completed_nodes,
+                    ss.id,
+                    ss.query,
+                    ss.course_title,
+                    ss.progress_percent,
+                    ss.computed_status AS status,
+                    ss.total_nodes,
+                    ss.completed_nodes,
                     cn2.title AS last_active_node_title,
-                    ls.created_at,
-                    ls.updated_at,
-                    ls.completed_at,
+                    ss.created_at,
+                    ss.updated_at,
+                    ss.completed_at,
                     COALESCE(rc.revision_count, 0) AS revision_count
-                FROM learning_sessions ls
-                LEFT JOIN node_counts nc
-                    ON ls.id = nc.learning_session_id
+                FROM session_status ss
                 LEFT JOIN concept_nodes cn2
-                    ON ls.last_active_node_id = cn2.id
+                    ON ss.last_active_node_id = cn2.id
                 LEFT JOIN revision_counts rc
-                    ON ls.id = rc.original_session_id
-                WHERE (? IS NULL OR ls.user_id = ?)
-                    AND (? = 'all' OR ls.status = ?)
+                    ON ss.id = rc.original_session_id
+                WHERE (? IS NULL OR ss.user_id = ?)
+                    AND (? = 'all' OR ss.computed_status = ?)
                 ORDER BY {order_column} {order_direction}
                 LIMIT ? OFFSET ?
                 """,
@@ -560,18 +605,26 @@ class LearningManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT id, status
-                FROM learning_sessions
-                WHERE id = ?
+                SELECT
+                    ls.id,
+                    ls.course_title,
+                    COUNT(cn.id) AS total_nodes,
+                    SUM(CASE WHEN cn.status = 'COMPLETED' THEN 1 ELSE 0 END) AS completed_nodes
+                FROM learning_sessions ls
+                LEFT JOIN concept_nodes cn ON cn.learning_session_id = ls.id
+                WHERE ls.id = ?
+                GROUP BY ls.id
                 """,
                 (original_session_id,),
             )
             session_row = cursor.fetchone()
             if session_row is None:
-                raise LookupError(
-                    f"Learning session not found: {original_session_id}"
-                )
-            if session_row["status"] != "completed":
+                raise LookupError(f"Learning session not found: {original_session_id}")
+            # Calculate derived status from actual node completion
+            total_nodes = session_row["total_nodes"] or 0
+            completed_nodes = session_row["completed_nodes"] or 0
+            is_completed = total_nodes > 0 and completed_nodes == total_nodes
+            if not is_completed:
                 raise ValueError(
                     "Revision sessions can only be created for completed sessions"
                 )
@@ -1204,9 +1257,7 @@ class LearningManager:
             )
             nodes_row = cursor.fetchone()
             nodes_total = int(nodes_row["nodes_total"] or 0) if nodes_row else 0
-            nodes_reviewed = (
-                int(nodes_row["nodes_reviewed"] or 0) if nodes_row else 0
-            )
+            nodes_reviewed = int(nodes_row["nodes_reviewed"] or 0) if nodes_row else 0
 
             cursor.execute(
                 """
@@ -1233,9 +1284,7 @@ class LearningManager:
             quizzes_failed = max(quizzes_total - quizzes_passed, 0)
 
             revision_quiz_score_percent = (
-                (quizzes_passed * 100) // quizzes_total
-                if quizzes_total > 0
-                else None
+                (quizzes_passed * 100) // quizzes_total if quizzes_total > 0 else None
             )
             total_quiz_score_percent = (
                 revision_quiz_score_percent
@@ -2677,19 +2726,13 @@ class LearningManager:
                 (session_id,),
             )
             if not cursor.fetchone():
-                raise LookupError(
-                    f"Learning session not found: {session_id}"
-                )
-            self._update_last_active_node_internal(
-                session_id, node_id, conn
-            )
+                raise LookupError(f"Learning session not found: {session_id}")
+            self._update_last_active_node_internal(session_id, node_id, conn)
             conn.commit()
         except LookupError:
             raise
         except sqlite3.Error as e:
-            logger.error(
-                f"Error updating last active node: {e}"
-            )
+            logger.error(f"Error updating last active node: {e}")
             raise
         finally:
             conn.close()

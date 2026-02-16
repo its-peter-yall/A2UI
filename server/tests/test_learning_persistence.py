@@ -1544,6 +1544,64 @@ class TestSessionListingPersistence(unittest.TestCase):
         self.assertEqual(in_progress_sessions[0]["status"], "in_progress")
         self.assertEqual(completed_sessions[0]["status"], "completed")
 
+    def test_get_sessions_list_filters_by_computed_status_not_stored(self) -> None:
+        """Filter should use computed status from nodes, not stored ls.status.
+
+        Regression test: Ensures that when ls.status is out of sync with
+        actual node completion, filtering still works correctly.
+        """
+        # Create a session with all nodes completed
+        session_id, node_ids = self._create_session_with_progress(
+            query="Completed Topic",
+            course_title="Completed Course",
+            total_nodes=2,
+            completed_nodes=2,
+        )
+
+        # Manually set the stored status to 'in_progress' (simulating a bug
+        # where _update_session_progress wasn't called)
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE learning_sessions SET status = 'in_progress' WHERE id = ?",
+                (session_id,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        # Verify the stored status is 'in_progress'
+        conn = self.manager._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT status FROM learning_sessions WHERE id = ?",
+                (session_id,),
+            )
+            stored_status = cursor.fetchone()["status"]
+            self.assertEqual(stored_status, "in_progress")
+        finally:
+            conn.close()
+
+        # Query by 'in_progress' - should NOT return the session
+        # because computed status from nodes is 'completed'
+        in_progress_sessions, in_progress_total = self.manager.get_sessions_list(
+            status="in_progress"
+        )
+        self.assertEqual(in_progress_total, 0)
+        self.assertEqual(len(in_progress_sessions), 0)
+
+        # Query by 'completed' - SHOULD return the session
+        completed_sessions, completed_total = self.manager.get_sessions_list(
+            status="completed"
+        )
+        self.assertEqual(completed_total, 1)
+        self.assertEqual(len(completed_sessions), 1)
+        self.assertEqual(completed_sessions[0]["id"], session_id)
+        self.assertEqual(completed_sessions[0]["status"], "completed")
+        self.assertEqual(completed_sessions[0]["progress_percent"], 100)
+
     def test_get_sessions_list_sorts_by_progress_percent_ascending(self) -> None:
         self._create_session_with_progress(
             query="Topic A",
@@ -1979,7 +2037,36 @@ class TestRevisionSessionPersistence(unittest.TestCase):
         self.assertTrue(all(node["status"] == "pending" for node in revision["nodes"]))
 
     def test_create_revision_for_in_progress_session_raises_value_error(self) -> None:
-        session_id = self._create_learning_session(status="in_progress")
+        # Create a session with incomplete nodes (not all COMPLETED)
+        # so the derived status is actually "in_progress"
+        session = self.manager.create_learning_session(
+            query="In-progress topic",
+            course_title="In-progress course",
+            user_id="user-1",
+        )
+        session_id = session["id"]
+        # Create 3 nodes: 2 completed, 1 still viewing (so session is in_progress)
+        self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=0,
+            title="Node 0",
+            content_markdown="Content 0",
+            status=NodeStatus.COMPLETED,
+        )
+        self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=1,
+            title="Node 1",
+            content_markdown="Content 1",
+            status=NodeStatus.COMPLETED,
+        )
+        self.manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=2,
+            title="Node 2",
+            content_markdown="Content 2",
+            status=NodeStatus.VIEWING_EXPLANATION,  # Not completed!
+        )
 
         with self.assertRaises(ValueError):
             self.manager.create_revision_session(session_id, mode="full_review")
@@ -2031,7 +2118,9 @@ class TestRevisionSessionPersistence(unittest.TestCase):
         revisions, total_count = self.manager.get_revisions_for_session(session_id)
 
         self.assertEqual(total_count, 2)
-        self.assertEqual([item["id"] for item in revisions], [second["id"], first["id"]])
+        self.assertEqual(
+            [item["id"] for item in revisions], [second["id"], first["id"]]
+        )
 
     def test_get_revision_session_returns_nodes_with_titles_and_sequence(self) -> None:
         session_id = self._create_learning_session(status="completed", node_count=2)
@@ -2238,7 +2327,9 @@ class TestRevisionProgressAndSummary(unittest.TestCase):
             )
             rows = cursor.fetchall()
             self.assertEqual(len(rows), 3)
-            self.assertTrue(all(row["revision_session_id"] == revision["id"] for row in rows))
+            self.assertTrue(
+                all(row["revision_session_id"] == revision["id"] for row in rows)
+            )
             self.assertEqual([row["is_correct"] for row in rows], [0, 0, 1])
         finally:
             conn.close()
@@ -2273,9 +2364,7 @@ class TestRevisionProgressAndSummary(unittest.TestCase):
         finally:
             conn.close()
 
-        revision = self.manager.create_revision_session(
-            session_id, mode="full_review"
-        )
+        revision = self.manager.create_revision_session(session_id, mode="full_review")
         self.manager.submit_revision_quiz(
             revision_id=revision["id"],
             node_id=node_info["id"],
