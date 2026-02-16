@@ -1645,40 +1645,17 @@ class LearningManager:
         session_status = "completed" if progress_percent == 100 else "in_progress"
         now = datetime.now(timezone.utc).isoformat()
 
-        if last_active_node_id is None:
-            cursor.execute(
-                """
-                UPDATE learning_sessions
-                SET status = ?,
-                    progress_percent = ?,
-                    completed_at = CASE
-                        WHEN ? = 'completed' THEN COALESCE(completed_at, ?)
-                        ELSE NULL
-                    END,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    session_status,
-                    progress_percent,
-                    session_status,
-                    now,
-                    now,
-                    session_id,
-                ),
-            )
-            return
-
         cursor.execute(
             """
             UPDATE learning_sessions
             SET status = ?,
                 progress_percent = ?,
                 completed_at = CASE
-                    WHEN ? = 'completed' THEN COALESCE(completed_at, ?)
+                    WHEN ? = 'completed'
+                        THEN COALESCE(completed_at, ?)
                     ELSE NULL
                 END,
-                last_active_node_id = ?,
+                last_active_node_id = COALESCE(?, last_active_node_id),
                 updated_at = ?
             WHERE id = ?
             """,
@@ -1824,16 +1801,25 @@ class LearningManager:
     def _ensure_quiz_attempts_revision_column(
         self, conn: sqlite3.Connection
     ) -> None:
-        """Migrate quiz_attempts table to include revision_session_id."""
+        """Migrate quiz_attempts table to include revision_session_id.
+
+        Note: SQLite ignores FK constraints and CASCADE clauses on
+        columns added via ALTER TABLE.  The REFERENCES clause is kept
+        for documentation only.  New databases get the full FK with
+        CASCADE from the CREATE TABLE statement.  On migrated
+        databases, application-level cleanup is required when deleting
+        revision sessions.
+        """
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(quiz_attempts)")
-        existing_columns = {row["name"] for row in cursor.fetchall()}
+        existing_columns = {
+            row["name"] for row in cursor.fetchall()
+        }
 
         if "revision_session_id" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE quiz_attempts "
-                "ADD COLUMN revision_session_id TEXT "
-                "REFERENCES revision_sessions(id)"
+                "ADD COLUMN revision_session_id TEXT"
             )
 
     def _get_next_revision_number(
