@@ -67,6 +67,9 @@ export { LearningHome } from './LearningHome';
 export { LearningErrorBoundary } from './LearningErrorBoundary';
 export { CourseCard } from './CourseCard';
 export type { CourseCardProps } from './CourseCard';
+export { CourseFilter } from './CourseFilter';
+export type { CourseFilterProps, FilterStatus, SortField } from './CourseFilter';
+export { CourseCardSkeleton } from './CourseCardSkeleton';
 export {
   ErrorState,
   NotFoundState,

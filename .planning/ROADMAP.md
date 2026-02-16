@@ -757,10 +757,10 @@ GET /learning/revisions/{revision_id}/summary
 ---
 
 ### Phase 12: Frontend — Course Dashboard Components
-**Status**: `pending`
+**Status**: `completed`
 **Directory**: `phases/12-course-dashboard/`
 **Estimated Plans**: 2
-**Plans Completed**: 1/2
+**Plans Completed**: 2/2
 
 Build the React components for displaying the course dashboard on the
 LearningHome page, showing all courses with progress indicators.
@@ -1442,7 +1442,7 @@ npm run build                   # Production build succeeds
 | 09 | Database Schema Extensions | 2 | in_progress | - |
 | 10 | Session Listing & Progress API | 2 | completed | 09 |
 | 11 | Revision & Quiz Re-attendance API | 2 | completed | 10 |
-| 12 | Course Dashboard Components | 2 | pending | 10 |
+| 12 | Course Dashboard Components | 2 | completed | 10 |
 | 13 | Course Resume & Navigation | 2 | pending | 12 |
 | 14 | Revision Mode UI | 2 | pending | 11, 12 |
 | 15 | Integration, Testing & Polish | 2 | pending | 09-14 |

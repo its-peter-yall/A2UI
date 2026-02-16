@@ -21,6 +21,7 @@ export interface UseCourseListOptions {
   status?: 'all' | 'in_progress' | 'completed';
   sortBy?: 'updated_at' | 'created_at' | 'progress_percent';
   limit?: number;
+  offset?: number;
 }
 
 export function useCourseList(options?: UseCourseListOptions) {
@@ -31,6 +32,7 @@ export function useCourseList(options?: UseCourseListOptions) {
         status: options?.status,
         sort_by: options?.sortBy,
         limit: options?.limit,
+        offset: options?.offset,
       }),
     staleTime: 30_000,
   });

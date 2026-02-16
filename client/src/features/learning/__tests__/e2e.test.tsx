@@ -85,6 +85,11 @@ vi.mock('@/lib/learningApi', () => ({
   retryQuiz: vi.fn(),
   regenerateNode: vi.fn(),
   getQuizAttempts: vi.fn(),
+  getSessionsList: vi.fn().mockResolvedValue({
+    sessions: [],
+    total_count: 0,
+    has_more: false,
+  }),
 }));
 
 const createQueryClient = () =>
