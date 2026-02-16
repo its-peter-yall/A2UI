@@ -372,7 +372,6 @@ class LearningManager:
                     GROUP BY learning_session_id
                 )
                 SELECT
-                    ls.progress_percent,
                     ls.status,
                     COALESCE(nc.completed_nodes, 0) AS completed_nodes,
                     COALESCE(nc.total_nodes, 0) AS total_nodes,
@@ -388,11 +387,14 @@ class LearningManager:
             row = cursor.fetchone()
             if not row:
                 return None
+            total = int(row["total_nodes"] or 0)
+            completed = int(row["completed_nodes"] or 0)
+            progress = self._calculate_progress_percent(completed, total)
             return {
-                "progress_percent": int(row["progress_percent"] or 0),
+                "progress_percent": progress,
                 "status": row["status"] or "in_progress",
-                "completed_nodes": int(row["completed_nodes"] or 0),
-                "total_nodes": int(row["total_nodes"] or 0),
+                "completed_nodes": completed,
+                "total_nodes": total,
                 "last_active_node_id": row["last_active_node_id"],
                 "last_active_node_title": row["last_active_node_title"],
             }
@@ -1841,7 +1843,7 @@ class LearningManager:
                 completed_at = CASE
                     WHEN ? = 'completed'
                         THEN COALESCE(completed_at, ?)
-                    ELSE NULL
+                    ELSE completed_at
                 END,
                 last_active_node_id = COALESCE(?, last_active_node_id),
                 updated_at = ?
@@ -1921,9 +1923,7 @@ class LearningManager:
         existing_columns = {row["name"] for row in cursor.fetchall()}
 
         if "started_at" not in existing_columns:
-            cursor.execute(
-                "ALTER TABLE concept_nodes ADD COLUMN started_at TIMESTAMP"
-            )
+            cursor.execute("ALTER TABLE concept_nodes ADD COLUMN started_at TIMESTAMP")
         if "completed_at" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE concept_nodes ADD COLUMN completed_at TIMESTAMP"
@@ -2006,9 +2006,7 @@ class LearningManager:
                 "ALTER TABLE quiz_attempts ADD COLUMN quiz_index INTEGER DEFAULT 0"
             )
 
-    def _ensure_quiz_attempts_revision_column(
-        self, conn: sqlite3.Connection
-    ) -> None:
+    def _ensure_quiz_attempts_revision_column(self, conn: sqlite3.Connection) -> None:
         """Migrate quiz_attempts table to include revision_session_id.
 
         Note: SQLite ignores FK constraints and CASCADE clauses on
@@ -2020,14 +2018,11 @@ class LearningManager:
         """
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(quiz_attempts)")
-        existing_columns = {
-            row["name"] for row in cursor.fetchall()
-        }
+        existing_columns = {row["name"] for row in cursor.fetchall()}
 
         if "revision_session_id" not in existing_columns:
             cursor.execute(
-                "ALTER TABLE quiz_attempts "
-                "ADD COLUMN revision_session_id TEXT"
+                "ALTER TABLE quiz_attempts ADD COLUMN revision_session_id TEXT"
             )
 
     def _get_next_revision_number(

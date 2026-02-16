@@ -74,7 +74,13 @@ import uuid
 from pathlib import Path
 
 from server.database.learning_persistence import LearningManager
-from server.schemas.learning import NodeStatus, QuizCard, QuizDifficulty, QuizOption, QuizSet
+from server.schemas.learning import (
+    NodeStatus,
+    QuizCard,
+    QuizDifficulty,
+    QuizOption,
+    QuizSet,
+)
 
 
 def _make_stable_uuid(label: str) -> str:
@@ -566,14 +572,14 @@ class TestQuizSetPersistence(unittest.TestCase):
                     QuizOption(
                         option_id=_make_stable_uuid(f"quiz{i}-{label}"),
                         display_label=label,
-                        text=f"Answer {label} for Q{i+1}",
+                        text=f"Answer {label} for Q{i + 1}",
                         is_correct=(j == correct_idx),
-                        explanation=f"Explanation for Q{i+1} option {label}",
+                        explanation=f"Explanation for Q{i + 1} option {label}",
                     )
                 )
             quizzes.append(
                 QuizCard(
-                    question_text=f"Question {i+1}?",
+                    question_text=f"Question {i + 1}?",
                     options=options,
                     difficulty=QuizDifficulty.EASY,
                 )
@@ -1417,7 +1423,7 @@ class TestSessionListingPersistence(unittest.TestCase):
                     (NodeStatus.COMPLETED.value, *node_ids[:completed_nodes]),
                 )
             last_active_node_id = None
-            if node_ids:
+            if node_ids and completed_nodes > 0:
                 last_active_node_id = node_ids[min(completed_nodes, total_nodes) - 1]
             self.manager._update_session_progress(
                 session_id=session["id"],
@@ -1890,7 +1896,9 @@ class TestRevisionPersistenceSchema(unittest.TestCase):
             conn.commit()
 
             first_next = self.manager._get_next_revision_number(first_session_id, conn)
-            second_next = self.manager._get_next_revision_number(second_session_id, conn)
+            second_next = self.manager._get_next_revision_number(
+                second_session_id, conn
+            )
             self.assertEqual(first_next, 3)
             self.assertEqual(second_next, 2)
         finally:
