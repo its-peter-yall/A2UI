@@ -57,10 +57,10 @@ export function CourseFilter({
               onClick={() => onStatusChange(option.value)}
               className={cn(
                 'rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
-                'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background',
+                'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
                 isActive
-                  ? 'bg-[#FFD400] text-gray-900'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  ? 'bg-[#FFD400] text-gray-900 focus:ring-gray-900'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80 focus:ring-primary'
               )}
             >
               {option.label}
@@ -87,10 +87,10 @@ export function CourseFilter({
                 onClick={() => onSortChange(option.value)}
                 className={cn(
                   'rounded-full px-3 py-1 text-xs font-medium transition-colors',
-                  'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background',
+                  'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
                   isActive
-                    ? 'bg-[#FFD400] text-gray-900'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    ? 'bg-[#FFD400] text-gray-900 focus:ring-gray-900'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80 focus:ring-primary'
                 )}
               >
                 {option.label}
