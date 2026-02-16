@@ -834,6 +834,102 @@ class LearningManager:
         finally:
             conn.close()
 
+    def delete_learning_session(self, session_id: str) -> bool:
+        """Delete a learning session and all related data.
+
+        Cascades to delete:
+        - Quiz attempts for concept nodes in the session
+        - Concept nodes belonging to the session
+        - Revision sessions (and their quiz attempts) for the session
+        - The learning session itself
+
+        Args:
+            session_id: ID of the learning session to delete.
+
+        Returns:
+            True if a learning session was deleted, otherwise False.
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # Get all concept node IDs for this session
+            cursor.execute(
+                """
+                SELECT id FROM concept_nodes
+                WHERE learning_session_id = ?
+                """,
+                (session_id,),
+            )
+            node_ids = [row["id"] for row in cursor.fetchall()]
+
+            # Delete quiz attempts for all concept nodes
+            if node_ids:
+                placeholders = ",".join("?" for _ in node_ids)
+                cursor.execute(
+                    f"""
+                    DELETE FROM quiz_attempts
+                    WHERE concept_node_id IN ({placeholders})
+                    """,
+                    tuple(node_ids),
+                )
+
+            # Delete concept nodes
+            cursor.execute(
+                """
+                DELETE FROM concept_nodes
+                WHERE learning_session_id = ?
+                """,
+                (session_id,),
+            )
+
+            # Get all revision session IDs for this session
+            cursor.execute(
+                """
+                SELECT id FROM revision_sessions
+                WHERE original_session_id = ?
+                """,
+                (session_id,),
+            )
+            revision_ids = [row["id"] for row in cursor.fetchall()]
+
+            # Delete quiz attempts for all revision sessions
+            if revision_ids:
+                placeholders = ",".join("?" for _ in revision_ids)
+                cursor.execute(
+                    f"""
+                    DELETE FROM quiz_attempts
+                    WHERE revision_session_id IN ({placeholders})
+                    """,
+                    tuple(revision_ids),
+                )
+
+            # Delete revision sessions
+            cursor.execute(
+                """
+                DELETE FROM revision_sessions
+                WHERE original_session_id = ?
+                """,
+                (session_id,),
+            )
+
+            # Delete the learning session
+            cursor.execute(
+                """
+                DELETE FROM learning_sessions
+                WHERE id = ?
+                """,
+                (session_id,),
+            )
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting learning session: {e}")
+            raise
+        finally:
+            conn.close()
+
     def mark_revision_node_reviewed(
         self,
         revision_id: str,

@@ -591,6 +591,41 @@ def delete_revision(revision_id: str) -> DeleteRevisionResponse:
         )
 
 
+class DeleteLearningSessionResponse(BaseModel):
+    """Response payload for deleting a learning session."""
+
+    deleted: bool = Field(..., description="Whether the session was deleted")
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    response_model=DeleteLearningSessionResponse,
+    summary="Delete learning session",
+    description=(
+        "Delete a learning session and all related data including "
+        "concept nodes, quiz attempts, and revision sessions."
+    ),
+)
+def delete_learning_session(session_id: str) -> DeleteLearningSessionResponse:
+    """Delete a learning session by ID with cascade deletion."""
+    try:
+        deleted = learning_manager.delete_learning_session(session_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Learning session not found: {session_id}",
+            )
+        return DeleteLearningSessionResponse(deleted=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting learning session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete learning session: {str(e)}",
+        )
+
+
 @router.post(
     "/revisions/{revision_id}/nodes/{node_id}/mark-reviewed",
     response_model=RevisionNodeProgress,
