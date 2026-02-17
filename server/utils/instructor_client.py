@@ -65,7 +65,7 @@ NOTES:
 - Must be initialized AFTER vertexai.init() completes
 - Each role has different model: planner=gemini-2.5-pro, others=gemini-2.5-flash
 - Temperature ranges from 0.2 (quizzer/precision) to 0.7 (generator/creative)
-- max_output_tokens varies by role: 4096 (planner) down to 1024 (quizzer)
+- max_output_tokens varies by role: 4096 (planner, quizzer) to 2048 (generator)
 =============================================================================
 """
 
@@ -105,7 +105,7 @@ MODEL_CONFIGS = {
     "quizzer": {
         "model": "gemini-2.5-flash",
         "temperature": 0.2,
-        "max_output_tokens": 1024,
+        "max_output_tokens": 4096,
     },
 }
 

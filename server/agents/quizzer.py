@@ -88,6 +88,9 @@ from server.schemas.learning import QuizCard, QuizOption, QuizSet, TopicNode
 logger = logging.getLogger(__name__)
 
 
+DIFFICULTY_ORDER = {"easy": 0, "medium": 1, "hard": 2}
+
+
 QUIZZER_SYSTEM_PROMPT = """You are an expert assessment designer specializing in retrieval-based learning and diagnostic question construction.
 
 ## Your Role
@@ -222,6 +225,24 @@ class QuizzerAgent(BaseAgent):
         """Initialize the QuizzerAgent with the 'quizzer' role."""
         super().__init__(role="quizzer")
         logger.debug("QuizzerAgent initialized")
+
+    @staticmethod
+    def _validate_difficulty_gradient(quiz_set: QuizSet) -> bool:
+        """Validate that quizzes follow a non-decreasing difficulty gradient."""
+        if len(quiz_set.quizzes) <= 1:
+            return True
+
+        difficulties = [
+            DIFFICULTY_ORDER.get(quiz.difficulty, 1) for quiz in quiz_set.quizzes
+        ]
+
+        if len(set(difficulties)) == 1:
+            return False
+
+        if difficulties[0] > difficulties[-1]:
+            return False
+
+        return True
 
     @property
     def system_prompt(self) -> str:
@@ -431,6 +452,21 @@ class QuizzerAgent(BaseAgent):
         )
 
         quiz_set = self._fix_quiz_set_option_ids(quiz_set)
+
+        if not self._validate_difficulty_gradient(quiz_set):
+            logger.warning(
+                "QuizSet for '%s' has invalid difficulty gradient: %s. "
+                "Reordering to match expected gradient.",
+                topic.title,
+                [quiz.difficulty for quiz in quiz_set.quizzes],
+            )
+            quiz_set = QuizSet(
+                quizzes=sorted(
+                    quiz_set.quizzes,
+                    key=lambda quiz: DIFFICULTY_ORDER.get(quiz.difficulty, 1),
+                ),
+                current_index=0,
+            )
 
         logger.info(
             "QuizzerAgent created quiz set: %s quizzes for topic: '%s'",
