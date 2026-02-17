@@ -15,7 +15,7 @@ KEY COMPONENTS:
 - generate_course(): Entry point that coordinates the full course generation
   flow (serial planning → parallel generation → result aggregation)
 - _generate_concept_unit(): Generates individual topic content (explanation +
-  quiz) with context injection from adjacent topics
+  quiz set) with context injection from adjacent topics
 - _process_gather_results(): Handles partial failures by creating SkeletonCards
   for failed nodes, enabling retry
 - regenerate_node(): Retries generation for a single failed node
@@ -26,7 +26,8 @@ DEPENDENCIES:
 - time.perf_counter(): High-resolution timing for metrics
 - server.agents: Planner, generator, and quizzer agents
 - server.database.learning_persistence: Learning session and node storage
-- server.schemas.learning: CourseOutline, TopicNode, QuizCard, NodeStatus
+- server.schemas.learning: CourseOutline, TopicNode, QuizSet, NodeStatus
+- server.agents.planner: validate_complexity_distribution guardrail
 
 USAGE PATTERN:
 ```python
@@ -80,12 +81,13 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from server.agents import generator_agent, planner_agent, quizzer_agent
+from server.agents.planner import validate_complexity_distribution
 from server.agents.generator import GeneratedContent
 from server.database.learning_persistence import learning_manager
 from server.schemas.learning import (
     CourseOutline,
     NodeStatus,
-    QuizCard,
+    QuizSet,
     TopicNode,
 )
 
@@ -146,6 +148,24 @@ class CourseOrchestrator:
         planner_start = time.perf_counter()
         outline: CourseOutline = await planner_agent.plan(query)
         planner_time_ms = (time.perf_counter() - planner_start) * 1000
+
+        distribution_result = validate_complexity_distribution(outline)
+        if not distribution_result["valid"]:
+            logger.warning(
+                "Planner complexity distribution issues detected",
+                extra={
+                    "errors": distribution_result["errors"],
+                    "distribution": distribution_result["distribution"],
+                },
+            )
+        elif distribution_result["warnings"]:
+            logger.info(
+                "Planner complexity distribution warnings",
+                extra={
+                    "warnings": distribution_result["warnings"],
+                    "distribution": distribution_result["distribution"],
+                },
+            )
 
         logger.info(
             f"Planner completed: '{outline.course_title}' with "
@@ -269,7 +289,7 @@ class CourseOrchestrator:
 
         Steps:
         - Call generator_agent.generate_explanation(topic, prev_summary, next_summary)
-        - Call quizzer_agent.generate_quiz(topic, content.content_markdown)
+        - Call quizzer_agent.generate_quiz_set(topic, content.content_markdown)
         - Create concept_node in database using learning_manager
         - Return node data or error dict (SkeletonCard)
 
@@ -296,9 +316,17 @@ class CourseOrchestrator:
             )
 
             # Generate quiz for the content
-            quiz: QuizCard = await quizzer_agent.generate_quiz(
+            quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
                 topic=topic,
                 content=content.content_markdown,
+                quiz_count=topic.quiz_count,
+            )
+
+            logger.debug(
+                "Generated quiz set with %s quizzes for topic '%s' (quiz_count=%s)",
+                len(quiz_set.quizzes),
+                topic.title,
+                topic.quiz_count,
             )
 
             # Determine initial status (first node is VIEWING_EXPLANATION, rest are LOCKED)
@@ -315,7 +343,7 @@ class CourseOrchestrator:
                 title=topic.title,
                 content_markdown=content.content_markdown,
                 status=initial_status,
-                quiz=quiz,
+                quiz_set=quiz_set,
             )
 
             logger.info(
@@ -553,6 +581,13 @@ class CourseOrchestrator:
                 elif other_node["sequence_index"] == sequence_index + 1:
                     next_summary = other_node["title"]
 
+            quiz_count = 1
+            quiz_payload = node.get("quiz")
+            if quiz_payload and isinstance(quiz_payload, dict):
+                quizzes = quiz_payload.get("quizzes")
+                if quizzes and isinstance(quizzes, list):
+                    quiz_count = len(quizzes)
+
             # Create a TopicNode from the existing node data
             # Note: We don't have key_terms stored in the node, so we use placeholders
             # The min_length for key_terms is 2, so we provide generic terms
@@ -571,9 +606,17 @@ class CourseOrchestrator:
             )
 
             # Regenerate quiz
-            quiz: QuizCard = await quizzer_agent.generate_quiz(
+            quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
                 topic=topic,
                 content=content.content_markdown,
+                quiz_count=quiz_count,
+            )
+
+            logger.debug(
+                "Regenerated quiz set with %s quizzes for node '%s' (quiz_count=%s)",
+                len(quiz_set.quizzes),
+                node_id,
+                quiz_count,
             )
 
             new_status = NodeStatus.LOCKED
@@ -586,7 +629,7 @@ class CourseOrchestrator:
                 node_id=node_id,
                 content_markdown=content.content_markdown,
                 status=new_status,
-                quiz=quiz,
+                quiz_set=quiz_set,
                 error_message=None,
                 retry_available=False,
             )
