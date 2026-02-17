@@ -142,11 +142,11 @@ Plans:
   3. User's QuizSet is generated in a single LLM call (not N separate calls)
   4. User's quiz options have valid, unique IDs across the entire QuizSet
   5. User's QuizSet difficulty ordering is validated — no uniform or reversed gradients
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 17-01: generate_quiz_set() method with difficulty gradient and batch generation
-- [ ] 17-02: QuizSet validation, option ID fixing, and max_output_tokens config
+- [ ] 17-01-PLAN.md — generate_quiz_set() method with difficulty gradient and batch generation
+- [ ] 17-02-PLAN.md — QuizSet difficulty validation, option ID fixing, and max_output_tokens config
 
 ### Phase 18: Planner Complexity Assignment
 **Goal**: PlannerAgent assigns meaningful complexity ratings and quiz counts to each topic in a learning path
