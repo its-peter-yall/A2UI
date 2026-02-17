@@ -13,7 +13,7 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 **Current Plan:** 2 of 2
 **Total Plans in Phase:** 2
 **Status:** Milestone v1.2 complete
-**Last Activity:** 2026-02-17
+**Last Activity:** 2026-02-17 - Completed quick task 2: Debug multi-quiz submission: option ID mismatch in QuizSet validation
 
 **Progress:** [██████████] 100%
 
@@ -75,6 +75,12 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 2 | Debug multi-quiz submission: option ID mismatch in QuizSet validation | 2026-02-17 | 388f662 | [2-debug-multi-quiz-submission-option-id-mi](./quick/2-debug-multi-quiz-submission-option-id-mi/) |
 
 ### Blockers/Concerns
 
