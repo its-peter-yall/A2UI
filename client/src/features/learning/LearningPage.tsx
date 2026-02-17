@@ -246,6 +246,7 @@ export function LearningPage() {
       <main className="py-8">
         <LearningPathContainer
           sessionId={sessionId}
+          session={session ?? undefined}
           initialNodeId={session?.last_active_node_id ?? undefined}
           onCourseGenerated={(session) => {
             document.title = `Learn: ${session.course_title}`;

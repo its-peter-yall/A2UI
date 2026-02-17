@@ -93,6 +93,8 @@ import { useLearningMutations } from './useLearningMutations';
 interface LearningPathContainerProps {
   /** Existing session ID to load */
   sessionId?: string;
+  /** Pre-fetched session data (avoids duplicate fetching) */
+  session?: LearningSessionWithNodes;
   /** Query to generate new course (if no sessionId) */
   query?: string;
   /** Optional user ID for new sessions */
@@ -112,6 +114,7 @@ type CelebrationState = {
 
 export function LearningPathContainer({
   sessionId,
+  session: sessionProp,
   query,
   userId,
   initialNodeId,
@@ -162,9 +165,9 @@ export function LearningPathContainer({
   const pendingNodeIdRef = useRef<string | null>(null);
   const lastFlushedNodeIdRef = useRef<string | null>(null);
 
-  // Fetch existing session
+  // Fetch existing session (skip if provided via props)
   const {
-    data: session,
+    data: fetchedSession,
     isLoading: isLoadingSession,
     isError: isSessionError,
     error: sessionError,
@@ -172,7 +175,7 @@ export function LearningPathContainer({
   } = useQuery({
     queryKey: ['learningSession', activeSessionId],
     queryFn: () => getLearningSession(activeSessionId ?? ''),
-    enabled: !!activeSessionId,
+    enabled: !!activeSessionId && !sessionProp,
     retry: (failureCount, error) => {
       if (axios.isAxiosError(error) && error.response?.status === 404) {
         return false;
@@ -181,6 +184,9 @@ export function LearningPathContainer({
     },
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
+
+  // Use provided session or fetched session
+  const session = sessionProp ?? fetchedSession;
 
   // Generate new course mutation
   const generateMutation = useMutation({
@@ -228,6 +234,7 @@ export function LearningPathContainer({
     continueToNext,
     regenerate,
     advanceToNextQuiz,
+    goToPreviousQuiz,
     isAnyLoading,
     isRegenerating,
     isTransitioning,
@@ -480,7 +487,7 @@ export function LearningPathContainer({
     );
   }
 
-  if (isLoadingSession) {
+  if (!sessionProp && isLoadingSession) {
     return (
       <>
         <LoadingState message="Loading your learning session..." />
@@ -516,7 +523,7 @@ export function LearningPathContainer({
               : "We couldn't load your learning session. Please try again."
           }
           onRetry={() => {
-            if (activeSessionId) {
+            if (activeSessionId && refetchSession) {
               refetchSession();
               return;
             }
@@ -568,7 +575,7 @@ export function LearningPathContainer({
           title="Generation failed"
           message="All topics failed to generate. Please try again."
           onRetry={() => {
-            if (activeSessionId) {
+            if (activeSessionId && refetchSession) {
               refetchSession();
               return;
             }
@@ -676,6 +683,7 @@ export function LearningPathContainer({
                       onRetryQuiz={retry}
                       onContinueToNext={handleContinueToNext}
                       onNextQuiz={() => advanceToNextQuiz(currentSlideNode.id)}
+                      onPreviousQuiz={goToPreviousQuiz}
                       onRegenerate={regenerate}
                       isRegenerating={isRegenerating}
                       isTransitioning={isTransitioning}
