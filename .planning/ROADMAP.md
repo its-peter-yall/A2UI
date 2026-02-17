@@ -187,11 +187,11 @@ Plans:
   2. User can click "Next Quiz" after passing a quiz and advance to the next one in the chain
   3. User sees a complexity badge (Basic/Intermediate/Advanced) on each topic card
   4. User sees a difficulty label (Easy/Medium/Hard) on each quiz within a multi-quiz chain
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 20-01: Multi-quiz UI verification and onNextQuiz handler implementation
-- [ ] 20-02: Complexity badges, difficulty labels, and end-to-end polish
+- [ ] 20-01-PLAN.md — Backend complexity pipeline (DB schema + server schemas + orchestrator + TypeScript types)
+- [ ] 20-02-PLAN.md — Frontend multi-quiz UI (advanceToNextQuiz mutation + component wiring + badges/labels)
 
 ## Progress
 

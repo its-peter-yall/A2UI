@@ -9,20 +9,20 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 
 ## Current Position
 
-**Phase:** 19 of 20 (Orchestrator Integration)
-**Current Plan:** Not started
+**Phase:** 20 of 20 (Frontend Verification)
+**Current Plan:** 2 of 2
 **Total Plans in Phase:** 2
-**Status:** Milestone complete
+**Status:** In progress
 **Last Activity:** 2026-02-17
 
-**Progress:** [██████████] 100%
+**Progress:** [██████████] 95%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 39 (v1.0: 20, v1.1: 14, v1.2: 5)
-- Average duration: --
-- Total execution time: --
+- Total plans completed: 40 (v1.0: 20, v1.1: 14, v1.2: 6)
+- Average duration: 4.6 min
+- Total execution time: 31 min
 
 **By Phase (v1.2):**
 
@@ -31,11 +31,8 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 | 16. Schema Foundation | 1/2 | 5min | 5min |
 | 17. Quizzer Multi-Quiz | 2/2 | 5min | 2.5min |
 | 18. Planner Complexity | 2/2 | 6min | 3min |
-| 19. Orchestrator Integration | 0/2 | - | - |
-| 20. Frontend Verification | 0/2 | - | - |
-| Phase 17 P02 | 2 min | 2 tasks | 3 files |
-| Phase 19 P01 | 6 min | 2 tasks | 2 files |
-| Phase 19 P02 | 0 min | 2 tasks | 1 files |
+| 19. Orchestrator Integration | 2/2 | 0min | 0min |
+| 20. Frontend Verification | 1/2 | 15min | 15min |
 
 ## Accumulated Context
 
@@ -58,6 +55,9 @@ Recent decisions affecting current work:
 - [18-02]: Quiz count bands: Basic=1, Intermediate flexible, Advanced=3-5
 - [Phase 17]: Kept difficulty validation in QuizzerAgent instead of QuizSet schema to preserve backward compatibility
 - [Phase 17]: Used warning + stable reorder behavior instead of failing generation on invalid gradients
+- [20-01]: Use DEFAULT 'Intermediate' for complexity column migration to prevent constraint violations
+- [20-01]: Make complexity Optional in ConceptNodeResponse and TypeScript for backward compatibility
+- [20-01]: Wire complexity through orchestrator only (router uses Pydantic auto-mapping)
 
 ### Research Context
 
@@ -82,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-**Last session:** 2026-02-17T13:19:32.497Z
-**Stopped at:** Completed 19-02-PLAN.md
+**Last session:** 2026-02-17T14:00:00Z
+**Stopped at:** Completed 20-01-PLAN.md
 **Resume file:** None
