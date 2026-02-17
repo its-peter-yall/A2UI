@@ -75,11 +75,16 @@ from server.agents.quizzer import (
     quizzer_agent,
 )
 from server.schemas.learning import (
+    LLMQuizCard,
+    LLMQuizOption,
+    LLMQuizSet,
     QuizCard,
     QuizDifficulty,
     QuizOption,
     QuizSet,
     TopicNode,
+    convert_llm_to_quiz_card,
+    convert_llm_to_quiz_set,
 )
 from server.utils.instructor_client import MODEL_CONFIGS
 
@@ -87,6 +92,60 @@ from server.utils.instructor_client import MODEL_CONFIGS
 def _make_stable_uuid(label: str) -> str:
     """Generate deterministic UUID for testing."""
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"test-option-{label}"))
+
+
+def _make_mock_llm_option(label: str, is_correct: bool = False) -> LLMQuizOption:
+    """Create a mock LLMQuizOption for testing."""
+    return LLMQuizOption(
+        display_label=label,
+        text=f"Option {label} text",
+        is_correct=is_correct,
+        explanation=f"Explanation for option {label}",
+    )
+
+
+def _make_mock_llm_quiz_card() -> LLMQuizCard:
+    """Create a mock LLMQuizCard for testing."""
+    return LLMQuizCard(
+        question_text="What is the main concept of Test Topic 0?",
+        options=[
+            _make_mock_llm_option("A", is_correct=True),
+            _make_mock_llm_option("B"),
+            _make_mock_llm_option("C"),
+            _make_mock_llm_option("D"),
+        ],
+        difficulty=QuizDifficulty.MEDIUM,
+    )
+
+
+def _make_mock_llm_quiz_set(quiz_count: int) -> LLMQuizSet:
+    """Create a mock LLMQuizSet with a deterministic difficulty gradient."""
+    difficulty_sequences = {
+        1: ["medium"],
+        2: ["easy", "hard"],
+        3: ["easy", "medium", "hard"],
+        4: ["easy", "medium", "medium", "hard"],
+        5: ["easy", "easy", "medium", "hard", "hard"],
+    }
+    bounded_count = max(1, min(5, quiz_count))
+    sequence = difficulty_sequences[bounded_count]
+    quizzes: list[LLMQuizCard] = []
+
+    for i, difficulty in enumerate(sequence):
+        quizzes.append(
+            LLMQuizCard(
+                question_text=f"Question {i + 1} for topic set",
+                options=[
+                    _make_mock_llm_option("A", is_correct=True),
+                    _make_mock_llm_option("B"),
+                    _make_mock_llm_option("C"),
+                    _make_mock_llm_option("D"),
+                ],
+                difficulty=difficulty,
+            )
+        )
+
+    return LLMQuizSet(quizzes=quizzes, current_index=0)
 
 
 def _make_mock_topic(index: int = 0) -> TopicNode:
@@ -372,7 +431,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         """
         import asyncio
 
-        mock_quiz = _make_mock_quiz_card()
+        mock_quiz = _make_mock_llm_quiz_card()
         mock_create.return_value = mock_quiz
 
         agent = QuizzerAgent()
@@ -392,7 +451,8 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         # Verify the call arguments include role and response_model
         call_kwargs = mock_create.call_args.kwargs
         self.assertEqual(call_kwargs["role"], "quizzer")
-        self.assertEqual(call_kwargs["response_model"], QuizCard)
+        # Should use LLMQuizCard for generation
+        self.assertEqual(call_kwargs["response_model"], LLMQuizCard)
 
         # Verify messages contain topic and content information
         messages = call_kwargs["messages"]
@@ -405,9 +465,14 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         self.assertIn("system_prompt", call_kwargs)
         self.assertIn("distractor", call_kwargs["system_prompt"].lower())
 
-        # Verify result
+        # Verify result is QuizCard (not LLMQuizCard)
+        self.assertIsInstance(result, QuizCard)
         self.assertEqual(result.question_text, mock_quiz.question_text)
         self.assertEqual(len(result.options), 4)
+
+        # Verify option_ids were generated (UUID format)
+        for opt in result.options:
+            uuid.UUID(opt.option_id)
 
     @patch(
         "server.agents.base.instructor_client.create_structured",
@@ -421,7 +486,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         """
         import asyncio
 
-        mock_quiz = _make_mock_quiz_card()
+        mock_quiz = _make_mock_llm_quiz_card()
         mock_create.return_value = mock_quiz
 
         agent = QuizzerAgent()
@@ -453,7 +518,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         """
         import asyncio
 
-        mock_quiz = _make_mock_quiz_card()
+        mock_quiz = _make_mock_llm_quiz_card()
         mock_create.return_value = mock_quiz
 
         agent = QuizzerAgent()
@@ -466,7 +531,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
             )
         )
 
-        # Verify QuizCard structure
+        # Verify QuizCard structure (not LLMQuizCard)
         self.assertIsInstance(result, QuizCard)
         self.assertIsInstance(result.question_text, str)
         self.assertGreater(len(result.question_text), 0)
@@ -481,6 +546,10 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         # Verify difficulty is a valid string value
         self.assertIsInstance(result.difficulty, str)
         self.assertIn(result.difficulty, {"easy", "medium", "hard"})
+
+        # Verify option_ids were generated (UUID format)
+        for opt in result.options:
+            uuid.UUID(opt.option_id)
 
 
 class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
@@ -519,14 +588,14 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         "server.agents.base.instructor_client.create_structured",
         new_callable=AsyncMock,
     )
-    def test_generate_quiz_set_calls_instructor_with_quiz_set_model(
+    def test_generate_quiz_set_calls_instructor_with_llm_quiz_set_model(
         self,
         mock_create: AsyncMock,
     ) -> None:
-        """Batch path should call instructor with QuizSet response model."""
+        """Batch path should call instructor with LLMQuizSet response model."""
         import asyncio
 
-        mock_create.return_value = _make_mock_quiz_set(3)
+        mock_create.return_value = _make_mock_llm_quiz_set(3)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=2)
@@ -539,10 +608,12 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
             )
         )
 
+        # Result should be QuizSet (not LLMQuizSet)
         self.assertIsInstance(result, QuizSet)
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
-        self.assertEqual(call_kwargs["response_model"], QuizSet)
+        # Should use LLMQuizSet for generation
+        self.assertEqual(call_kwargs["response_model"], LLMQuizSet)
         user_message = call_kwargs["messages"][0]["content"]
         self.assertIn("Q1=easy", user_message)
         self.assertIn("Q2=medium", user_message)
@@ -559,7 +630,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Returned QuizSet should contain exactly requested quiz count."""
         import asyncio
 
-        mock_create.return_value = _make_mock_quiz_set(3)
+        mock_create.return_value = _make_mock_llm_quiz_set(3)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=3)
@@ -584,7 +655,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Over-count responses should align to expected difficulty sequence."""
         import asyncio
 
-        mock_create.return_value = _make_mock_quiz_set(5)
+        mock_create.return_value = _make_mock_llm_quiz_set(5)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=31)
@@ -613,7 +684,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Under-count responses should raise to avoid partial quiz chains."""
         import asyncio
 
-        mock_create.return_value = _make_mock_quiz_set(2)
+        mock_create.return_value = _make_mock_llm_quiz_set(2)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=32)
@@ -638,12 +709,12 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Non-monotonic gradients should be reordered to ascending."""
         import asyncio
 
-        ascending_quiz_set = _make_mock_quiz_set(3)
-        mock_create.return_value = QuizSet(
+        ascending_llm_set = _make_mock_llm_quiz_set(3)
+        mock_create.return_value = LLMQuizSet(
             quizzes=[
-                ascending_quiz_set.quizzes[0],
-                ascending_quiz_set.quizzes[2],
-                ascending_quiz_set.quizzes[1],
+                ascending_llm_set.quizzes[0],
+                ascending_llm_set.quizzes[2],
+                ascending_llm_set.quizzes[1],
             ],
             current_index=0,
         )
@@ -674,14 +745,18 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Mismatched difficulty distributions should raise."""
         import asyncio
 
-        base_set = _make_mock_quiz_set(4)
+        base_llm_set = _make_mock_llm_quiz_set(4)
         wrong_quizzes = [
-            base_set.quizzes[0],
-            base_set.quizzes[1],
-            base_set.quizzes[2].model_copy(update={"difficulty": "hard"}),
-            base_set.quizzes[3],
+            base_llm_set.quizzes[0],
+            base_llm_set.quizzes[1],
+            LLMQuizCard(
+                question_text=base_llm_set.quizzes[2].question_text,
+                options=base_llm_set.quizzes[2].options,
+                difficulty="hard",  # Changed from medium to hard
+            ),
+            base_llm_set.quizzes[3],
         ]
-        mock_create.return_value = QuizSet(
+        mock_create.return_value = LLMQuizSet(
             quizzes=wrong_quizzes,
             current_index=0,
         )
@@ -709,7 +784,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Prompt must include easy->medium->hard sequence for 3 quizzes."""
         import asyncio
 
-        mock_create.return_value = _make_mock_quiz_set(3)
+        mock_create.return_value = _make_mock_llm_quiz_set(3)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=4)
@@ -731,42 +806,39 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         "server.agents.base.instructor_client.create_structured",
         new_callable=AsyncMock,
     )
-    def test_generate_quiz_set_fixes_option_ids(
+    def test_generate_quiz_set_generates_option_ids(
         self,
         mock_create: AsyncMock,
     ) -> None:
-        """Option IDs should be UUIDs and unique after post-processing."""
+        """Option IDs should be UUIDs generated by backend after LLM response."""
         import asyncio
 
-        quizzes = []
+        # LLM returns data without option_id (using LLM schemas)
+        llm_quizzes = []
         for i, difficulty in enumerate(["easy", "medium", "hard"]):
-            quizzes.append(
-                QuizCard(
-                    question_text=f"Question with letter IDs {i + 1}",
+            llm_quizzes.append(
+                LLMQuizCard(
+                    question_text=f"Question {i + 1}",
                     options=[
-                        QuizOption(
-                            option_id="A",
+                        LLMQuizOption(
                             display_label="A",
                             text="Option A",
                             is_correct=(i == 0),
                             explanation="Explanation A",
                         ),
-                        QuizOption(
-                            option_id="B",
+                        LLMQuizOption(
                             display_label="B",
                             text="Option B",
                             is_correct=(i == 1),
                             explanation="Explanation B",
                         ),
-                        QuizOption(
-                            option_id="C",
+                        LLMQuizOption(
                             display_label="C",
                             text="Option C",
                             is_correct=(i == 2),
                             explanation="Explanation C",
                         ),
-                        QuizOption(
-                            option_id="D",
+                        LLMQuizOption(
                             display_label="D",
                             text="Option D",
                             is_correct=False,
@@ -776,7 +848,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                     difficulty=difficulty,
                 )
             )
-        mock_create.return_value = QuizSet(quizzes=quizzes, current_index=0)
+        mock_create.return_value = LLMQuizSet(quizzes=llm_quizzes, current_index=0)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=5)
@@ -784,11 +856,12 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         result = asyncio.run(
             agent.generate_quiz_set(
                 topic=topic,
-                content="Option ID fix content",
+                content="Option ID generation content",
                 quiz_count=3,
             )
         )
 
+        # Backend should generate UUIDs for all options
         all_option_ids = [
             option.option_id for quiz in result.quizzes for option in quiz.options
         ]
@@ -806,136 +879,36 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         self,
         mock_create: AsyncMock,
     ) -> None:
-        """Duplicate option IDs across quizzes should be de-duplicated."""
+        """Backend should generate unique UUIDs across all quizzes in set."""
         import asyncio
 
-        duplicate_quizzes = []
+        # LLM returns quizzes without option_ids (LLM schemas)
+        # Backend conversion should ensure uniqueness
+        llm_quizzes = []
         for i, difficulty in enumerate(["easy", "medium", "hard"]):
-            duplicate_quizzes.append(
-                QuizCard(
-                    question_text=f"Duplicate IDs question {i + 1}",
+            llm_quizzes.append(
+                LLMQuizCard(
+                    question_text=f"Question {i + 1}",
                     options=[
-                        QuizOption(
-                            option_id=_make_stable_uuid("shared-A"),
-                            display_label="A",
-                            text="Shared A",
-                            is_correct=(i == 0),
-                            explanation="A explanation",
-                        ),
-                        QuizOption(
-                            option_id=_make_stable_uuid("shared-B"),
-                            display_label="B",
-                            text="Shared B",
-                            is_correct=(i == 1),
-                            explanation="B explanation",
-                        ),
-                        QuizOption(
-                            option_id=_make_stable_uuid(f"unique-{i}-C"),
-                            display_label="C",
-                            text="Unique C",
-                            is_correct=(i == 2),
-                            explanation="C explanation",
-                        ),
-                        QuizOption(
-                            option_id=_make_stable_uuid(f"unique-{i}-D"),
-                            display_label="D",
-                            text="Unique D",
-                            is_correct=False,
-                            explanation="D explanation",
-                        ),
-                    ],
-                    difficulty=difficulty,
-                )
-            )
-
-        mock_create.return_value = QuizSet(
-            quizzes=duplicate_quizzes,
-            current_index=0,
-        )
-
-        agent = QuizzerAgent()
-        topic = _make_mock_topic(index=6)
-        result = asyncio.run(
-            agent.generate_quiz_set(
-                topic=topic,
-                content="Duplicate ID content",
-                quiz_count=3,
-            )
-        )
-
-        all_option_ids = [
-            option.option_id for quiz in result.quizzes for option in quiz.options
-        ]
-        self.assertEqual(len(all_option_ids), 12)
-        self.assertEqual(len(set(all_option_ids)), 12)
-
-    @patch(
-        "server.agents.base.instructor_client.create_structured",
-        new_callable=AsyncMock,
-    )
-    def test_generate_quiz_set_fixes_fake_uuid_option_ids(
-        self,
-        mock_create: AsyncMock,
-    ) -> None:
-        """Fake UUID-like strings from LLM should be converted to real UUIDs."""
-        import asyncio
-
-        # Simulate LLM generating fake UUID-like strings
-        # Each quiz needs unique option_ids (QuizCard schema requirement)
-        fake_uuid_quizzes = []
-        fake_uuids_by_quiz = [
-            # Quiz 0
-            [
-                "h8i8j8k8-l8m8-4h9i-5j0k-1l2m3n4o5p6q",
-                "a1b2c3d4-e5f6-4g7h-8i9j-0k1l2m3n4o5p",
-                "x9y8z7w6-v5u4-3t2s-1r0q-9p8o7n6m5l4k",
-                "p1q2r3s4-t5u6-4v7w-8x9y-0z1a2b3c4d5e",
-            ],
-            # Quiz 1
-            [
-                "f6g7h8i9-j0k1-4l2m-3n4o-5p6q7r8s9t0u",
-                "v1w2x3y4-z5a6-4b7c-8d9e-0f1g2h3i4j5k",
-                "l6m7n8o9-p0q1-4r2s-3t4u-5v6w7x8y9z0a",
-                "b1c2d3e4-f5g6-4h7i-8j9k-0l1m2n3o4p5q",
-            ],
-            # Quiz 2
-            [
-                "r6s7t8u9-v0w1-4x2y-3z4a-5b6c7d8e9f0g",
-                "h1i2j3k4-l5m6-4n7o-8p9q-0r1s2t3u4v5w",
-                "x6y7z8a9-b0c1-4d2e-3f4g-5h6i7j8k9l0m",
-                "n1o2p3q4-r5s6-4t7u-8v9w-0x1y2z3a4b5c",
-            ],
-        ]
-        all_fake_uuids = [uid for quiz_uids in fake_uuids_by_quiz for uid in quiz_uids]
-
-        for i, difficulty in enumerate(["easy", "medium", "hard"]):
-            fake_uuid_quizzes.append(
-                QuizCard(
-                    question_text=f"Fake UUID question {i + 1}",
-                    options=[
-                        QuizOption(
-                            option_id=fake_uuids_by_quiz[i][0],
+                        LLMQuizOption(
                             display_label="A",
                             text="Option A",
                             is_correct=(i == 0),
                             explanation="Explanation A",
                         ),
-                        QuizOption(
-                            option_id=fake_uuids_by_quiz[i][1],
+                        LLMQuizOption(
                             display_label="B",
                             text="Option B",
                             is_correct=(i == 1),
                             explanation="Explanation B",
                         ),
-                        QuizOption(
-                            option_id=fake_uuids_by_quiz[i][2],
+                        LLMQuizOption(
                             display_label="C",
                             text="Option C",
                             is_correct=(i == 2),
                             explanation="Explanation C",
                         ),
-                        QuizOption(
-                            option_id=fake_uuids_by_quiz[i][3],
+                        LLMQuizOption(
                             display_label="D",
                             text="Option D",
                             is_correct=False,
@@ -946,35 +919,27 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 )
             )
 
-        mock_create.return_value = QuizSet(
-            quizzes=fake_uuid_quizzes,
+        mock_create.return_value = LLMQuizSet(
+            quizzes=llm_quizzes,
             current_index=0,
         )
 
         agent = QuizzerAgent()
-        topic = _make_mock_topic(index=61)
-
+        topic = _make_mock_topic(index=6)
         result = asyncio.run(
             agent.generate_quiz_set(
                 topic=topic,
-                content="Fake UUID fix content",
+                content="Unique ID content",
                 quiz_count=3,
             )
         )
 
+        # All 12 options should have unique UUIDs
         all_option_ids = [
             option.option_id for quiz in result.quizzes for option in quiz.options
         ]
-
-        # Verify all 12 options have valid UUIDs
         self.assertEqual(len(all_option_ids), 12)
         self.assertEqual(len(set(all_option_ids)), 12)
-
-        # Verify none of the fake UUIDs remain
-        for option_id in all_option_ids:
-            self.assertNotIn(option_id, all_fake_uuids)
-            # Verify it's a valid UUID4
-            uuid.UUID(option_id)
 
     @patch(
         "server.agents.base.instructor_client.create_structured",
@@ -987,7 +952,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         """Batch prompt should include topic title, summary, and key terms."""
         import asyncio
 
-        mock_create.return_value = _make_mock_quiz_set(3)
+        mock_create.return_value = _make_mock_llm_quiz_set(3)
 
         agent = QuizzerAgent()
         topic = _make_mock_topic(index=7)
@@ -1004,6 +969,79 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         self.assertIn(topic.summary_for_context, user_message)
         self.assertIn(topic.key_terms[0], user_message)
         self.assertIn(topic.key_terms[1], user_message)
+
+
+class TestLLMToStorageConversion(unittest.TestCase):
+    """Tests for LLM schema to storage schema conversion."""
+
+    def test_convert_llm_to_quiz_card_generates_uuids(self):
+        """Conversion should generate UUIDs for all options."""
+        llm_card = _make_mock_llm_quiz_card()
+        quiz_card = convert_llm_to_quiz_card(llm_card)
+
+        self.assertIsInstance(quiz_card, QuizCard)
+        self.assertEqual(len(quiz_card.options), 4)
+
+        # All options should have UUID option_ids
+        for opt in quiz_card.options:
+            uuid.UUID(opt.option_id)
+
+    def test_convert_llm_to_quiz_set_generates_unique_uuids(self):
+        """Conversion should generate unique UUIDs across all quizzes."""
+        llm_set = _make_mock_llm_quiz_set(3)
+        quiz_set = convert_llm_to_quiz_set(llm_set)
+
+        self.assertIsInstance(quiz_set, QuizSet)
+
+        # Collect all option_ids across all quizzes
+        all_option_ids = [
+            opt.option_id for quiz in quiz_set.quizzes for opt in quiz.options
+        ]
+
+        # Should be 12 unique UUIDs (3 quizzes x 4 options)
+        self.assertEqual(len(all_option_ids), 12)
+        self.assertEqual(len(set(all_option_ids)), 12)
+
+    def test_conversion_preserves_all_other_fields(self):
+        """Conversion should preserve text, is_correct, explanation, display_label."""
+        llm_card = LLMQuizCard(
+            question_text="Test question?",
+            options=[
+                LLMQuizOption(
+                    display_label="A",
+                    text="Correct answer",
+                    is_correct=True,
+                    explanation="This is correct because...",
+                ),
+                LLMQuizOption(
+                    display_label="B",
+                    text="Wrong answer",
+                    is_correct=False,
+                    explanation="This is wrong because...",
+                ),
+                LLMQuizOption(
+                    display_label="C", text="C", is_correct=False, explanation="C"
+                ),
+                LLMQuizOption(
+                    display_label="D", text="D", is_correct=False, explanation="D"
+                ),
+            ],
+            difficulty="hard",
+        )
+
+        quiz_card = convert_llm_to_quiz_card(llm_card)
+
+        self.assertEqual(quiz_card.question_text, "Test question?")
+        self.assertEqual(quiz_card.difficulty, "hard")
+
+        # Verify each option preserved its fields
+        for i, (llm_opt, quiz_opt) in enumerate(
+            zip(llm_card.options, quiz_card.options)
+        ):
+            self.assertEqual(quiz_opt.display_label, llm_opt.display_label)
+            self.assertEqual(quiz_opt.text, llm_opt.text)
+            self.assertEqual(quiz_opt.is_correct, llm_opt.is_correct)
+            self.assertEqual(quiz_opt.explanation, llm_opt.explanation)
 
 
 class TestQuizzerDifficultyValidation(unittest.TestCase):
