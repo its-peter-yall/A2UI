@@ -303,6 +303,95 @@ class TestPlannerSchemas(unittest.TestCase):
         with self.assertRaises(ValidationError):
             CourseOutline(course_title="Too short", topics=topics)
 
+    def test_topic_node_complexity_default(self) -> None:
+        """TopicNode without complexity defaults to Intermediate."""
+        topic = _make_topic(0)
+        self.assertEqual(topic.complexity, "Intermediate")
+
+    def test_topic_node_quiz_count_default(self) -> None:
+        """TopicNode without quiz_count defaults to 1."""
+        topic = _make_topic(0)
+        self.assertEqual(topic.quiz_count, 1)
+
+    def test_topic_node_complexity_valid_values(self) -> None:
+        """All three valid complexity values are accepted."""
+        for complexity in ["Basic", "Intermediate", "Advanced"]:
+            topic = TopicNode(
+                index=0,
+                title="T",
+                summary_for_context="S",
+                key_terms=["a", "b"],
+                complexity=complexity,
+            )
+            self.assertEqual(topic.complexity, complexity)
+
+    def test_topic_node_complexity_invalid_rejected(self) -> None:
+        """Invalid complexity values raise ValidationError."""
+        for invalid in ["Expert", "", "basic", "BASIC"]:
+            with self.assertRaises(
+                ValidationError,
+                msg=f"Expected ValidationError for complexity={invalid!r}",
+            ):
+                TopicNode(
+                    index=0,
+                    title="T",
+                    summary_for_context="S",
+                    key_terms=["a", "b"],
+                    complexity=invalid,
+                )
+
+    def test_topic_node_quiz_count_valid_range(self) -> None:
+        """Values 1 through 5 are accepted for quiz_count."""
+        for count in range(1, 6):
+            topic = TopicNode(
+                index=0,
+                title="T",
+                summary_for_context="S",
+                key_terms=["a", "b"],
+                quiz_count=count,
+            )
+            self.assertEqual(topic.quiz_count, count)
+
+    def test_topic_node_quiz_count_invalid_rejected(self) -> None:
+        """Values outside 1-5 raise ValidationError."""
+        for invalid_count in [0, -1, 6, 10, 100]:
+            with self.assertRaises(
+                ValidationError,
+                msg=f"Expected ValidationError for quiz_count={invalid_count}",
+            ):
+                TopicNode(
+                    index=0,
+                    title="T",
+                    summary_for_context="S",
+                    key_terms=["a", "b"],
+                    quiz_count=invalid_count,
+                )
+
+    def test_topic_node_backward_compat(self) -> None:
+        """TopicNode from old data (no complexity/quiz_count) gets defaults."""
+        old_data = {
+            "index": 0,
+            "title": "Old Topic",
+            "summary_for_context": "Old summary",
+            "key_terms": ["term1", "term2"],
+        }
+        topic = TopicNode(**old_data)
+        self.assertEqual(topic.complexity, "Intermediate")
+        self.assertEqual(topic.quiz_count, 1)
+
+    def test_topic_node_with_all_fields(self) -> None:
+        """TopicNode with all fields including new ones."""
+        topic = TopicNode(
+            index=0,
+            title="Quantum Entanglement",
+            summary_for_context="Deep dive into QE",
+            key_terms=["entanglement", "superposition"],
+            complexity="Advanced",
+            quiz_count=5,
+        )
+        self.assertEqual(topic.complexity, "Advanced")
+        self.assertEqual(topic.quiz_count, 5)
+
 
 class TestSessionSchemas(unittest.TestCase):
     def test_learning_session_create(self) -> None:
