@@ -64,27 +64,28 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLAN-01 | — | Pending |
-| PLAN-02 | — | Pending |
-| PLAN-03 | — | Pending |
-| QUIZ-01 | — | Pending |
-| QUIZ-02 | — | Pending |
-| QUIZ-03 | — | Pending |
-| QUIZ-04 | — | Pending |
-| PROG-01 | — | Pending |
-| PROG-02 | — | Pending |
-| PROG-03 | — | Pending |
-| PROG-04 | — | Pending |
-| UXUI-01 | — | Pending |
-| UXUI-02 | — | Pending |
-| UXUI-03 | — | Pending |
-| UXUI-04 | — | Pending |
+| PLAN-01 | Phase 18: Planner Complexity Assignment | Pending |
+| PLAN-02 | Phase 18: Planner Complexity Assignment | Pending |
+| PLAN-03 | Phase 18: Planner Complexity Assignment | Pending |
+| QUIZ-01 | Phase 17: Quizzer Multi-Quiz Generation | Pending |
+| QUIZ-02 | Phase 17: Quizzer Multi-Quiz Generation | Pending |
+| QUIZ-03 | Phase 17: Quizzer Multi-Quiz Generation | Pending |
+| QUIZ-04 | Phase 17: Quizzer Multi-Quiz Generation | Pending |
+| PROG-01 | Phase 19: Orchestrator Integration & Progression | Pending |
+| PROG-02 | Phase 19: Orchestrator Integration & Progression | Pending |
+| PROG-03 | Phase 19: Orchestrator Integration & Progression | Pending |
+| PROG-04 | Phase 19: Orchestrator Integration & Progression | Pending |
+| UXUI-01 | Phase 20: Frontend Verification & Polish | Pending |
+| UXUI-02 | Phase 20: Frontend Verification & Polish | Pending |
+| UXUI-03 | Phase 20: Frontend Verification & Polish | Pending |
+| UXUI-04 | Phase 20: Frontend Verification & Polish | Pending |
 
 **Coverage:**
 - v1.2 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15 ✓
+- Unmapped: 0
+- Infrastructure phases (no direct requirements): Phase 16 (Schema Foundation — enables Phases 17-18)
 
 ---
 *Requirements defined: 2026-02-17*
-*Last updated: 2026-02-17 after initial definition*
+*Last updated: 2026-02-17 after roadmap creation*
