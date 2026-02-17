@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-17)
 
 **Core value:** Users can learn any topic through AI-generated retrieval-based learning paths with gated progression that reinforces understanding through active recall.
-**Current focus:** v1.2 Dynamic Quiz Generation — Phase 17: Quizzer Multi-Quiz
+**Current focus:** v1.2 Dynamic Quiz Generation — Phase 18: Planner Complexity
 
 ## Current Position
 
-Phase: 17 of 20 (Quizzer Multi-Quiz Generation)
-Plan: 2 of 2 in current phase
+Phase: 18 of 20 (Planner Complexity Assessment)
+Plan: 1 of 2 in current phase
 Status: Executing
-Last activity: 2026-02-17 — Completed 17-01 (generate_quiz_set batch generation)
+Last activity: 2026-02-17 — Completed 18-01 (Planner complexity prompt engineering)
 
-Progress: [█████████████████████████████████████████░░░░░░░░░] 82% (36/44 plans total)
+Progress: [█████████████████████████████████████████░░░░░░░░░] 84% (37/44 plans total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 36 (v1.0: 20, v1.1: 14, v1.2: 2)
+- Total plans completed: 37 (v1.0: 20, v1.1: 14, v1.2: 3)
 - Average duration: --
 - Total execution time: --
 
@@ -29,7 +29,7 @@ Progress: [███████████████████████
 |-------|-------|-------|----------|
 | 16. Schema Foundation | 1/2 | 5min | 5min |
 | 17. Quizzer Multi-Quiz | 1/2 | 3min | 3min |
-| 18. Planner Complexity | 0/2 | - | - |
+| 18. Planner Complexity | 1/2 | 3min | 3min |
 | 19. Orchestrator Integration | 0/2 | - | - |
 | 20. Frontend Verification | 0/2 | - | - |
 
@@ -47,6 +47,8 @@ Recent decisions affecting current work:
 - [16-01]: Pydantic Literal + Field(ge/le) sufficient for TopicNode validation -- no custom validators needed
 - [Phase 17]: Kept shared QUIZZER_SYSTEM_PROMPT unchanged and encoded multi-quiz constraints in a batch-only user message path
 - [Phase 17]: Used backward-compatible delegation: quiz_count<=1 calls generate_quiz and wraps in QuizSet, quiz_count>1 uses single response_model=QuizSet batch call
+- [18-01]: Prompt extension pattern — add sections + update example/output spec, never rewrite existing prompt content
+- [18-01]: Quiz count mapping uses ranges (Intermediate: 2-3, Advanced: 3-5) for LLM flexibility
 
 ### Research Context
 
@@ -64,7 +66,7 @@ None yet.
 
 ### Blockers/Concerns
 
-- Planner prompt drift risk: adding complexity/quiz_count may cause uniform or meaningless values
+- ~~Planner prompt drift risk~~ — addressed in 18-01: explicit criteria + VARIED emphasis + example
 - onNextQuiz is a no-op — real implementation needed in Phase 20
 - State machine desync risk between node state and current_index for multi-quiz
 - Regeneration must produce QuizSet when original had quiz_count > 1
@@ -72,5 +74,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 17-01-PLAN.md
+Stopped at: Completed 18-01-PLAN.md
 Resume file: None
