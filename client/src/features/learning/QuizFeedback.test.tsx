@@ -14,9 +14,9 @@
  * - Shows "Incorrect" without badge for wrong answers
  * - Shows "Try Again" button when not mastered
  * - Shows "Continue" button when mastered
- * - Displays explanation for correct answer (always shown)
- * - Displays explanation for selected incorrect option when wrong (with "Why this is incorrect:")
- * - Hides explanations for unselected incorrect options (prevents giving away answers)
+ * - Displays all option explanations when user answers correctly
+ * - Displays selected incorrect option explanation when wrong
+ * - Hides correct answer explanation when answer is incorrect
  * - QuizSet: Shows progress indicator (Quiz X of Y)
  * - QuizSet: Shows "Next Quiz" button when correct and more quizzes exist
  * - QuizSet: Displays correct quiz based on currentQuizIndex
@@ -108,7 +108,9 @@ const mockIncorrectResult: QuizSubmitResponse = {
   ...mockCorrectResult,
   is_correct: false,
   score_percent: 0,
+  correct_option_id: null,
   selected_option_id: 'opt-a-uuid',
+  explanation: '',
   selected_explanation: 'London is the capital of England.',
   is_mastered: false,
   next_node_unlocked: false,
@@ -171,7 +173,7 @@ describe('QuizFeedback', () => {
       expect(onContinue).toHaveBeenCalled();
     });
 
-    it('displays explanation for correct answer when user answers correctly', () => {
+    it('displays explanations for all options when user answers correctly', () => {
       render(
         <QuizFeedback
           quiz={mockQuiz}
@@ -179,14 +181,14 @@ describe('QuizFeedback', () => {
           attemptCount={1}
         />
       );
-      // Only correct answer's explanation is shown when user answered correctly
+      // Correct option explanation from result payload
       expect(screen.getByText(/paris is the capital of france/i)).toBeInTheDocument();
-      // Other incorrect options' explanations should NOT be shown
-      expect(screen.queryByText(/london is the capital of england/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/berlin is the capital of germany/i)).not.toBeInTheDocument();
+      // Incorrect option explanations are shown for learning context
+      expect(screen.getByText(/london is the capital of england/i)).toBeInTheDocument();
+      expect(screen.getByText(/berlin is the capital of germany/i)).toBeInTheDocument();
     });
 
-    it('displays explanation for selected incorrect option when user answers incorrectly', () => {
+    it('displays only selected incorrect option explanation when user answers incorrectly', () => {
       render(
         <QuizFeedback
           quiz={mockQuiz}
@@ -194,12 +196,12 @@ describe('QuizFeedback', () => {
           attemptCount={1}
         />
       );
-      // Correct answer's explanation is always shown
-      expect(screen.getByText(/paris is the capital of france/i)).toBeInTheDocument();
-      // Selected incorrect option (London - option_a) explanation is shown with "Why this is incorrect:" label
+      // Correct answer is hidden for incorrect attempts
+      expect(screen.queryByText(/paris is the capital of france/i)).not.toBeInTheDocument();
+      // Selected incorrect option explanation is shown
       expect(screen.getByText(/london is the capital of england/i)).toBeInTheDocument();
       expect(screen.getByText(/Why this is incorrect:/i)).toBeInTheDocument();
-      // Other incorrect options (Berlin, Madrid) should NOT have their explanations shown
+      // Unselected options remain hidden
       expect(screen.queryByText(/berlin is the capital of germany/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/madrid is the capital of spain/i)).not.toBeInTheDocument();
     });

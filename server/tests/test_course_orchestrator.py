@@ -323,6 +323,7 @@ class TestCourseOrchestratorGenerateConceptUnit(unittest.IsolatedAsyncioTestCase
             )
 
         mock_skeleton.assert_called_once()
+        self.assertEqual(mock_skeleton.call_args.kwargs["complexity"], topic.complexity)
         self.assertEqual(result["node"], skeleton)
         self.assertEqual(result["error_message"], "boom")
 
@@ -354,17 +355,59 @@ class TestCourseOrchestratorGatherResults(unittest.TestCase):
             CourseOrchestrator,
             "_create_skeleton_card",
             return_value=skeleton,
-        ):
+        ) as mock_skeleton:
             nodes, serial_ms = orchestrator._process_gather_results(
                 results=results,
                 topics=topics,
                 session_id="session-1",
             )
 
+        self.assertEqual(mock_skeleton.call_count, 2)
+        self.assertEqual(
+            mock_skeleton.call_args_list[0].kwargs["complexity"], topics[0].complexity
+        )
+        self.assertEqual(
+            mock_skeleton.call_args_list[1].kwargs["complexity"], "Intermediate"
+        )
         self.assertEqual(len(nodes), 4)
         self.assertEqual(nodes[0], skeleton)
         self.assertEqual(nodes[3], skeleton)
         self.assertEqual(serial_ms, 6.0)
+
+    def test_create_skeleton_card_includes_complexity(self) -> None:
+        orchestrator = CourseOrchestrator()
+        node_payload = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 1,
+            "title": "Topic 1",
+            "content_markdown": (
+                "Content generation failed. Retry is available."
+            ),
+            "status": NodeStatus.ERROR.value,
+            "error_message": "boom",
+            "retry_available": True,
+            "complexity": "Advanced",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+            "quiz": None,
+        }
+
+        with patch.object(
+            orchestrator_module.learning_manager,
+            "create_concept_node",
+            return_value=node_payload,
+        ) as mock_create:
+            skeleton = orchestrator._create_skeleton_card(
+                error=RuntimeError("boom"),
+                session_id="session-1",
+                sequence_index=1,
+                title="Topic 1",
+                complexity="Advanced",
+            )
+
+        self.assertEqual(mock_create.call_args.kwargs["complexity"], "Advanced")
+        self.assertEqual(skeleton["complexity"], "Advanced")
 
 
 class TestCourseOrchestratorRegenerateNode(unittest.IsolatedAsyncioTestCase):

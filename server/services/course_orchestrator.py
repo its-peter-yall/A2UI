@@ -363,6 +363,7 @@ class CourseOrchestrator:
                 session_id=session_id,
                 sequence_index=sequence_index,
                 title=topic.title,
+                complexity=topic.complexity,
             )
         finally:
             generation_ms = (time.perf_counter() - start_time) * 1000
@@ -424,6 +425,7 @@ class CourseOrchestrator:
                     session_id=session_id,
                     sequence_index=topic_index,
                     title=topic_title,
+                    complexity=topic.complexity if topic else "Intermediate",
                 )
                 processed_nodes.append(skeleton)
                 generation_times.append(0.0)
@@ -457,6 +459,7 @@ class CourseOrchestrator:
                     session_id=session_id,
                     sequence_index=i,
                     title=topic.title if topic else f"Topic {i}",
+                    complexity=topic.complexity if topic else "Intermediate",
                 )
                 processed_nodes.append(skeleton)
                 generation_times.append(0.0)
@@ -469,6 +472,7 @@ class CourseOrchestrator:
         session_id: str,
         sequence_index: int,
         title: str,
+        complexity: str = "Intermediate",
     ) -> Dict[str, Any]:
         """
         Create a SkeletonCard dict for a failed generation.
@@ -481,6 +485,7 @@ class CourseOrchestrator:
             session_id: The learning session identifier
             sequence_index: The index of the failed topic
             title: The title of the failed topic
+            complexity: Complexity level to persist for retry context
 
         Returns:
             Dict representing a SkeletonCard
@@ -495,6 +500,7 @@ class CourseOrchestrator:
             quiz=None,
             error_message=str(error),
             retry_available=True,
+            complexity=complexity,
         )
         return {
             "id": node["id"],
@@ -505,6 +511,7 @@ class CourseOrchestrator:
             "status": node["status"],
             "error_message": node.get("error_message"),
             "retry_available": node.get("retry_available", True),
+            "complexity": node.get("complexity"),
             "created_at": node["created_at"],
             "updated_at": node["updated_at"],
             "quiz": node.get("quiz"),

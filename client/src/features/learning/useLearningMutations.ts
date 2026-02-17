@@ -323,22 +323,11 @@ export function useLearningMutations({
   const advanceToNextQuizMutation = useMutation({
     mutationFn: (nodeId: string) => retryQuiz(nodeId),
     
-    onMutate: async (nodeId): Promise<MutationContext> => {
+    onMutate: async () => {
       await queryClient.cancelQueries({ queryKey });
-
-      // Optimistically transition back to IN_QUIZ
-      const rollback = optimisticStatusUpdate(
-        queryClient,
-        sessionId,
-        nodeId,
-        'IN_QUIZ'
-      );
-
-      return { rollback };
     },
     
-    onError: (error, _nodeId, context) => {
-      context?.rollback();
+    onError: (error) => {
       onError?.(error as Error, 'advanceToNextQuiz');
     },
     
