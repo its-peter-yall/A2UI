@@ -557,26 +557,7 @@ class QuizzerAgent(BaseAgent):
             context=full_context,
         )
 
-        # Log LLM-generated option IDs for debugging
-        for quiz_idx, quiz in enumerate(quiz_set.quizzes):
-            for opt in quiz.options:
-                logger.debug(
-                    "LLM generated option_id for quiz %s: %s",
-                    quiz_idx,
-                    opt.option_id,
-                )
-
         quiz_set = self._fix_quiz_set_option_ids(quiz_set)
-
-        # Log fixed option IDs for debugging
-        for quiz_idx, quiz in enumerate(quiz_set.quizzes):
-            for opt in quiz.options:
-                logger.debug(
-                    "Fixed option_id for quiz %s: %s",
-                    quiz_idx,
-                    opt.option_id,
-                )
-
         quiz_set = self._enforce_quiz_count(quiz_set, quiz_count)
 
         if not self._validate_difficulty_gradient(quiz_set):

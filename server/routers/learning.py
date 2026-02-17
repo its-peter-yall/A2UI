@@ -827,14 +827,6 @@ def submit_quiz(
         finally:
             conn.close()
 
-        # Log submission for debugging
-        logger.debug(
-            "Quiz submission: node_id=%s, quiz_index=%s, selected_option_id=%s",
-            node_id,
-            request.quiz_index,
-            request.selected_option_id,
-        )
-
         # Create the quiz attempt
         result = learning_manager.create_quiz_attempt(
             node_id=node_id,
