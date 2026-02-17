@@ -138,6 +138,19 @@ class TestPlannerAgent(unittest.TestCase):
         self.assertEqual(topic.title, "Test Topic")
         self.assertEqual(len(topic.key_terms), 2)
 
+    def test_topic_node_with_complexity_and_quiz_count(self) -> None:
+        """Verify TopicNode accepts complexity and quiz_count values."""
+        topic = TopicNode(
+            index=0,
+            title="Advanced Topic",
+            summary_for_context="A complex synthesis topic",
+            key_terms=["synthesis", "integration"],
+            complexity="Advanced",
+            quiz_count=4,
+        )
+        self.assertEqual(topic.complexity, "Advanced")
+        self.assertEqual(topic.quiz_count, 4)
+
     def test_course_outline_validation(self) -> None:
         """Verify CourseOutline schema validation works correctly."""
         outline = _make_mock_outline()
@@ -249,6 +262,51 @@ class TestPlannerPromptQuality(unittest.TestCase):
         """Check that key terms are part of the output specification."""
         self.assertIn("key_terms", PLANNER_SYSTEM_PROMPT)
         self.assertIn("Key Terms", PLANNER_SYSTEM_PROMPT)
+
+    def test_prompt_contains_complexity_assessment(self) -> None:
+        """Check that complexity assessment section with all levels exists."""
+        self.assertIn("Complexity Assessment", PLANNER_SYSTEM_PROMPT)
+        self.assertIn("Basic", PLANNER_SYSTEM_PROMPT)
+        self.assertIn("Intermediate", PLANNER_SYSTEM_PROMPT)
+        self.assertIn("Advanced", PLANNER_SYSTEM_PROMPT)
+
+    def test_prompt_contains_quiz_count_mapping(self) -> None:
+        """Check that quiz count mapping section with rules exists."""
+        self.assertIn("Quiz Count Mapping", PLANNER_SYSTEM_PROMPT)
+        self.assertIn("quiz_count: 1", PLANNER_SYSTEM_PROMPT)
+        self.assertIn("quiz_count", PLANNER_SYSTEM_PROMPT)
+        self.assertIn("Bloom", PLANNER_SYSTEM_PROMPT)
+
+    def test_prompt_example_includes_complexity_values(self) -> None:
+        """Check that example decomposition includes complexity values."""
+        # Find the example section
+        example_start = PLANNER_SYSTEM_PROMPT.index("Example Decomposition")
+        example_section = PLANNER_SYSTEM_PROMPT[example_start:]
+
+        # Verify varied complexity in example
+        self.assertIn('"Basic"', example_section)
+        self.assertIn('"Intermediate"', example_section)
+        self.assertIn('"Advanced"', example_section)
+
+    def test_prompt_output_requirements_include_complexity_fields(
+        self,
+    ) -> None:
+        """Check that output requirements mention complexity and quiz_count."""
+        # Find the output requirements section
+        output_start = PLANNER_SYSTEM_PROMPT.index("Output Requirements")
+        output_section = PLANNER_SYSTEM_PROMPT[output_start:]
+
+        self.assertIn("complexity", output_section)
+        self.assertIn("quiz_count", output_section)
+
+    def test_prompt_emphasizes_variety(self) -> None:
+        """Check that prompt discourages uniform complexity."""
+        prompt_upper = PLANNER_SYSTEM_PROMPT.upper()
+        has_varied = "VARIED" in prompt_upper or "VARIETY" in prompt_upper
+        self.assertTrue(
+            has_varied,
+            "Prompt should emphasize varied complexity distribution",
+        )
 
 
 class TestPlannerAgentImport(unittest.TestCase):
