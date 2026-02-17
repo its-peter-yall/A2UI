@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-17)
 
 **Core value:** Users can learn any topic through AI-generated retrieval-based learning paths with gated progression that reinforces understanding through active recall.
-**Current focus:** v1.2 Dynamic Quiz Generation — Phase 16: Schema Foundation
+**Current focus:** v1.2 Dynamic Quiz Generation — Phase 17: Quizzer Multi-Quiz
 
 ## Current Position
 
-Phase: 16 of 20 (Schema Foundation & Backward Compatibility)
-Plan: 1 of 2 in current phase
+Phase: 17 of 20 (Quizzer Multi-Quiz Generation)
+Plan: 2 of 2 in current phase
 Status: Executing
-Last activity: 2026-02-17 — Completed 16-01 (Schema Foundation)
+Last activity: 2026-02-17 — Completed 17-01 (generate_quiz_set batch generation)
 
-Progress: [███████████████████████████████████░░░░░░░░░░░░░] 70% (35/44 plans total)
+Progress: [█████████████████████████████████████████░░░░░░░░░] 82% (36/44 plans total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 35 (v1.0: 20, v1.1: 14, v1.2: 1)
+- Total plans completed: 36 (v1.0: 20, v1.1: 14, v1.2: 2)
 - Average duration: --
 - Total execution time: --
 
@@ -28,7 +28,7 @@ Progress: [███████████████████████
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 16. Schema Foundation | 1/2 | 5min | 5min |
-| 17. Quizzer Multi-Quiz | 0/2 | - | - |
+| 17. Quizzer Multi-Quiz | 1/2 | 3min | 3min |
 | 18. Planner Complexity | 0/2 | - | - |
 | 19. Orchestrator Integration | 0/2 | - | - |
 | 20. Frontend Verification | 0/2 | - | - |
@@ -45,6 +45,8 @@ Recent decisions affecting current work:
 - [v1.2 init]: Bloom's taxonomy for difficulty gradient (Recall → Application → Synthesis)
 - [v1.2 init]: Schema defaults (complexity="Intermediate", quiz_count=1) for backward compat
 - [16-01]: Pydantic Literal + Field(ge/le) sufficient for TopicNode validation -- no custom validators needed
+- [Phase 17]: Kept shared QUIZZER_SYSTEM_PROMPT unchanged and encoded multi-quiz constraints in a batch-only user message path
+- [Phase 17]: Used backward-compatible delegation: quiz_count<=1 calls generate_quiz and wraps in QuizSet, quiz_count>1 uses single response_model=QuizSet batch call
 
 ### Research Context
 
@@ -70,5 +72,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 16-01-PLAN.md (Schema Foundation)
+Stopped at: Completed 17-01-PLAN.md
 Resume file: None
