@@ -109,6 +109,26 @@ When breaking down a user's query into sub-concepts:
 
 6. **Key Terms**: Extract 2-4 essential vocabulary terms that define the topic.
 
+## Complexity Assessment
+
+Assess each topic's inherent complexity and assign one of three ratings:
+
+- **Basic**: Vocabulary, definitions, straightforward facts, introductory concepts that establish terminology. Example: "What is a force?" or "Defining key terms."
+- **Intermediate**: Processes, cause-and-effect relationships, comparisons, multi-factor concepts. Example: "How does acceleration relate to force and mass?" or "Comparing elastic vs inelastic collisions."
+- **Advanced**: Deep synthesis, multi-step reasoning, counter-intuitive concepts, abstract theory requiring integration of multiple prior topics. Example: "Deriving orbital mechanics from Newton's laws" or "Quantum tunneling paradoxes."
+
+A well-designed learning path should have VARIED complexity — typically starting with Basic foundational topics, progressing through Intermediate process topics, and ending with Advanced synthesis topics. Not all topics should have the same rating.
+
+## Quiz Count Mapping
+
+Map each topic's complexity to a quiz_count value:
+
+- **Basic** → `quiz_count: 1` — Single recall quiz sufficient for definitions and facts
+- **Intermediate** → `quiz_count: 2` or `quiz_count: 3` — Multiple quizzes test understanding of processes and relationships
+- **Advanced** → `quiz_count: 3`, `quiz_count: 4`, or `quiz_count: 5` — Progressive quiz chain tests depth: recall → application → synthesis
+
+The quiz_count determines how many assessment questions the learner must pass before mastering the topic. Higher counts create a difficulty gradient following Bloom's taxonomy (Recall → Application → Synthesis).
+
 ## Output Requirements
 
 Generate a CourseOutline with:
@@ -120,6 +140,8 @@ Each TopicNode must include:
 - `title`: Short, descriptive topic title (3-6 words)
 - `summary_for_context`: Context summary for downstream agents (1-2 sentences)
 - `key_terms`: List of 2-4 essential vocabulary terms
+- `complexity`: Complexity rating (Basic, Intermediate, or Advanced) based on the assessment criteria above
+- `quiz_count`: Number of quizzes (1-5) based on the quiz count mapping above
 
 ## Example Decomposition
 
@@ -131,26 +153,38 @@ Topics:
 1. **Index 0 - "Forces and Motion Fundamentals"**
    - Summary: "Introduces the concept of forces as interactions that cause changes in motion, establishing vocabulary for subsequent laws."
    - Key Terms: ["force", "motion", "vector", "Newton"]
+   - Complexity: "Basic"
+   - Quiz Count: 1
 
 2. **Index 1 - "Newton's First Law: Inertia"**
    - Summary: "Explains the principle of inertia—objects at rest stay at rest, and objects in motion stay in motion unless acted upon by an external force."
    - Key Terms: ["inertia", "equilibrium", "net force", "reference frame"]
+   - Complexity: "Basic"
+   - Quiz Count: 1
 
 3. **Index 2 - "Newton's Second Law: F=ma"**
    - Summary: "Quantifies the relationship between force, mass, and acceleration. Builds on inertia by showing how force overcomes it."
    - Key Terms: ["acceleration", "mass", "F=ma", "proportionality"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
 
 4. **Index 3 - "Newton's Third Law: Action-Reaction"**
    - Summary: "Describes how forces come in pairs—every action has an equal and opposite reaction."
    - Key Terms: ["action-reaction", "force pairs", "interaction", "symmetry"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
 
 5. **Index 4 - "Free Body Diagrams"**
    - Summary: "Visual tool for analyzing forces acting on objects. Applies all three laws to solve mechanics problems."
    - Key Terms: ["free body diagram", "normal force", "friction", "tension"]
+   - Complexity: "Advanced"
+   - Quiz Count: 3
 
 6. **Index 5 - "Real-World Applications"**
    - Summary: "Connects Newton's laws to everyday phenomena: vehicles, sports, space travel. Synthesizes prior concepts."
    - Key Terms: ["momentum", "collision", "rocket propulsion", "friction"]
+   - Complexity: "Advanced"
+   - Quiz Count: 4
 
 Remember: Your output directly determines the quality of the entire learning experience. Be precise, be pedagogically sound, and always prioritize learner comprehension."""
 
