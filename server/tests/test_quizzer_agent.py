@@ -77,6 +77,7 @@ from server.schemas.learning import (
     QuizCard,
     QuizDifficulty,
     QuizOption,
+    QuizSet,
     TopicNode,
 )
 
@@ -132,6 +133,60 @@ def _make_mock_quiz_card() -> QuizCard:
         ],
         difficulty=QuizDifficulty.MEDIUM,
     )
+
+
+def _make_mock_quiz_set(quiz_count: int) -> QuizSet:
+    """Create a mock QuizSet with a deterministic difficulty gradient."""
+    difficulty_sequences = {
+        1: ["medium"],
+        2: ["easy", "hard"],
+        3: ["easy", "medium", "hard"],
+        4: ["easy", "medium", "medium", "hard"],
+        5: ["easy", "easy", "medium", "hard", "hard"],
+    }
+    bounded_count = max(1, min(5, quiz_count))
+    sequence = difficulty_sequences[bounded_count]
+    quizzes: list[QuizCard] = []
+
+    for i, difficulty in enumerate(sequence):
+        quizzes.append(
+            QuizCard(
+                question_text=f"Question {i + 1} for topic set",
+                options=[
+                    QuizOption(
+                        option_id=_make_stable_uuid(f"Q{i}-A"),
+                        display_label="A",
+                        text=f"Correct answer for question {i + 1}",
+                        is_correct=True,
+                        explanation="Correct explanation.",
+                    ),
+                    QuizOption(
+                        option_id=_make_stable_uuid(f"Q{i}-B"),
+                        display_label="B",
+                        text=f"Distractor B for question {i + 1}",
+                        is_correct=False,
+                        explanation="Incorrect explanation B.",
+                    ),
+                    QuizOption(
+                        option_id=_make_stable_uuid(f"Q{i}-C"),
+                        display_label="C",
+                        text=f"Distractor C for question {i + 1}",
+                        is_correct=False,
+                        explanation="Incorrect explanation C.",
+                    ),
+                    QuizOption(
+                        option_id=_make_stable_uuid(f"Q{i}-D"),
+                        display_label="D",
+                        text=f"Distractor D for question {i + 1}",
+                        is_correct=False,
+                        explanation="Incorrect explanation D.",
+                    ),
+                ],
+                difficulty=difficulty,
+            )
+        )
+
+    return QuizSet(quizzes=quizzes, current_index=0)
 
 
 class TestQuizzerAgentRole(unittest.TestCase):
@@ -424,6 +479,297 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
         # Verify difficulty is a valid string value
         self.assertIsInstance(result.difficulty, str)
         self.assertIn(result.difficulty, {"easy", "medium", "hard"})
+
+
+class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
+    """Tests for QuizzerAgent.generate_quiz_set() behavior and wiring."""
+
+    @patch(
+        "server.agents.quizzer.QuizzerAgent.generate_quiz",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_single_delegates_to_generate_quiz(
+        self,
+        mock_generate_quiz: AsyncMock,
+    ) -> None:
+        """quiz_count=1 should delegate to single-quiz generation."""
+        import asyncio
+
+        mock_generate_quiz.return_value = _make_mock_quiz_card()
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=1)
+
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Content for single quiz delegation",
+                quiz_count=1,
+            )
+        )
+
+        mock_generate_quiz.assert_awaited_once()
+        self.assertIsInstance(result, QuizSet)
+        self.assertEqual(len(result.quizzes), 1)
+        self.assertEqual(result.current_index, 0)
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_calls_instructor_with_quiz_set_model(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Batch path should call instructor with QuizSet response model."""
+        import asyncio
+
+        mock_create.return_value = _make_mock_quiz_set(3)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=2)
+
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Batch quiz content",
+                quiz_count=3,
+            )
+        )
+
+        self.assertIsInstance(result, QuizSet)
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args.kwargs
+        self.assertEqual(call_kwargs["response_model"], QuizSet)
+        user_message = call_kwargs["messages"][0]["content"]
+        self.assertIn("Q1=easy", user_message)
+        self.assertIn("Q2=medium", user_message)
+        self.assertIn("Q3=hard", user_message)
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_returns_correct_quiz_count(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Returned QuizSet should contain exactly requested quiz count."""
+        import asyncio
+
+        mock_create.return_value = _make_mock_quiz_set(3)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=3)
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Count verification content",
+                quiz_count=3,
+            )
+        )
+
+        self.assertEqual(len(result.quizzes), 3)
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_difficulty_gradient_in_prompt(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Prompt must include easy->medium->hard sequence for 3 quizzes."""
+        import asyncio
+
+        mock_create.return_value = _make_mock_quiz_set(3)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=4)
+        asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Difficulty verification content",
+                quiz_count=3,
+            )
+        )
+
+        user_message = mock_create.call_args.kwargs["messages"][0]["content"]
+        self.assertIn("easy", user_message)
+        self.assertIn("medium", user_message)
+        self.assertIn("hard", user_message)
+        self.assertIn("difficulty sequence", user_message.lower())
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_fixes_option_ids(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Option IDs should be UUIDs and unique after post-processing."""
+        import asyncio
+
+        quizzes = []
+        for i, difficulty in enumerate(["easy", "medium", "hard"]):
+            quizzes.append(
+                QuizCard(
+                    question_text=f"Question with letter IDs {i + 1}",
+                    options=[
+                        QuizOption(
+                            option_id="A",
+                            display_label="A",
+                            text="Option A",
+                            is_correct=(i == 0),
+                            explanation="Explanation A",
+                        ),
+                        QuizOption(
+                            option_id="B",
+                            display_label="B",
+                            text="Option B",
+                            is_correct=(i == 1),
+                            explanation="Explanation B",
+                        ),
+                        QuizOption(
+                            option_id="C",
+                            display_label="C",
+                            text="Option C",
+                            is_correct=(i == 2),
+                            explanation="Explanation C",
+                        ),
+                        QuizOption(
+                            option_id="D",
+                            display_label="D",
+                            text="Option D",
+                            is_correct=False,
+                            explanation="Explanation D",
+                        ),
+                    ],
+                    difficulty=difficulty,
+                )
+            )
+        mock_create.return_value = QuizSet(quizzes=quizzes, current_index=0)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=5)
+
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Option ID fix content",
+                quiz_count=3,
+            )
+        )
+
+        all_option_ids = [
+            option.option_id for quiz in result.quizzes for option in quiz.options
+        ]
+        self.assertEqual(len(all_option_ids), 12)
+        self.assertEqual(len(set(all_option_ids)), 12)
+        for option_id in all_option_ids:
+            self.assertNotIn(option_id, {"A", "B", "C", "D"})
+            uuid.UUID(option_id)
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_unique_option_ids_across_quizzes(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Duplicate option IDs across quizzes should be de-duplicated."""
+        import asyncio
+
+        duplicate_quizzes = []
+        for i, difficulty in enumerate(["easy", "medium", "hard"]):
+            duplicate_quizzes.append(
+                QuizCard(
+                    question_text=f"Duplicate IDs question {i + 1}",
+                    options=[
+                        QuizOption(
+                            option_id=_make_stable_uuid("shared-A"),
+                            display_label="A",
+                            text="Shared A",
+                            is_correct=(i == 0),
+                            explanation="A explanation",
+                        ),
+                        QuizOption(
+                            option_id=_make_stable_uuid("shared-B"),
+                            display_label="B",
+                            text="Shared B",
+                            is_correct=(i == 1),
+                            explanation="B explanation",
+                        ),
+                        QuizOption(
+                            option_id=_make_stable_uuid(f"unique-{i}-C"),
+                            display_label="C",
+                            text="Unique C",
+                            is_correct=(i == 2),
+                            explanation="C explanation",
+                        ),
+                        QuizOption(
+                            option_id=_make_stable_uuid(f"unique-{i}-D"),
+                            display_label="D",
+                            text="Unique D",
+                            is_correct=False,
+                            explanation="D explanation",
+                        ),
+                    ],
+                    difficulty=difficulty,
+                )
+            )
+
+        mock_create.return_value = QuizSet(
+            quizzes=duplicate_quizzes,
+            current_index=0,
+        )
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=6)
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Duplicate ID content",
+                quiz_count=3,
+            )
+        )
+
+        all_option_ids = [
+            option.option_id for quiz in result.quizzes for option in quiz.options
+        ]
+        self.assertEqual(len(all_option_ids), 12)
+        self.assertEqual(len(set(all_option_ids)), 12)
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_includes_topic_info(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Batch prompt should include topic title, summary, and key terms."""
+        import asyncio
+
+        mock_create.return_value = _make_mock_quiz_set(3)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=7)
+        asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Topic info content",
+                quiz_count=3,
+            )
+        )
+
+        user_message = mock_create.call_args.kwargs["messages"][0]["content"]
+        self.assertIn(topic.title, user_message)
+        self.assertIn(topic.summary_for_context, user_message)
+        self.assertIn(topic.key_terms[0], user_message)
+        self.assertIn(topic.key_terms[1], user_message)
 
 
 class TestQuizCardValidation(unittest.TestCase):
