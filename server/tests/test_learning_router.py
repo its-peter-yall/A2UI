@@ -27,7 +27,7 @@ NOTES:
 """
 
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -333,6 +333,71 @@ def _create_client() -> TestClient:
     app = FastAPI()
     app.include_router(learning_router)
     return TestClient(app)
+
+
+class TestLearningRouterGenerateCourse(unittest.TestCase):
+    """Tests for course generation response payload mapping."""
+
+    def test_generate_course_maps_quiz_set_payload(self) -> None:
+        """Generated nodes should map quiz sets into response schema."""
+        quiz = _make_quiz_card()
+        quiz_set = QuizSet(quizzes=[quiz], current_index=0)
+        quiz_payload = quiz_set.model_dump()
+        session_payload = {
+            "id": "session-1",
+            "user_id": None,
+            "query": "math",
+            "course_title": "Math Basics",
+            "created_at": "2026-02-15T00:00:00+00:00",
+            "updated_at": "2026-02-15T00:00:00+00:00",
+            "total_nodes": 1,
+            "completed_nodes": 0,
+        }
+        node_payload = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 0,
+            "title": "Addition",
+            "content_markdown": "Content",
+            "status": "SHOWING_FEEDBACK",
+            "error_message": None,
+            "retry_available": False,
+            "created_at": "2026-02-15T00:00:00+00:00",
+            "updated_at": "2026-02-15T00:00:00+00:00",
+            "quiz": quiz_payload,
+        }
+        fake_orchestrator = MagicMock()
+        fake_orchestrator.generate_course = AsyncMock(
+            return_value={
+                "session": session_payload,
+                "nodes": [node_payload],
+            }
+        )
+        fake_manager = MagicMock()
+        fake_manager.get_quiz_set_for_node.return_value = {
+            "quiz_set": quiz_set,
+            "shuffle_seed": None,
+            "current_index": 0,
+        }
+
+        client = _create_client()
+        orchestrator_path = "server.routers.learning.course_orchestrator"
+        manager_path = "server.routers.learning.learning_manager"
+        with patch(orchestrator_path, fake_orchestrator):
+            with patch(manager_path, fake_manager):
+                response = client.post(
+                    "/learning/generate",
+                    json={"query": "math"},
+                )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        node = payload["nodes"][0]
+        self.assertIsNotNone(node["quiz_set"])
+        self.assertIsNotNone(node["quiz"])
+        question_text = node["quiz"]["question_text"]
+        self.assertEqual(question_text, quiz.question_text)
+
 
 
 class TestLearningRouterSessionListing(unittest.TestCase):

@@ -298,7 +298,11 @@ async def generate_course(
             user_id=request.user_id,
         )
         session = result.get("session", {})
-        nodes = result.get("nodes", [])
+        nodes_data = result.get("nodes", [])
+        nodes = [
+            ConceptNodeResponse(**_apply_node_visibility(node))
+            for node in nodes_data
+        ]
         return LearningSessionWithNodes(**session, nodes=nodes)
     except Exception as e:
         logger.error(f"Error generating course: {e}")
@@ -782,7 +786,8 @@ def transition_node(
         if request.target_status == NodeStatus.IN_QUIZ:
             _ensure_quiz_shuffle_seed(node_id)
 
-        return ConceptNodeResponse(**updated_node)
+        response_node = _apply_node_visibility(updated_node)
+        return ConceptNodeResponse(**response_node)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -925,7 +930,8 @@ def retry_quiz(node_id: str) -> ConceptNodeResponse:
 
         _ensure_quiz_shuffle_seed(node_id)
 
-        return ConceptNodeResponse(**updated_node)
+        response_node = _apply_node_visibility(updated_node)
+        return ConceptNodeResponse(**response_node)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -964,7 +970,8 @@ async def regenerate_node_endpoint(node_id: str) -> ConceptNodeResponse:
                 detail=result.get("error", "Regeneration failed"),
             )
 
-        return ConceptNodeResponse(**result)
+        response_node = _apply_node_visibility(result)
+        return ConceptNodeResponse(**response_node)
     except HTTPException:
         raise
     except Exception as e:
