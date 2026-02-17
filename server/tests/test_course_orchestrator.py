@@ -70,7 +70,16 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from server.schemas.learning import CourseOutline, NodeStatus, QuizSet, TopicNode
+from server.database.learning_persistence import learning_manager
+from server.routers.learning import QuizSubmitRequest, submit_quiz
+from server.schemas.learning import (
+    CourseOutline,
+    NodeStatus,
+    QuizCard,
+    QuizOption,
+    QuizSet,
+    TopicNode,
+)
 from server.services.course_orchestrator import CourseOrchestrator
 
 orchestrator_module = importlib.import_module("server.services.course_orchestrator")
@@ -103,6 +112,39 @@ def _make_topics(count: int = 3) -> list[TopicNode]:
 
 def _make_outline(count: int = 5) -> CourseOutline:
     return CourseOutline(course_title="Mock Course", topics=_make_topics(count))
+
+
+def _make_quiz_set(quiz_count: int) -> QuizSet:
+    if quiz_count == 1:
+        difficulties = ["medium"]
+    elif quiz_count == 2:
+        difficulties = ["easy", "hard"]
+    else:
+        difficulties = ["easy", "medium", "hard"]
+
+    quizzes = []
+    labels = ["A", "B", "C", "D"]
+    for index in range(quiz_count):
+        options = []
+        for option_index, label in enumerate(labels):
+            options.append(
+                QuizOption(
+                    option_id=f"option-{index}-{label}",
+                    display_label=label,
+                    text=f"Option {label} for quiz {index + 1}",
+                    is_correct=option_index == 0,
+                    explanation=f"Explanation {label} for quiz {index + 1}",
+                )
+            )
+        quizzes.append(
+            QuizCard(
+                question_text=f"Question {index + 1} of {quiz_count}",
+                options=options,
+                difficulty=difficulties[min(index, len(difficulties) - 1)],
+            )
+        )
+
+    return QuizSet(quizzes=quizzes, current_index=0)
 
 
 class TestCourseOrchestratorGenerateCourse(unittest.IsolatedAsyncioTestCase):
@@ -410,6 +452,155 @@ class TestCourseOrchestratorRegenerateNode(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(update_kwargs["retry_available"])
         self.assertEqual(result["id"], "node-1")
         self.assertTrue(result["regenerated"])
+
+
+class TestMultiQuizMasteryIntegration(unittest.TestCase):
+    """Integration tests for multi-quiz mastery and progression behavior."""
+
+    def test_mastery_requires_all_quizzes_passed(self) -> None:
+        quiz_set = _make_quiz_set(3)
+        connection = Mock()
+        cursor = Mock()
+        connection.cursor.return_value = cursor
+        cursor.fetchall.side_effect = [
+            [{"quiz_index": 0}, {"quiz_index": 1}],
+            [{"quiz_index": 0}, {"quiz_index": 1}, {"quiz_index": 2}],
+        ]
+
+        with (
+            patch.object(
+                learning_manager,
+                "_get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                learning_manager,
+                "get_quiz_set_for_node",
+                return_value={"quiz_set": quiz_set},
+            ),
+        ):
+            first_check = learning_manager.check_mastery("node-1")
+            second_check = learning_manager.check_mastery("node-1")
+
+        connection.close.assert_called()
+        self.assertFalse(first_check)
+        self.assertTrue(second_check)
+
+    def test_sequential_enforcement_via_current_index(self) -> None:
+        fake_conn = Mock()
+        fake_manager = Mock()
+        fake_manager._get_connection.return_value = fake_conn
+        fake_manager._get_node_by_id.return_value = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 0,
+            "status": "IN_QUIZ",
+        }
+        fake_manager.create_quiz_attempt.side_effect = [
+            {
+                "id": "attempt-1",
+                "node_id": "node-1",
+                "attempt_number": 1,
+                "quiz_index": 0,
+                "selected_option_id": "option-a",
+                "is_correct": True,
+                "score_percent": 100,
+                "correct_option_id": "option-a",
+                "explanation": "Correct",
+                "is_mastered": False,
+                "created_at": "2026-02-15T00:00:00+00:00",
+                "updated_at": "2026-02-15T00:00:00+00:00",
+            },
+            {
+                "id": "attempt-2",
+                "node_id": "node-1",
+                "attempt_number": 2,
+                "quiz_index": 1,
+                "selected_option_id": "option-b",
+                "is_correct": False,
+                "score_percent": 0,
+                "correct_option_id": "option-a",
+                "explanation": "Incorrect",
+                "is_mastered": False,
+                "created_at": "2026-02-15T00:00:00+00:00",
+                "updated_at": "2026-02-15T00:00:00+00:00",
+            },
+        ]
+        quiz_set = Mock()
+        quiz_set.quizzes = [object(), object(), object()]
+        fake_manager.get_quiz_set_for_node.return_value = {"quiz_set": quiz_set}
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            submit_quiz(
+                "node-1",
+                QuizSubmitRequest(selected_option_id="option-a", quiz_index=0),
+            )
+            submit_quiz(
+                "node-1",
+                QuizSubmitRequest(selected_option_id="option-b", quiz_index=1),
+            )
+
+        fake_manager.update_quiz_set_progress.assert_called_once_with(
+            node_id="node-1", current_index=1
+        )
+
+    def test_retry_targets_only_failed_quiz(self) -> None:
+        fake_conn = Mock()
+        fake_manager = Mock()
+        fake_manager._get_connection.return_value = fake_conn
+        fake_manager._get_node_by_id.return_value = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 0,
+            "status": "IN_QUIZ",
+        }
+        fake_manager.create_quiz_attempt.side_effect = [
+            {
+                "id": "attempt-1",
+                "node_id": "node-1",
+                "attempt_number": 2,
+                "quiz_index": 1,
+                "selected_option_id": "option-wrong",
+                "is_correct": False,
+                "score_percent": 0,
+                "correct_option_id": "option-a",
+                "explanation": "Incorrect",
+                "is_mastered": False,
+                "created_at": "2026-02-15T00:00:00+00:00",
+                "updated_at": "2026-02-15T00:00:00+00:00",
+            },
+            {
+                "id": "attempt-2",
+                "node_id": "node-1",
+                "attempt_number": 3,
+                "quiz_index": 1,
+                "selected_option_id": "option-a",
+                "is_correct": True,
+                "score_percent": 100,
+                "correct_option_id": "option-a",
+                "explanation": "Correct",
+                "is_mastered": False,
+                "created_at": "2026-02-15T00:00:00+00:00",
+                "updated_at": "2026-02-15T00:00:00+00:00",
+            },
+        ]
+        quiz_set = Mock()
+        quiz_set.quizzes = [object(), object(), object()]
+        fake_manager.get_quiz_set_for_node.return_value = {"quiz_set": quiz_set}
+
+        with patch("server.routers.learning.learning_manager", fake_manager):
+            submit_quiz(
+                "node-1",
+                QuizSubmitRequest(selected_option_id="option-wrong", quiz_index=1),
+            )
+            submit_quiz(
+                "node-1",
+                QuizSubmitRequest(selected_option_id="option-a", quiz_index=1),
+            )
+
+        fake_manager.update_quiz_set_progress.assert_called_once_with(
+            node_id="node-1", current_index=2
+        )
 
 
 class TestCourseOrchestratorQuizSetWiring(unittest.IsolatedAsyncioTestCase):
