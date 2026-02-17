@@ -330,6 +330,203 @@ class QuizSetHidden(BaseModel):
     )
 
 
+# =============================================================================
+# LLM OUTPUT SCHEMAS - Backend generates UUIDs for option_id
+# =============================================================================
+# These schemas are used for LLM generation ONLY. They exclude option_id
+# because the LLM should not generate UUIDs. The backend generates UUIDs
+# after receiving the LLM response and converts to storage schemas.
+# =============================================================================
+
+
+class LLMQuizOption(BaseModel):
+    """Quiz option for LLM output - no option_id, backend generates UUIDs.
+
+    This schema is used when the LLM generates quiz content. The backend
+    will generate UUIDs for option_id after receiving the LLM response.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    display_label: str = Field(
+        ...,
+        description="User-facing label shown in UI (A, B, C, D)",
+        pattern=r"^[A-D]$",
+    )
+    text: str = Field(..., description="Option text shown to the user", min_length=1)
+    is_correct: bool = Field(..., description="Whether this option is correct")
+    explanation: str = Field(
+        ...,
+        description="Feedback explaining why this option is correct or not",
+        min_length=1,
+    )
+
+    @field_validator("display_label")
+    @classmethod
+    def validate_display_label(cls, v: str) -> str:
+        if v not in {"A", "B", "C", "D"}:
+            raise ValueError("display_label must be A, B, C, or D")
+        return v
+
+
+class LLMQuizCard(BaseModel):
+    """Quiz card for LLM output - uses LLMQuizOption without option_id.
+
+    The backend converts this to QuizCard after generating UUIDs for options.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    question_text: str = Field(..., description="Quiz question text", min_length=1)
+    options: List[LLMQuizOption] = Field(
+        ...,
+        description="Answer options for the quiz (exactly 4 required)",
+        min_length=4,
+        max_length=4,
+    )
+    difficulty: str = Field(
+        default="medium", description="Difficulty for the quiz (easy, medium, hard)"
+    )
+
+    @field_validator("options")
+    @classmethod
+    def validate_options(cls, options: List[LLMQuizOption]) -> List[LLMQuizOption]:
+        if len(options) != 4:
+            raise ValueError("LLMQuizCard requires exactly 4 options")
+
+        correct_count = sum(1 for opt in options if opt.is_correct)
+        if correct_count != 1:
+            raise ValueError(
+                f"LLMQuizCard requires exactly one correct option, found {correct_count}"
+            )
+
+        unique_labels = {opt.display_label for opt in options}
+        if unique_labels != {"A", "B", "C", "D"}:
+            raise ValueError(
+                "LLMQuizCard options must have display_labels A, B, C, D. "
+                f"Found: {sorted(unique_labels)}"
+            )
+
+        return options
+
+
+class LLMQuizSet(BaseModel):
+    """Quiz set for LLM output - uses LLMQuizCard without option_id.
+
+    The backend converts this to QuizSet after generating UUIDs for all options.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    quizzes: List[LLMQuizCard] = Field(
+        ...,
+        description="List of quizzes for this concept node (1-5 quizzes supported)",
+        min_length=1,
+        max_length=5,
+    )
+    current_index: int = Field(
+        default=0,
+        description="Index of the currently active quiz (0-based)",
+        ge=0,
+    )
+    shuffle_seed: Optional[str] = Field(
+        default=None,
+        description="Seed for deterministic quiz/option ordering",
+    )
+
+    @field_validator("quizzes")
+    @classmethod
+    def validate_quizzes(cls, quizzes: List[LLMQuizCard]) -> List[LLMQuizCard]:
+        if len(quizzes) < 1:
+            raise ValueError("LLMQuizSet requires at least 1 quiz")
+        if len(quizzes) > 5:
+            raise ValueError("LLMQuizSet supports at most 5 quizzes")
+        return quizzes
+
+
+# =============================================================================
+# CONVERSION FUNCTIONS: LLM schemas → Storage schemas
+# =============================================================================
+
+
+def convert_llm_to_quiz_option(llm_option: LLMQuizOption, option_id: str) -> QuizOption:
+    """Convert LLMQuizOption to QuizOption with backend-generated UUID.
+
+    Args:
+        llm_option: The LLM-generated option without option_id
+        option_id: The backend-generated UUID for this option
+
+    Returns:
+        QuizOption with option_id set to the provided UUID
+    """
+    return QuizOption(
+        option_id=option_id,
+        display_label=llm_option.display_label,
+        text=llm_option.text,
+        is_correct=llm_option.is_correct,
+        explanation=llm_option.explanation,
+    )
+
+
+def convert_llm_to_quiz_card(llm_card: LLMQuizCard) -> QuizCard:
+    """Convert LLMQuizCard to QuizCard with backend-generated UUIDs.
+
+    Generates unique UUID4s for all options in the quiz card.
+
+    Args:
+        llm_card: The LLM-generated quiz card without option_ids
+
+    Returns:
+        QuizCard with option_ids set to generated UUIDs
+    """
+    import uuid
+
+    options = [
+        convert_llm_to_quiz_option(opt, str(uuid.uuid4())) for opt in llm_card.options
+    ]
+
+    return QuizCard(
+        question_text=llm_card.question_text,
+        options=options,
+        difficulty=llm_card.difficulty,
+    )
+
+
+def convert_llm_to_quiz_set(llm_set: LLMQuizSet) -> QuizSet:
+    """Convert LLMQuizSet to QuizSet with backend-generated UUIDs.
+
+    Generates unique UUID4s for all options across all quizzes in the set,
+    ensuring no duplicate option_ids within or across quizzes.
+
+    Args:
+        llm_set: The LLM-generated quiz set without option_ids
+
+    Returns:
+        QuizSet with option_ids set to generated UUIDs
+    """
+    import uuid
+
+    quizzes = []
+    for llm_card in llm_set.quizzes:
+        options = [
+            convert_llm_to_quiz_option(opt, str(uuid.uuid4()))
+            for opt in llm_card.options
+        ]
+        quizzes.append(
+            QuizCard(
+                question_text=llm_card.question_text,
+                options=options,
+                difficulty=llm_card.difficulty,
+            )
+        )
+
+    return QuizSet(
+        quizzes=quizzes,
+        current_index=llm_set.current_index,
+        shuffle_seed=llm_set.shuffle_seed,
+    )
+
+
 class TopicNode(BaseModel):
     """Planner output node describing a course topic."""
 
@@ -350,10 +547,7 @@ class TopicNode(BaseModel):
     )
     complexity: Literal["Basic", "Intermediate", "Advanced"] = Field(
         default="Intermediate",
-        description=(
-            "Topic complexity rating assigned by planner."
-            " Drives quiz_count."
-        ),
+        description=("Topic complexity rating assigned by planner. Drives quiz_count."),
     )
     quiz_count: int = Field(
         default=1,
