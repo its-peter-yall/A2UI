@@ -13,7 +13,9 @@ KEY COMPONENTS:
 - QUIZZER_SYSTEM_PROMPT: Detailed prompt with distractor generation methodology
 - QuizzerAgent: Agent class for generating diagnostic assessments
 - generate_quiz(): Main method to create QuizCard from topic and content
+- generate_quiz_set(): Batch method to create QuizSet in one LLM call
 - _build_user_message(): Constructs prompt with topic details and content
+- _build_batch_user_message(): Constructs prompt for multi-quiz generation
 - _build_topic_context(): Merges topic metadata with additional context
 - quizzer_agent: Singleton instance for application-wide use
 
@@ -81,7 +83,7 @@ import uuid
 from typing import Optional
 
 from server.agents.base import BaseAgent
-from server.schemas.learning import QuizCard, QuizOption, TopicNode
+from server.schemas.learning import QuizCard, QuizOption, QuizSet, TopicNode
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +260,86 @@ class QuizzerAgent(BaseAgent):
             difficulty=quiz.difficulty,
         )
 
+    def _fix_quiz_set_option_ids(self, quiz_set: QuizSet) -> QuizSet:
+        """Fix option IDs and enforce global uniqueness across a quiz set."""
+        fixed_quizzes: list[QuizCard] = []
+        seen_option_ids: set[str] = set()
+
+        for quiz in quiz_set.quizzes:
+            fixed_quiz = self._fix_option_ids(quiz)
+            unique_options: list[QuizOption] = []
+
+            for option in fixed_quiz.options:
+                option_id = option.option_id
+                if option_id in seen_option_ids:
+                    option_id = str(uuid.uuid4())
+
+                seen_option_ids.add(option_id)
+                unique_options.append(
+                    QuizOption(
+                        option_id=option_id,
+                        display_label=option.display_label,
+                        text=option.text,
+                        is_correct=option.is_correct,
+                        explanation=option.explanation,
+                    )
+                )
+
+            fixed_quizzes.append(
+                QuizCard(
+                    question_text=fixed_quiz.question_text,
+                    options=unique_options,
+                    difficulty=fixed_quiz.difficulty,
+                )
+            )
+
+        return QuizSet(
+            quizzes=fixed_quizzes,
+            current_index=quiz_set.current_index,
+            shuffle_seed=quiz_set.shuffle_seed,
+        )
+
+    def _build_batch_user_message(
+        self,
+        topic: TopicNode,
+        content: str,
+        quiz_count: int,
+    ) -> str:
+        """Build prompt for batch quiz generation with a difficulty gradient."""
+        difficulty_sequences = {
+            1: ["medium"],
+            2: ["easy", "hard"],
+            3: ["easy", "medium", "hard"],
+            4: ["easy", "medium", "medium", "hard"],
+            5: ["easy", "easy", "medium", "hard", "hard"],
+        }
+        bounded_quiz_count = max(1, min(5, quiz_count))
+        difficulty_sequence = difficulty_sequences[bounded_quiz_count]
+        key_terms_str = ", ".join(topic.key_terms)
+        sequence_text = ", ".join(
+            f"Q{i + 1}={difficulty}" for i, difficulty in enumerate(difficulty_sequence)
+        )
+
+        return f"""Generate a complete quiz set for the following topic and content.
+
+## Topic Information
+- **Title**: {topic.title}
+- **Index in Learning Path**: {topic.index}
+- **Summary**: {topic.summary_for_context}
+- **Key Terms**: {key_terms_str}
+
+## Content to Test
+{content}
+
+## Requirements
+1. Generate EXACTLY {bounded_quiz_count} quizzes
+2. Use this exact difficulty sequence: {sequence_text}
+3. Keep the sequence ordered from easier to harder
+4. For each quiz, generate EXACTLY 4 options (A, B, C, D)
+5. For each quiz, ensure EXACTLY 1 option is correct
+6. For each quiz, each distractor MUST target a specific misconception
+7. For each quiz, EVERY option MUST have an explanation"""
+
     async def generate_quiz(
         self,
         topic: TopicNode,
@@ -322,6 +404,41 @@ class QuizzerAgent(BaseAgent):
         )
 
         return quiz
+
+    async def generate_quiz_set(
+        self,
+        topic: TopicNode,
+        content: str,
+        quiz_count: int,
+        context: Optional[dict] = None,
+    ) -> QuizSet:
+        """Generate a complete QuizSet in one call with difficulty gradient."""
+        if quiz_count <= 1:
+            single_quiz = await self.generate_quiz(
+                topic=topic,
+                content=content,
+                context=context,
+            )
+            return QuizSet(quizzes=[single_quiz], current_index=0)
+
+        user_message = self._build_batch_user_message(topic, content, quiz_count)
+        full_context = self._build_topic_context(topic, context)
+
+        quiz_set = await self.generate(
+            response_model=QuizSet,
+            user_message=user_message,
+            context=full_context,
+        )
+
+        quiz_set = self._fix_quiz_set_option_ids(quiz_set)
+
+        logger.info(
+            "QuizzerAgent created quiz set: %s quizzes for topic: '%s'",
+            len(quiz_set.quizzes),
+            topic.title,
+        )
+
+        return quiz_set
 
     def _build_user_message(self, topic: TopicNode, content: str) -> str:
         """
