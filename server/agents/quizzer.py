@@ -79,11 +79,18 @@ NOTES:
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Optional
 
 from server.agents.base import BaseAgent
-from server.schemas.learning import QuizCard, QuizOption, QuizSet, TopicNode
+from server.schemas.learning import (
+    LLMQuizCard,
+    LLMQuizSet,
+    QuizCard,
+    QuizSet,
+    TopicNode,
+    convert_llm_to_quiz_card,
+    convert_llm_to_quiz_set,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -172,10 +179,10 @@ Your output MUST follow this exact structure in JSON format:
    - Avoid "all of the above" or "none of the above"
    
 2. **options**: EXACTLY 4 options with:
-   - **id**: "A", "B", "C", or "D" (unique IDs)
-   - **text**: The option text
-   - **is_correct**: true for exactly ONE option, false for others
-   - **explanation**: Required explanation (see above)
+    - **display_label**: "A", "B", "C", or "D" (user-facing label)
+    - **text**: The option text
+    - **is_correct**: true for exactly ONE option, false for others
+    - **explanation**: Required explanation (see above)
    
 3. **difficulty**: One of "easy", "medium", or "hard"
 
@@ -345,94 +352,6 @@ class QuizzerAgent(BaseAgent):
         """
         return QUIZZER_SYSTEM_PROMPT
 
-    @staticmethod
-    def _is_valid_uuid(value: str) -> bool:
-        """Check if a string is a valid UUID.
-
-        Args:
-            value: String to validate as UUID.
-
-        Returns:
-            True if value is a valid UUID, False otherwise.
-        """
-        try:
-            uuid.UUID(value)
-            return True
-        except ValueError:
-            return False
-
-    def _fix_option_ids(self, quiz: QuizCard) -> QuizCard:
-        """Fixes LLM-generated option_ids that may be A/B/C/D or fake UUIDs.
-
-        LLMs sometimes generate:
-        - Letter IDs (A, B, C, D) instead of UUIDs
-        - Fake UUID-like strings (e.g., 'h8i8j8k8-l8m8-4h9i-5j0k-1l2m3n4o5p6q')
-
-        This method converts any invalid option_id to a real UUID4.
-        """
-        fixed_options: list[QuizOption] = []
-
-        for option in quiz.options:
-            # Fix if it's A/B/C/D OR not a valid UUID
-            if option.option_id in {"A", "B", "C", "D"} or not self._is_valid_uuid(
-                option.option_id
-            ):
-                fixed_option = QuizOption(
-                    option_id=str(uuid.uuid4()),
-                    display_label=option.display_label,
-                    text=option.text,
-                    is_correct=option.is_correct,
-                    explanation=option.explanation,
-                )
-                fixed_options.append(fixed_option)
-            else:
-                fixed_options.append(option)
-
-        return QuizCard(
-            question_text=quiz.question_text,
-            options=fixed_options,
-            difficulty=quiz.difficulty,
-        )
-
-    def _fix_quiz_set_option_ids(self, quiz_set: QuizSet) -> QuizSet:
-        """Fix option IDs and enforce global uniqueness across a quiz set."""
-        fixed_quizzes: list[QuizCard] = []
-        seen_option_ids: set[str] = set()
-
-        for quiz in quiz_set.quizzes:
-            fixed_quiz = self._fix_option_ids(quiz)
-            unique_options: list[QuizOption] = []
-
-            for option in fixed_quiz.options:
-                option_id = option.option_id
-                if option_id in seen_option_ids:
-                    option_id = str(uuid.uuid4())
-
-                seen_option_ids.add(option_id)
-                unique_options.append(
-                    QuizOption(
-                        option_id=option_id,
-                        display_label=option.display_label,
-                        text=option.text,
-                        is_correct=option.is_correct,
-                        explanation=option.explanation,
-                    )
-                )
-
-            fixed_quizzes.append(
-                QuizCard(
-                    question_text=fixed_quiz.question_text,
-                    options=unique_options,
-                    difficulty=fixed_quiz.difficulty,
-                )
-            )
-
-        return QuizSet(
-            quizzes=fixed_quizzes,
-            current_index=quiz_set.current_index,
-            shuffle_seed=quiz_set.shuffle_seed,
-        )
-
     def _build_batch_user_message(
         self,
         topic: TopicNode,
@@ -517,13 +436,13 @@ class QuizzerAgent(BaseAgent):
         )
 
         quiz = await self.generate(
-            response_model=QuizCard,
+            response_model=LLMQuizCard,
             user_message=user_message,
             context=full_context,
         )
 
-        # Post-process to fix LLM-generated A/B/C/D option_ids to UUIDs
-        quiz = self._fix_option_ids(quiz)
+        # Convert LLM output to storage schema with backend-generated UUIDs
+        quiz = convert_llm_to_quiz_card(quiz)
 
         logger.info(
             f"QuizzerAgent created quiz: difficulty={quiz.difficulty}, "
@@ -552,12 +471,13 @@ class QuizzerAgent(BaseAgent):
         full_context = self._build_topic_context(topic, context)
 
         quiz_set = await self.generate(
-            response_model=QuizSet,
+            response_model=LLMQuizSet,
             user_message=user_message,
             context=full_context,
         )
 
-        quiz_set = self._fix_quiz_set_option_ids(quiz_set)
+        # Convert LLM output to storage schema with backend-generated UUIDs
+        quiz_set = convert_llm_to_quiz_set(quiz_set)
         quiz_set = self._enforce_quiz_count(quiz_set, quiz_count)
 
         if not self._validate_difficulty_gradient(quiz_set):
