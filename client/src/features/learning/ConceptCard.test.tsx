@@ -288,4 +288,104 @@ describe('ConceptCard', () => {
       expect(screen.getByText(/unable to load feedback/i)).toBeInTheDocument();
     });
   });
+
+  it('renders complexity badge when node has complexity', () => {
+    render(
+      <ConceptCard node={{ ...mockNode, complexity: 'Advanced' }} />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Advanced')).toBeInTheDocument();
+  });
+
+  it('does not render complexity badge when node has no complexity', () => {
+    render(
+      <ConceptCard node={{ ...mockNode, complexity: undefined }} />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByText(/Basic|Intermediate|Advanced/)).not.toBeInTheDocument();
+  });
+
+  it('renders difficulty label in IN_QUIZ state with QuizSet', () => {
+    render(
+      <ConceptCard
+        node={{
+          ...mockQuizSetHiddenNode,
+          status: 'IN_QUIZ',
+        }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByText('Easy')).toBeInTheDocument();
+    expect(screen.getByText('Quiz 1 of 3')).toBeInTheDocument();
+  });
+
+  it('calls onNextQuiz when Next Quiz button clicked after correct answer', async () => {
+    const onNextQuiz = vi.fn();
+    const feedbackResult = {
+      node_id: 'node-quizset',
+      is_correct: true,
+      is_mastered: false,
+      selected_option_id: 'q1-a',
+      correct_option_id: 'q1-a',
+      explanation: 'Correct explanation',
+      selected_explanation: '',
+      score_percent: 50,
+      quiz_index: 0,
+      next_node_unlocked: false,
+      attempt_number: 1,
+      node_status: 'SHOWING_FEEDBACK' as const,
+    };
+    
+    render(
+      <ConceptCard 
+        node={{
+          ...mockQuizSetHiddenNode,
+          status: 'SHOWING_FEEDBACK',
+          quiz_set: {
+            quizzes: [
+              {
+                question_text: 'First quiz question?',
+                options: [
+                  { option_id: 'q1-a', display_label: 'A', text: 'First Option', is_correct: true, explanation: 'Correct!' },
+                  { option_id: 'q1-b', display_label: 'B', text: 'Second Option', is_correct: false, explanation: 'Wrong' },
+                ],
+                difficulty: 'easy',
+              },
+              {
+                question_text: 'Second quiz question?',
+                options: [
+                  { option_id: 'q2-a', display_label: 'A', text: 'Third Option', is_correct: true, explanation: 'Correct!' },
+                  { option_id: 'q2-b', display_label: 'B', text: 'Fourth Option', is_correct: false, explanation: 'Wrong' },
+                ],
+                difficulty: 'medium',
+              },
+              {
+                question_text: 'Third quiz question?',
+                options: [
+                  { option_id: 'q3-a', display_label: 'A', text: 'Fifth Option', is_correct: true, explanation: 'Correct!' },
+                  { option_id: 'q3-b', display_label: 'B', text: 'Sixth Option', is_correct: false, explanation: 'Wrong' },
+                ],
+                difficulty: 'hard',
+              },
+            ],
+            current_index: 0,
+            shuffle_seed: null,
+          },
+        }}
+        quizResult={feedbackResult}
+        onNextQuiz={onNextQuiz}
+      />,
+      { wrapper: createWrapper() }
+    );
+    
+    await waitFor(() => {
+      const nextButton = screen.getByRole('button', { name: /next quiz/i });
+      expect(nextButton).toBeInTheDocument();
+    });
+
+    const nextButton = screen.getByRole('button', { name: /next quiz/i });
+    fireEvent.click(nextButton);
+    
+    expect(onNextQuiz).toHaveBeenCalledTimes(1);
+  });
 });
