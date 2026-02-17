@@ -268,5 +268,101 @@ class PlannerAgent(BaseAgent):
         return outline
 
 
+def validate_complexity_distribution(
+    outline: CourseOutline,
+) -> dict:
+    """Validate complexity distribution and quiz_count correlation
+    in a CourseOutline.
+
+    Detects degenerate LLM outputs where all topics share the same
+    complexity rating or quiz_count values don't match their
+    complexity band. Returns actionable diagnostics for the
+    CourseOrchestrator to decide whether to accept or retry.
+
+    Args:
+        outline: A CourseOutline with topics containing complexity
+            and quiz_count fields.
+
+    Returns:
+        Dict with keys:
+            valid (bool): True if distribution is acceptable.
+            warnings (list[str]): Non-blocking issues.
+            errors (list[str]): Blocking issues.
+            distribution (dict): Count per complexity level,
+                e.g. {"Basic": 2, "Intermediate": 2, "Advanced": 2}.
+
+    Example:
+        >>> result = validate_complexity_distribution(outline)
+        >>> if not result["valid"]:
+        ...     for err in result["errors"]:
+        ...         logger.error(err)
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # Build distribution counts
+    distribution: dict[str, int] = {
+        "Basic": 0,
+        "Intermediate": 0,
+        "Advanced": 0,
+    }
+    for topic in outline.topics:
+        if topic.complexity in distribution:
+            distribution[topic.complexity] += 1
+
+    total = len(outline.topics)
+
+    # --- Error checks ---
+
+    # 1. Uniform complexity: all topics same rating
+    unique_complexities = {t.complexity for t in outline.topics}
+    if len(unique_complexities) == 1:
+        only = next(iter(unique_complexities))
+        errors.append(
+            f"All {total} topics have complexity "
+            f"'{only}' — expected varied distribution"
+        )
+
+    # 2. Quiz count out of range for complexity band
+    for topic in outline.topics:
+        if topic.complexity == "Basic" and topic.quiz_count > 1:
+            errors.append(
+                f"Topic '{topic.title}' is Basic but has "
+                f"quiz_count={topic.quiz_count} (expected 1)"
+            )
+        elif topic.complexity == "Advanced" and topic.quiz_count < 3:
+            errors.append(
+                f"Topic '{topic.title}' is Advanced but has "
+                f"quiz_count={topic.quiz_count} (expected 3-5)"
+            )
+
+    # --- Warning checks ---
+
+    # 1. Skewed distribution: >80% same complexity
+    if len(unique_complexities) > 1:
+        for level, count in distribution.items():
+            if total > 0 and (count / total) > 0.8:
+                pct = round((count / total) * 100)
+                warnings.append(
+                    f"{pct}% of topics are '{level}' — consider more variety"
+                )
+
+    # 2. Intermediate with quiz_count=1
+    for topic in outline.topics:
+        if topic.complexity == "Intermediate" and topic.quiz_count == 1:
+            warnings.append(
+                f"Topic '{topic.title}' is Intermediate but has quiz_count=1"
+            )
+
+    valid = len(errors) == 0
+
+    return {
+        "valid": valid,
+        "warnings": warnings,
+        "errors": errors,
+        "distribution": distribution,
+    }
+
+
 # Singleton instance for use throughout the application
 planner_agent = PlannerAgent()
