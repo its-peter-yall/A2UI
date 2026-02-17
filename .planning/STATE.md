@@ -13,7 +13,7 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 **Current Plan:** 2 of 2
 **Total Plans in Phase:** 2
 **Status:** Milestone v1.2 complete
-**Last Activity:** 2026-02-17 - Completed quick task 2: Debug multi-quiz submission: option ID mismatch in QuizSet validation
+**Last Activity:** 2026-02-17 - Completed quick task 3: Refactor quiz generation to remove option_id from LLM output
 
 **Progress:** [██████████] 100%
 
@@ -81,6 +81,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 2 | Debug multi-quiz submission: option ID mismatch in QuizSet validation | 2026-02-17 | 388f662 | [2-debug-multi-quiz-submission-option-id-mi](./quick/2-debug-multi-quiz-submission-option-id-mi/) |
+| 3 | Refactor quiz generation to remove option_id from LLM output | 2026-02-17 | 92740bb | [3-refactor-quiz-generation-remove-option-i](./quick/3-refactor-quiz-generation-remove-option-i/) |
 
 ### Blockers/Concerns
 
