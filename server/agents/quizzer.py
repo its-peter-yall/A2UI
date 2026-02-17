@@ -345,12 +345,38 @@ class QuizzerAgent(BaseAgent):
         """
         return QUIZZER_SYSTEM_PROMPT
 
+    @staticmethod
+    def _is_valid_uuid(value: str) -> bool:
+        """Check if a string is a valid UUID.
+
+        Args:
+            value: String to validate as UUID.
+
+        Returns:
+            True if value is a valid UUID, False otherwise.
+        """
+        try:
+            uuid.UUID(value)
+            return True
+        except ValueError:
+            return False
+
     def _fix_option_ids(self, quiz: QuizCard) -> QuizCard:
-        """Fixes LLM-generated option_ids that may be A/B/C/D instead of UUIDs."""
+        """Fixes LLM-generated option_ids that may be A/B/C/D or fake UUIDs.
+
+        LLMs sometimes generate:
+        - Letter IDs (A, B, C, D) instead of UUIDs
+        - Fake UUID-like strings (e.g., 'h8i8j8k8-l8m8-4h9i-5j0k-1l2m3n4o5p6q')
+
+        This method converts any invalid option_id to a real UUID4.
+        """
         fixed_options: list[QuizOption] = []
 
         for option in quiz.options:
-            if option.option_id in {"A", "B", "C", "D"}:
+            # Fix if it's A/B/C/D OR not a valid UUID
+            if option.option_id in {"A", "B", "C", "D"} or not self._is_valid_uuid(
+                option.option_id
+            ):
                 fixed_option = QuizOption(
                     option_id=str(uuid.uuid4()),
                     display_label=option.display_label,

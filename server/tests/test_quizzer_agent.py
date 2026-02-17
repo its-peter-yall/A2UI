@@ -873,6 +873,113 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         "server.agents.base.instructor_client.create_structured",
         new_callable=AsyncMock,
     )
+    def test_generate_quiz_set_fixes_fake_uuid_option_ids(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Fake UUID-like strings from LLM should be converted to real UUIDs."""
+        import asyncio
+
+        # Simulate LLM generating fake UUID-like strings
+        # Each quiz needs unique option_ids (QuizCard schema requirement)
+        fake_uuid_quizzes = []
+        fake_uuids_by_quiz = [
+            # Quiz 0
+            [
+                "h8i8j8k8-l8m8-4h9i-5j0k-1l2m3n4o5p6q",
+                "a1b2c3d4-e5f6-4g7h-8i9j-0k1l2m3n4o5p",
+                "x9y8z7w6-v5u4-3t2s-1r0q-9p8o7n6m5l4k",
+                "p1q2r3s4-t5u6-4v7w-8x9y-0z1a2b3c4d5e",
+            ],
+            # Quiz 1
+            [
+                "f6g7h8i9-j0k1-4l2m-3n4o-5p6q7r8s9t0u",
+                "v1w2x3y4-z5a6-4b7c-8d9e-0f1g2h3i4j5k",
+                "l6m7n8o9-p0q1-4r2s-3t4u-5v6w7x8y9z0a",
+                "b1c2d3e4-f5g6-4h7i-8j9k-0l1m2n3o4p5q",
+            ],
+            # Quiz 2
+            [
+                "r6s7t8u9-v0w1-4x2y-3z4a-5b6c7d8e9f0g",
+                "h1i2j3k4-l5m6-4n7o-8p9q-0r1s2t3u4v5w",
+                "x6y7z8a9-b0c1-4d2e-3f4g-5h6i7j8k9l0m",
+                "n1o2p3q4-r5s6-4t7u-8v9w-0x1y2z3a4b5c",
+            ],
+        ]
+        all_fake_uuids = [uid for quiz_uids in fake_uuids_by_quiz for uid in quiz_uids]
+
+        for i, difficulty in enumerate(["easy", "medium", "hard"]):
+            fake_uuid_quizzes.append(
+                QuizCard(
+                    question_text=f"Fake UUID question {i + 1}",
+                    options=[
+                        QuizOption(
+                            option_id=fake_uuids_by_quiz[i][0],
+                            display_label="A",
+                            text="Option A",
+                            is_correct=(i == 0),
+                            explanation="Explanation A",
+                        ),
+                        QuizOption(
+                            option_id=fake_uuids_by_quiz[i][1],
+                            display_label="B",
+                            text="Option B",
+                            is_correct=(i == 1),
+                            explanation="Explanation B",
+                        ),
+                        QuizOption(
+                            option_id=fake_uuids_by_quiz[i][2],
+                            display_label="C",
+                            text="Option C",
+                            is_correct=(i == 2),
+                            explanation="Explanation C",
+                        ),
+                        QuizOption(
+                            option_id=fake_uuids_by_quiz[i][3],
+                            display_label="D",
+                            text="Option D",
+                            is_correct=False,
+                            explanation="Explanation D",
+                        ),
+                    ],
+                    difficulty=difficulty,
+                )
+            )
+
+        mock_create.return_value = QuizSet(
+            quizzes=fake_uuid_quizzes,
+            current_index=0,
+        )
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=61)
+
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Fake UUID fix content",
+                quiz_count=3,
+            )
+        )
+
+        all_option_ids = [
+            option.option_id for quiz in result.quizzes for option in quiz.options
+        ]
+
+        # Verify all 12 options have valid UUIDs
+        self.assertEqual(len(all_option_ids), 12)
+        self.assertEqual(len(set(all_option_ids)), 12)
+
+        # Verify none of the fake UUIDs remain
+        for option_id in all_option_ids:
+            self.assertNotIn(option_id, all_fake_uuids)
+            # Verify it's a valid UUID4
+            uuid.UUID(option_id)
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
     def test_generate_quiz_set_includes_topic_info(
         self,
         mock_create: AsyncMock,
