@@ -341,7 +341,7 @@ def validate_complexity_distribution(
     # 1. Skewed distribution: >80% same complexity
     if len(unique_complexities) > 1:
         for level, count in distribution.items():
-            if total > 0 and (count / total) > 0.8:
+            if total > 0 and (count / total) >= 0.8:
                 pct = round((count / total) * 100)
                 warnings.append(
                     f"{pct}% of topics are '{level}' — consider more variety"

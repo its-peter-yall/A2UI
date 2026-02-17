@@ -63,7 +63,12 @@ NOTES:
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from server.agents.planner import PLANNER_SYSTEM_PROMPT, PlannerAgent, planner_agent
+from server.agents.planner import (
+    PLANNER_SYSTEM_PROMPT,
+    PlannerAgent,
+    planner_agent,
+    validate_complexity_distribution,
+)
 from server.schemas.learning import CourseOutline, TopicNode
 
 
@@ -321,6 +326,177 @@ class TestPlannerAgentImport(unittest.TestCase):
         """Verify PLANNER_SYSTEM_PROMPT is exported."""
         self.assertIsInstance(PLANNER_SYSTEM_PROMPT, str)
         self.assertGreater(len(PLANNER_SYSTEM_PROMPT), 100)
+
+
+def _make_outline_with_complexity(
+    specs: list,
+) -> CourseOutline:
+    """Build a CourseOutline with specific complexity/quiz_count values.
+
+    Args:
+        specs: List of (complexity, quiz_count) tuples. Padded to
+            minimum 5 topics with ("Intermediate", 2) defaults.
+
+    Returns:
+        CourseOutline with the requested topic configurations.
+    """
+    # Pad to minimum 5 topics
+    while len(specs) < 5:
+        specs.append(("Intermediate", 2))
+
+    topics = [
+        TopicNode(
+            index=i,
+            title=f"Topic {i}: {complexity}",
+            summary_for_context=f"Summary for {complexity} topic {i}",
+            key_terms=[f"term-{i}a", f"term-{i}b"],
+            complexity=complexity,
+            quiz_count=quiz_count,
+        )
+        for i, (complexity, quiz_count) in enumerate(specs)
+    ]
+    return CourseOutline(
+        course_title="Test Course",
+        topics=topics,
+    )
+
+
+class TestComplexityDistribution(unittest.TestCase):
+    """Tests for validate_complexity_distribution() function."""
+
+    def test_valid_varied_distribution(self) -> None:
+        """A well-distributed outline passes validation."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Basic", 1),
+                ("Basic", 1),
+                ("Intermediate", 2),
+                ("Intermediate", 3),
+                ("Advanced", 4),
+                ("Advanced", 3),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        self.assertTrue(result["valid"])
+        self.assertEqual(len(result["errors"]), 0)
+        self.assertIn("Basic", result["distribution"])
+        self.assertIn("Intermediate", result["distribution"])
+        self.assertIn("Advanced", result["distribution"])
+
+    def test_uniform_complexity_detected(self) -> None:
+        """All topics with same complexity fails validation."""
+        outline = _make_outline_with_complexity([("Intermediate", 2)] * 5)
+        result = validate_complexity_distribution(outline)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any(
+                "All 5 topics have complexity 'Intermediate'" in e
+                for e in result["errors"]
+            )
+        )
+
+    def test_all_basic_detected(self) -> None:
+        """All Basic topics also fails validation."""
+        outline = _make_outline_with_complexity([("Basic", 1)] * 5)
+        result = validate_complexity_distribution(outline)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("All 5 topics have complexity 'Basic'" in e for e in result["errors"])
+        )
+
+    def test_basic_with_high_quiz_count_error(self) -> None:
+        """Basic topic with quiz_count > 1 triggers error."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Basic", 3),
+                ("Intermediate", 2),
+                ("Advanced", 4),
+                ("Intermediate", 2),
+                ("Basic", 1),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("Basic" in e and "quiz_count=3" in e for e in result["errors"])
+        )
+
+    def test_advanced_with_low_quiz_count_error(self) -> None:
+        """Advanced topic with quiz_count < 3 triggers error."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Basic", 1),
+                ("Intermediate", 2),
+                ("Advanced", 1),
+                ("Intermediate", 3),
+                ("Advanced", 4),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("Advanced" in e and "quiz_count=1" in e for e in result["errors"])
+        )
+
+    def test_skewed_distribution_warning(self) -> None:
+        """More than 80% same complexity warns but passes."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Intermediate", 2),
+                ("Intermediate", 2),
+                ("Intermediate", 3),
+                ("Intermediate", 2),
+                ("Basic", 1),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        # Not all same so no error, but >80% Intermediate
+        self.assertTrue(result["valid"])
+        self.assertTrue(
+            any("% of topics are 'Intermediate'" in w for w in result["warnings"])
+        )
+
+    def test_intermediate_with_quiz_count_one_warning(self) -> None:
+        """Intermediate topic with quiz_count=1 triggers warning."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Basic", 1),
+                ("Intermediate", 1),
+                ("Intermediate", 2),
+                ("Advanced", 4),
+                ("Advanced", 3),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        self.assertTrue(result["valid"])
+        self.assertTrue(
+            any("Intermediate" in w and "quiz_count=1" in w for w in result["warnings"])
+        )
+
+    def test_distribution_counts_correct(self) -> None:
+        """Verify distribution dict accuracy."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Basic", 1),
+                ("Basic", 1),
+                ("Intermediate", 2),
+                ("Advanced", 4),
+                ("Advanced", 3),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        self.assertEqual(
+            result["distribution"],
+            {"Basic": 2, "Intermediate": 1, "Advanced": 2},
+        )
 
 
 if __name__ == "__main__":
