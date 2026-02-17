@@ -172,11 +172,11 @@ Plans:
   2. User cannot skip ahead to quiz N+1 without passing quiz N (sequential enforcement)
   3. User can retry only the specific failed quiz without restarting the entire chain
   4. User receives a full QuizSet (not single quiz) when regenerating a node that originally had quiz_count > 1
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 19-01: Orchestrator wiring — read quiz_count, call generate_quiz_set, store QuizSet
-- [ ] 19-02: Multi-quiz mastery verification, retry semantics, and regeneration with QuizSet
+- [ ] 19-01-PLAN.md — Orchestrator wiring: generate_quiz_set() for generate + regenerate paths, validate_complexity_distribution(), test updates
+- [ ] 19-02-PLAN.md — Multi-quiz mastery gate, sequential enforcement, retry semantics, and regeneration with QuizSet tests
 
 ### Phase 20: Frontend Verification & Polish
 **Goal**: Users experience a complete, polished multi-quiz flow with progress indicators and complexity/difficulty badges
@@ -219,7 +219,7 @@ Phase 20
 | 16. Schema Foundation | v1.2 | Complete    | 2026-02-17 | - |
 | 17. Quizzer Multi-Quiz | v1.2 | Complete    | 2026-02-17 | - |
 | 18. Planner Complexity | v1.2 | Complete    | 2026-02-17 | - |
-| 19. Orchestrator Integration | v1.2 | 0/2 | Not started | - |
+| 19. Orchestrator Integration | v1.2 | 0/2 | Planned | - |
 | 20. Frontend Verification | v1.2 | 0/2 | Not started | - |
 
 ---
