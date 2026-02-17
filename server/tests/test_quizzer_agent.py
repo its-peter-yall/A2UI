@@ -577,6 +577,131 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         "server.agents.base.instructor_client.create_structured",
         new_callable=AsyncMock,
     )
+    def test_generate_quiz_set_selects_expected_sequence_from_over_count(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Over-count responses should align to expected difficulty sequence."""
+        import asyncio
+
+        mock_create.return_value = _make_mock_quiz_set(5)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=31)
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Over-count enforcement content",
+                quiz_count=3,
+            )
+        )
+
+        self.assertEqual(len(result.quizzes), 3)
+        self.assertEqual(
+            [quiz.difficulty for quiz in result.quizzes],
+            ["easy", "medium", "hard"],
+        )
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_raises_on_under_count_response(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Under-count responses should raise to avoid partial quiz chains."""
+        import asyncio
+
+        mock_create.return_value = _make_mock_quiz_set(2)
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=32)
+
+        with self.assertRaises(ValueError):
+            asyncio.run(
+                agent.generate_quiz_set(
+                    topic=topic,
+                    content="Under-count enforcement content",
+                    quiz_count=3,
+                )
+            )
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_reorders_internal_difficulty_inversion(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Non-monotonic gradients should be reordered to ascending."""
+        import asyncio
+
+        ascending_quiz_set = _make_mock_quiz_set(3)
+        mock_create.return_value = QuizSet(
+            quizzes=[
+                ascending_quiz_set.quizzes[0],
+                ascending_quiz_set.quizzes[2],
+                ascending_quiz_set.quizzes[1],
+            ],
+            current_index=0,
+        )
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=33)
+        result = asyncio.run(
+            agent.generate_quiz_set(
+                topic=topic,
+                content="Internal inversion content",
+                quiz_count=3,
+            )
+        )
+
+        self.assertEqual(
+            [quiz.difficulty for quiz in result.quizzes],
+            ["easy", "medium", "hard"],
+        )
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
+    def test_generate_quiz_set_raises_on_wrong_distribution(
+        self,
+        mock_create: AsyncMock,
+    ) -> None:
+        """Mismatched difficulty distributions should raise."""
+        import asyncio
+
+        base_set = _make_mock_quiz_set(4)
+        wrong_quizzes = [
+            base_set.quizzes[0],
+            base_set.quizzes[1],
+            base_set.quizzes[2].model_copy(update={"difficulty": "hard"}),
+            base_set.quizzes[3],
+        ]
+        mock_create.return_value = QuizSet(
+            quizzes=wrong_quizzes,
+            current_index=0,
+        )
+
+        agent = QuizzerAgent()
+        topic = _make_mock_topic(index=34)
+
+        with self.assertRaises(ValueError):
+            asyncio.run(
+                agent.generate_quiz_set(
+                    topic=topic,
+                    content="Wrong distribution content",
+                    quiz_count=4,
+                )
+            )
+
+    @patch(
+        "server.agents.base.instructor_client.create_structured",
+        new_callable=AsyncMock,
+    )
     def test_generate_quiz_set_difficulty_gradient_in_prompt(
         self,
         mock_create: AsyncMock,
@@ -822,13 +947,21 @@ class TestQuizzerDifficultyValidation(unittest.TestCase):
 
         return QuizSet(quizzes=quizzes, current_index=0)
 
-    def test_single_quiz_always_valid(self) -> None:
-        """Single-quiz sets should always pass gradient validation."""
-        quiz_set = self._make_quiz_set_for_difficulties(["hard"])
+    def test_single_quiz_expected_medium_valid(self) -> None:
+        """Single-quiz sets should use the expected 'medium' difficulty."""
+        quiz_set = self._make_quiz_set_for_difficulties(["medium"])
 
         result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
 
         self.assertTrue(result)
+
+    def test_single_quiz_wrong_difficulty_invalid(self) -> None:
+        """Single-quiz sets should fail if difficulty mismatches."""
+        quiz_set = self._make_quiz_set_for_difficulties(["easy"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertFalse(result)
 
     def test_ascending_gradient_valid(self) -> None:
         """A strict easy->medium->hard gradient should pass validation."""
@@ -862,6 +995,14 @@ class TestQuizzerDifficultyValidation(unittest.TestCase):
 
         self.assertFalse(result)
 
+    def test_internal_inversion_invalid(self) -> None:
+        """A sequence like easy->hard->medium should fail validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(["easy", "hard", "medium"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertFalse(result)
+
     def test_partially_ascending_valid(self) -> None:
         """Non-decreasing gradients with repeats should pass validation."""
         quiz_set = self._make_quiz_set_for_difficulties(
@@ -872,15 +1013,15 @@ class TestQuizzerDifficultyValidation(unittest.TestCase):
 
         self.assertTrue(result)
 
-    def test_five_quiz_ascending_valid(self) -> None:
-        """Five-quiz non-decreasing gradient should pass validation."""
+    def test_five_quiz_wrong_distribution_invalid(self) -> None:
+        """Five-quiz sets must match the expected distribution."""
         quiz_set = self._make_quiz_set_for_difficulties(
             ["easy", "medium", "medium", "hard", "hard"]
         )
 
         result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
 
-        self.assertTrue(result)
+        self.assertFalse(result)
 
 
 class TestQuizzerConfig(unittest.TestCase):

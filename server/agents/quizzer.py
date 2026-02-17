@@ -227,22 +227,119 @@ class QuizzerAgent(BaseAgent):
         logger.debug("QuizzerAgent initialized")
 
     @staticmethod
-    def _validate_difficulty_gradient(quiz_set: QuizSet) -> bool:
-        """Validate that quizzes follow a non-decreasing difficulty gradient."""
-        if len(quiz_set.quizzes) <= 1:
-            return True
+    def _expected_difficulty_sequence(quiz_count: int) -> list[str]:
+        """Return the expected difficulty sequence for a given quiz count."""
+        difficulty_sequences = {
+            1: ["medium"],
+            2: ["easy", "hard"],
+            3: ["easy", "medium", "hard"],
+            4: ["easy", "medium", "medium", "hard"],
+            5: ["easy", "easy", "medium", "hard", "hard"],
+        }
+        bounded_quiz_count = max(1, min(5, quiz_count))
+        return difficulty_sequences[bounded_quiz_count]
 
-        difficulties = [
-            DIFFICULTY_ORDER.get(quiz.difficulty, 1) for quiz in quiz_set.quizzes
-        ]
+    @classmethod
+    def _validate_difficulty_gradient(cls, quiz_set: QuizSet) -> bool:
+        """Validate that quizzes match the expected difficulty sequence."""
+        expected_sequence = cls._expected_difficulty_sequence(
+            len(quiz_set.quizzes)
+        )
+        actual_sequence = [quiz.difficulty for quiz in quiz_set.quizzes]
 
-        if len(set(difficulties)) == 1:
+        if len(actual_sequence) != len(expected_sequence):
             return False
 
-        if difficulties[0] > difficulties[-1]:
+        if any(
+            difficulty not in DIFFICULTY_ORDER
+            for difficulty in actual_sequence
+        ):
             return False
 
-        return True
+        return actual_sequence == expected_sequence
+
+    @classmethod
+    def _align_quizzes_to_sequence(
+        cls,
+        quizzes: list[QuizCard],
+        expected_sequence: list[str],
+    ) -> list[QuizCard]:
+        """Align quizzes to the expected difficulty sequence."""
+        available: dict[str, list[QuizCard]] = {
+            difficulty: [] for difficulty in DIFFICULTY_ORDER
+        }
+        unknown_difficulties: list[str] = []
+
+        for quiz in quizzes:
+            if quiz.difficulty not in available:
+                unknown_difficulties.append(quiz.difficulty)
+                continue
+            available[quiz.difficulty].append(quiz)
+
+        if unknown_difficulties:
+            raise ValueError(
+                "QuizSet contains invalid difficulty values: "
+                f"{sorted(set(unknown_difficulties))}"
+            )
+
+        aligned_quizzes: list[QuizCard] = []
+        for difficulty in expected_sequence:
+            if not available[difficulty]:
+                raise ValueError(
+                    "QuizSet difficulty distribution does not match expected "
+                    f"sequence {expected_sequence}"
+                )
+            aligned_quizzes.append(available[difficulty].pop(0))
+
+        return aligned_quizzes
+
+    @classmethod
+    def _enforce_quiz_count(cls, quiz_set: QuizSet, quiz_count: int) -> QuizSet:
+        """Ensure quiz count and difficulty sequence match the request."""
+        requested_count = max(1, min(5, quiz_count))
+        actual_count = len(quiz_set.quizzes)
+        expected_sequence = cls._expected_difficulty_sequence(
+            requested_count
+        )
+        actual_sequence = [quiz.difficulty for quiz in quiz_set.quizzes]
+
+        if actual_count < requested_count:
+            raise ValueError(
+                "QuizSet returned fewer quizzes than requested: "
+                f"requested={requested_count}, actual={actual_count}"
+            )
+
+        if (
+            actual_count == requested_count
+            and actual_sequence == expected_sequence
+        ):
+            return quiz_set
+
+        aligned_quizzes = cls._align_quizzes_to_sequence(
+            quiz_set.quizzes,
+            expected_sequence,
+        )
+
+        if actual_count != requested_count:
+            logger.warning(
+                "QuizSet returned %s quizzes for requested %s. "
+                "Dropping extras to match expected sequence.",
+                actual_count,
+                requested_count,
+            )
+        elif actual_sequence != expected_sequence:
+            logger.warning(
+                "QuizSet difficulty sequence mismatch: %s expected %s. "
+                "Reordering to expected sequence.",
+                actual_sequence,
+                expected_sequence,
+            )
+
+        return QuizSet(
+            quizzes=aligned_quizzes,
+            current_index=0,
+            shuffle_seed=quiz_set.shuffle_seed,
+        )
 
     @property
     def system_prompt(self) -> str:
@@ -327,15 +424,10 @@ class QuizzerAgent(BaseAgent):
         quiz_count: int,
     ) -> str:
         """Build prompt for batch quiz generation with a difficulty gradient."""
-        difficulty_sequences = {
-            1: ["medium"],
-            2: ["easy", "hard"],
-            3: ["easy", "medium", "hard"],
-            4: ["easy", "medium", "medium", "hard"],
-            5: ["easy", "easy", "medium", "hard", "hard"],
-        }
         bounded_quiz_count = max(1, min(5, quiz_count))
-        difficulty_sequence = difficulty_sequences[bounded_quiz_count]
+        difficulty_sequence = self._expected_difficulty_sequence(
+            bounded_quiz_count
+        )
         key_terms_str = ", ".join(topic.key_terms)
         sequence_text = ", ".join(
             f"Q{i + 1}={difficulty}" for i, difficulty in enumerate(difficulty_sequence)
@@ -452,20 +544,12 @@ class QuizzerAgent(BaseAgent):
         )
 
         quiz_set = self._fix_quiz_set_option_ids(quiz_set)
+        quiz_set = self._enforce_quiz_count(quiz_set, quiz_count)
 
         if not self._validate_difficulty_gradient(quiz_set):
-            logger.warning(
-                "QuizSet for '%s' has invalid difficulty gradient: %s. "
-                "Reordering to match expected gradient.",
-                topic.title,
-                [quiz.difficulty for quiz in quiz_set.quizzes],
-            )
-            quiz_set = QuizSet(
-                quizzes=sorted(
-                    quiz_set.quizzes,
-                    key=lambda quiz: DIFFICULTY_ORDER.get(quiz.difficulty, 1),
-                ),
-                current_index=0,
+            raise ValueError(
+                "QuizSet difficulty sequence mismatch after alignment: "
+                f"{[quiz.difficulty for quiz in quiz_set.quizzes]}"
             )
 
         logger.info(

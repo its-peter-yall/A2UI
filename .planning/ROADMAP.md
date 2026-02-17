@@ -111,7 +111,7 @@
 - Decimal phases (16.1, 16.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 16: Schema Foundation & Backward Compatibility** - Extend TopicNode with complexity and quiz_count fields, ensuring existing courses still load (completed 2026-02-17)
-- [ ] **Phase 17: Quizzer Multi-Quiz Generation** - Generate QuizSets with difficulty gradients in a single batch LLM call
+- [x] **Phase 17: Quizzer Multi-Quiz Generation** - Generate QuizSets with difficulty gradients in a single batch LLM call (completed 2026-02-17)
 - [x] **Phase 18: Planner Complexity Assignment** - Prompt engineering for AI-driven complexity rating and quiz count per topic (completed 2026-02-17)
 - [ ] **Phase 19: Orchestrator Integration & Backend Progression** - Wire Planner→Quizzer→Persistence and verify multi-quiz mastery logic
 - [ ] **Phase 20: Frontend Verification & Polish** - Verify multi-quiz UI, implement onNextQuiz handler, add complexity/difficulty badges
@@ -217,7 +217,7 @@ Phase 20
 | 1-8 | v1.0 | 20/20 | Complete | 2025-02-01 |
 | 9-15 | v1.1 | 14/14 | Complete | 2025-02-16 |
 | 16. Schema Foundation | v1.2 | Complete    | 2026-02-17 | - |
-| 17. Quizzer Multi-Quiz | v1.2 | 0/2 | Not started | - |
+| 17. Quizzer Multi-Quiz | v1.2 | Complete    | 2026-02-17 | - |
 | 18. Planner Complexity | v1.2 | Complete    | 2026-02-17 | - |
 | 19. Orchestrator Integration | v1.2 | 0/2 | Not started | - |
 | 20. Frontend Verification | v1.2 | 0/2 | Not started | - |
