@@ -315,6 +315,39 @@ export function useLearningMutations({
     },
   });
 
+  // ============================================================
+  // ADVANCE TO NEXT QUIZ: SHOWING_FEEDBACK → IN_QUIZ
+  // User clicks "Next Quiz" after correct answer in multi-quiz set
+  // Reuses retry-quiz endpoint - server already advanced current_index
+  // ============================================================
+  const advanceToNextQuizMutation = useMutation({
+    mutationFn: (nodeId: string) => retryQuiz(nodeId),
+    
+    onMutate: async (nodeId): Promise<MutationContext> => {
+      await queryClient.cancelQueries({ queryKey });
+
+      // Optimistically transition back to IN_QUIZ
+      const rollback = optimisticStatusUpdate(
+        queryClient,
+        sessionId,
+        nodeId,
+        'IN_QUIZ'
+      );
+
+      return { rollback };
+    },
+    
+    onError: (error, _nodeId, context) => {
+      context?.rollback();
+      onError?.(error as Error, 'advanceToNextQuiz');
+    },
+    
+    onSettled: () => {
+      // CRITICAL: Refetch to get new current_index from server
+      invalidateSession();
+    },
+  });
+
   const completeMasteryMutation = useMutation({
     mutationFn: async ({
       nodeId,
@@ -489,11 +522,23 @@ export function useLearningMutations({
     regenerateMutation.mutate(nodeId);
   };
 
+  /**
+   * Advance to next quiz in a multi-quiz set.
+   * Only valid from SHOWING_FEEDBACK state after correct answer.
+   * Reuses retry-quiz endpoint; server has already advanced current_index.
+   * 
+   * @param nodeId - Node with the quiz set
+   */
+  const advanceToNextQuiz = (nodeId: string) => {
+    advanceToNextQuizMutation.mutate(nodeId);
+  };
+
   return {
     // Raw mutations (for advanced use cases)
     transitionMutation,
     submitQuizMutation,
     retryQuizMutation,
+    advanceToNextQuizMutation,
     regenerateMutation,
 
     // Convenience functions (recommended for most use cases)
@@ -502,11 +547,13 @@ export function useLearningMutations({
     retry,
     continueToNext,
     regenerate,
+    advanceToNextQuiz,
 
     // Loading states (TanStack Query v5 uses isPending for mutations)
     isTransitioning: transitionMutation.isPending,
     isSubmitting: submitQuizMutation.isPending,
     isRetrying: retryQuizMutation.isPending,
+    isAdvancingQuiz: advanceToNextQuizMutation.isPending,
     isRegenerating: regenerateMutation.isPending,
     isCompleting: completeMasteryMutation.isPending,
     
@@ -515,6 +562,7 @@ export function useLearningMutations({
       transitionMutation.isPending ||
       submitQuizMutation.isPending ||
       retryQuizMutation.isPending ||
+      advanceToNextQuizMutation.isPending ||
       regenerateMutation.isPending ||
       completeMasteryMutation.isPending,
   };

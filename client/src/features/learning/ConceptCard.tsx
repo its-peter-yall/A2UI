@@ -89,6 +89,7 @@ interface ConceptCardProps {
   onQuizSubmit?: (nodeId: string, optionId: string, quizIndex: number) => void;
   onRetryQuiz?: (nodeId: string) => void;
   onContinueToNext?: (nodeId: string) => void;
+  onNextQuiz?: () => void;
   onRegenerate?: (nodeId: string) => void;
   onSkipNode?: (nodeId: string) => void;
   onPrevious?: () => void;
@@ -105,6 +106,7 @@ export function ConceptCard({
   onQuizSubmit,
   onRetryQuiz,
   onContinueToNext,
+  onNextQuiz,
   onRegenerate,
   onSkipNode,
   onPrevious,
@@ -144,6 +146,20 @@ export function ConceptCard({
     quiz: node.quiz,
     nodeStatus: node.status,
   });
+
+  // Complexity badge styles
+  const complexityStyles = {
+    Basic: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    Intermediate: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+    Advanced: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+  };
+
+  // Difficulty label styles
+  const difficultyStyles = {
+    easy: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+    medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    hard: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  };
 
   // Status-based styling
   const statusStyles: Record<NodeStatus, string> = {
@@ -216,7 +232,17 @@ export function ConceptCard({
           <div className="flex items-center gap-3 p-4 border-b bg-card/50">
             <span className="text-xl">{statusIcons[node.status]}</span>
             <div className="flex-1">
-              <h3 className="font-semibold">{node.title}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold">{node.title}</h3>
+                {node.complexity && (
+                  <span className={cn(
+                    'text-xs font-medium px-2 py-0.5 rounded-full',
+                    complexityStyles[node.complexity]
+                  )}>
+                    {node.complexity}
+                  </span>
+                )}
+              </div>
               <span className="text-xs text-muted-foreground uppercase tracking-wide">
                 {node.status.replace(/_/g, ' ')}
               </span>
@@ -270,8 +296,16 @@ export function ConceptCard({
                 return (
                   <div className="space-y-4">
                     {isQuizSetHidden && (
-                      <div className="text-sm text-muted-foreground mb-2">
-                        Quiz {currentQuizIndex + 1} of {(visibleQuiz as { total_quizzes: number }).total_quizzes}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                        <span>Quiz {currentQuizIndex + 1} of {(visibleQuiz as { total_quizzes: number }).total_quizzes}</span>
+                        {currentQuiz?.difficulty && (
+                          <span className={cn(
+                            'text-xs font-medium px-2 py-0.5 rounded-full',
+                            difficultyStyles[currentQuiz.difficulty]
+                          )}>
+                            {currentQuiz.difficulty.charAt(0).toUpperCase() + currentQuiz.difficulty.slice(1)}
+                          </span>
+                        )}
                       </div>
                     )}
                     <p className="font-medium text-lg">{currentQuiz.question_text}</p>
@@ -329,8 +363,8 @@ export function ConceptCard({
                       result={feedbackResult}
                       attemptCount={attemptCount}
                       currentQuizIndex={
-                        node.quiz_set_hidden?.current_index ||
-                        feedbackResult.quiz_index ||
+                        feedbackResult.quiz_index ??
+                        node.quiz_set_hidden?.current_index ??
                         0
                       }
                       onRetry={handleRetry}
@@ -339,10 +373,7 @@ export function ConceptCard({
                           ? () => onContinueToNext?.(node.id)
                           : undefined
                       }
-                      onNextQuiz={() => {
-                        // Next quiz handling is managed by parent via quiz_index
-                        // The quiz set current_index is updated on the server
-                      }}
+                      onNextQuiz={onNextQuiz}
                     />
                   )}
                   {!feedbackResult && isFeedbackLoading && (

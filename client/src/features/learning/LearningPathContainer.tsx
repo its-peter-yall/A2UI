@@ -227,6 +227,7 @@ export function LearningPathContainer({
     retry,
     continueToNext,
     regenerate,
+    advanceToNextQuiz,
     isAnyLoading,
     isRegenerating,
     isTransitioning,
@@ -674,6 +675,7 @@ export function LearningPathContainer({
                       onQuizSubmit={submitAnswer}
                       onRetryQuiz={retry}
                       onContinueToNext={handleContinueToNext}
+                      onNextQuiz={() => advanceToNextQuiz(currentSlideNode.id)}
                       onRegenerate={regenerate}
                       isRegenerating={isRegenerating}
                       isTransitioning={isTransitioning}

@@ -122,6 +122,13 @@ export function QuizFeedback({
   // Only show correct answer when user answered correctly
   const showCorrectAnswer = is_correct && correct_option_id !== null;
 
+  // Difficulty label styles
+  const difficultyStyles = {
+    easy: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+    medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    hard: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  };
+
   return (
     <div className="space-y-6">
       {/* Result header */}
@@ -151,8 +158,16 @@ export function QuizFeedback({
 
       {/* Quiz set progress indicator */}
       {isQuizSet && totalQuizzes > 1 && (
-        <div className="text-sm text-muted-foreground mb-4">
-          Quiz {currentQuizIndex + 1} of {totalQuizzes}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+          <span>Quiz {currentQuizIndex + 1} of {totalQuizzes}</span>
+          {currentQuiz?.difficulty && (
+            <span className={cn(
+              'text-xs font-medium px-2 py-0.5 rounded-full',
+              difficultyStyles[currentQuiz.difficulty as 'easy' | 'medium' | 'hard']
+            )}>
+              {currentQuiz.difficulty.charAt(0).toUpperCase() + currentQuiz.difficulty.slice(1)}
+            </span>
+          )}
         </div>
       )}
 
