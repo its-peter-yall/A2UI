@@ -12,16 +12,16 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 **Phase:** 20 of 20 (Frontend Verification)
 **Current Plan:** 2 of 2
 **Total Plans in Phase:** 2
-**Status:** In progress
+**Status:** Phase complete
 **Last Activity:** 2026-02-17
 
-**Progress:** [██████████] 95%
+**Progress:** [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 40 (v1.0: 20, v1.1: 14, v1.2: 6)
-- Average duration: 4.6 min
+- Total plans completed: 41 (v1.0: 20, v1.1: 14, v1.2: 7)
+- Average duration: 4.5 min
 - Total execution time: 31 min
 
 **By Phase (v1.2):**
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 | 17. Quizzer Multi-Quiz | 2/2 | 5min | 2.5min |
 | 18. Planner Complexity | 2/2 | 6min | 3min |
 | 19. Orchestrator Integration | 2/2 | 0min | 0min |
-| 20. Frontend Verification | 1/2 | 15min | 15min |
+| 20. Frontend Verification | 2/2 | 15min | 7.5min |
 
 ## Accumulated Context
 
@@ -58,6 +58,9 @@ Recent decisions affecting current work:
 - [20-01]: Use DEFAULT 'Intermediate' for complexity column migration to prevent constraint violations
 - [20-01]: Make complexity Optional in ConceptNodeResponse and TypeScript for backward compatibility
 - [20-01]: Wire complexity through orchestrator only (router uses Pydantic auto-mapping)
+- [20-02]: Reuse retry-quiz endpoint for advanceToNextQuiz mutation (server already advanced current_index)
+- [20-02]: Use feedbackResult.quiz_index as primary source for currentQuizIndex (node.current_index points to NEXT quiz)
+- [20-02]: Make complexity/difficulty badges conditional for backward compatibility with existing nodes
 
 ### Research Context
 
@@ -76,12 +79,12 @@ None yet.
 ### Blockers/Concerns
 
 - ~~Planner prompt drift risk~~ — addressed in 18-01: explicit criteria + VARIED emphasis + example
-- onNextQuiz is a no-op — real implementation needed in Phase 20
-- State machine desync risk between node state and current_index for multi-quiz
-- Regeneration must produce QuizSet when original had quiz_count > 1
+- ~~onNextQuiz is a no-op~~ — resolved in 20-02: real advanceToNextQuiz mutation implemented
+- ~~State machine desync risk between node state and current_index for multi-quiz~~ — resolved in 20-02: feedbackResult.quiz_index as primary source
+- Regeneration must produce QuizSet when original had quiz_count > 1 (pending verification)
 
 ## Session Continuity
 
-**Last session:** 2026-02-17T14:00:00Z
-**Stopped at:** Completed 20-01-PLAN.md
+**Last session:** 2026-02-17T14:30:00Z
+**Stopped at:** Completed 20-02-PLAN.md (Phase 20 complete, v1.2 Dynamic Quiz Generation feature complete)
 **Resume file:** None
