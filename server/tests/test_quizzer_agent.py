@@ -69,6 +69,7 @@ from unittest.mock import AsyncMock, patch
 from pydantic import ValidationError
 
 from server.agents.quizzer import (
+    DIFFICULTY_ORDER,
     QUIZZER_SYSTEM_PROMPT,
     QuizzerAgent,
     quizzer_agent,
@@ -80,6 +81,7 @@ from server.schemas.learning import (
     QuizSet,
     TopicNode,
 )
+from server.utils.instructor_client import MODEL_CONFIGS
 
 
 def _make_stable_uuid(label: str) -> str:
@@ -770,6 +772,131 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
         self.assertIn(topic.summary_for_context, user_message)
         self.assertIn(topic.key_terms[0], user_message)
         self.assertIn(topic.key_terms[1], user_message)
+
+
+class TestQuizzerDifficultyValidation(unittest.TestCase):
+    """Tests for QuizzerAgent._validate_difficulty_gradient()."""
+
+    def _make_quiz_set_for_difficulties(self, difficulties: list[str]) -> QuizSet:
+        """Create a QuizSet from a provided list of difficulty labels."""
+        quizzes: list[QuizCard] = []
+
+        for index, difficulty in enumerate(difficulties):
+            _ = DIFFICULTY_ORDER[difficulty]
+            quizzes.append(
+                QuizCard(
+                    question_text=f"Difficulty test question {index + 1}",
+                    options=[
+                        QuizOption(
+                            option_id=_make_stable_uuid(f"diff-{index}-A"),
+                            display_label="A",
+                            text="Correct option",
+                            is_correct=True,
+                            explanation="Correct explanation.",
+                        ),
+                        QuizOption(
+                            option_id=_make_stable_uuid(f"diff-{index}-B"),
+                            display_label="B",
+                            text="Distractor B",
+                            is_correct=False,
+                            explanation="Incorrect explanation B.",
+                        ),
+                        QuizOption(
+                            option_id=_make_stable_uuid(f"diff-{index}-C"),
+                            display_label="C",
+                            text="Distractor C",
+                            is_correct=False,
+                            explanation="Incorrect explanation C.",
+                        ),
+                        QuizOption(
+                            option_id=_make_stable_uuid(f"diff-{index}-D"),
+                            display_label="D",
+                            text="Distractor D",
+                            is_correct=False,
+                            explanation="Incorrect explanation D.",
+                        ),
+                    ],
+                    difficulty=difficulty,
+                )
+            )
+
+        return QuizSet(quizzes=quizzes, current_index=0)
+
+    def test_single_quiz_always_valid(self) -> None:
+        """Single-quiz sets should always pass gradient validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(["hard"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertTrue(result)
+
+    def test_ascending_gradient_valid(self) -> None:
+        """A strict easy->medium->hard gradient should pass validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(["easy", "medium", "hard"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertTrue(result)
+
+    def test_two_quiz_gradient_valid(self) -> None:
+        """A two-quiz easy->hard gradient should pass validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(["easy", "hard"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertTrue(result)
+
+    def test_uniform_gradient_invalid(self) -> None:
+        """Uniform difficulty across all quizzes should fail validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(["medium", "medium", "medium"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertFalse(result)
+
+    def test_reversed_gradient_invalid(self) -> None:
+        """A hard->...->easy progression should fail validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(["hard", "medium", "easy"])
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertFalse(result)
+
+    def test_partially_ascending_valid(self) -> None:
+        """Non-decreasing gradients with repeats should pass validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(
+            ["easy", "easy", "medium", "hard", "hard"]
+        )
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertTrue(result)
+
+    def test_five_quiz_ascending_valid(self) -> None:
+        """Five-quiz non-decreasing gradient should pass validation."""
+        quiz_set = self._make_quiz_set_for_difficulties(
+            ["easy", "medium", "medium", "hard", "hard"]
+        )
+
+        result = QuizzerAgent._validate_difficulty_gradient(quiz_set)
+
+        self.assertTrue(result)
+
+
+class TestQuizzerConfig(unittest.TestCase):
+    """Tests for quizzer MODEL_CONFIGS guardrails."""
+
+    def test_quizzer_max_output_tokens_sufficient_for_multi_quiz(self) -> None:
+        """Quizzer token limit should be high enough for QuizSet payloads."""
+        self.assertGreaterEqual(MODEL_CONFIGS["quizzer"]["max_output_tokens"], 4096)
+
+    def test_quizzer_temperature_unchanged(self) -> None:
+        """Quizzer temperature remains tuned for deterministic JSON output."""
+        self.assertEqual(MODEL_CONFIGS["quizzer"]["temperature"], 0.2)
+
+    def test_quizzer_model_unchanged(self) -> None:
+        """Quizzer model remains Gemini Flash for fast generation."""
+        self.assertEqual(MODEL_CONFIGS["quizzer"]["model"], "gemini-2.5-flash")
 
 
 class TestQuizCardValidation(unittest.TestCase):
