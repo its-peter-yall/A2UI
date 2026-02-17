@@ -348,6 +348,22 @@ class TopicNode(BaseModel):
         min_length=2,
         max_length=4,
     )
+    complexity: Literal["Basic", "Intermediate", "Advanced"] = Field(
+        default="Intermediate",
+        description=(
+            "Topic complexity rating assigned by planner."
+            " Drives quiz_count."
+        ),
+    )
+    quiz_count: int = Field(
+        default=1,
+        description=(
+            "Number of quizzes to generate for this topic"
+            " (1-5). Higher for complex topics."
+        ),
+        ge=1,
+        le=5,
+    )
 
 
 class CourseOutline(BaseModel):
