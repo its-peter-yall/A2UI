@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 MVP** - Phases 1-8 (shipped 2025-02-01)
 - ✅ **v1.1 Course Persistence & Revision** - Phases 9-15 (shipped 2025-02-16)
-- 🚧 **v1.2 Dynamic Quiz Generation** - Phases 16-20 (in progress)
+- ✅ **v1.2 Dynamic Quiz Generation** - Phases 16-20 (shipped 2026-02-17)
 
 ## Phases
 
@@ -102,7 +102,7 @@
 
 </details>
 
-### 🚧 v1.2 Dynamic Quiz Generation (In Progress)
+### ✅ v1.2 Dynamic Quiz Generation (Shipped 2026-02-17)
 
 **Milestone Goal:** Enhance the quiz system to dynamically determine quiz quantity based on topic complexity, using single quizzes for simple concepts and progressive multi-quiz chains (1-5) for deep, complex topics with difficulty gradients following Bloom's taxonomy.
 
@@ -114,7 +114,7 @@
 - [x] **Phase 17: Quizzer Multi-Quiz Generation** - Generate QuizSets with difficulty gradients in a single batch LLM call (completed 2026-02-17)
 - [x] **Phase 18: Planner Complexity Assignment** - Prompt engineering for AI-driven complexity rating and quiz count per topic (completed 2026-02-17)
 - [x] **Phase 19: Orchestrator Integration & Backend Progression** - Wire Planner→Quizzer→Persistence and verify multi-quiz mastery logic (completed 2026-02-17)
-- [ ] **Phase 20: Frontend Verification & Polish** - Verify multi-quiz UI, implement onNextQuiz handler, add complexity/difficulty badges
+- [x] **Phase 20: Frontend Verification & Polish** - Verify multi-quiz UI, implement onNextQuiz handler, add complexity/difficulty badges (completed 2026-02-17)
 
 ## Phase Details
 
@@ -220,7 +220,7 @@ Phase 20
 | 17. Quizzer Multi-Quiz | v1.2 | Complete    | 2026-02-17 | - |
 | 18. Planner Complexity | v1.2 | Complete    | 2026-02-17 | - |
 | 19. Orchestrator Integration | 2/2 | Complete    | 2026-02-17 | - |
-| 20. Frontend Verification | v1.2 | 0/2 | Not started | - |
+| 20. Frontend Verification | v1.2 | 2/2 | Complete | 2026-02-17 |
 
 ---
 

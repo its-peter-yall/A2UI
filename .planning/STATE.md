@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-17)
 
 **Core value:** Users can learn any topic through AI-generated retrieval-based learning paths with gated progression that reinforces understanding through active recall.
-**Current focus:** v1.2 Dynamic Quiz Generation — Phase 19: Orchestrator Integration
+**Current focus:** v1.2 Dynamic Quiz Generation — COMPLETE (all phases 16-20 shipped)
 
 ## Current Position
 
 **Phase:** 20 of 20 (Frontend Verification)
 **Current Plan:** 2 of 2
 **Total Plans in Phase:** 2
-**Status:** Phase complete
+**Status:** Milestone v1.2 complete
 **Last Activity:** 2026-02-17
 
 **Progress:** [██████████] 100%
