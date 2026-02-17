@@ -69,13 +69,42 @@ Extended AgUI into a personal learning dashboard with course persistence, progre
 
 ---
 
+## Milestone: v1.2 — Dynamic Quiz Generation
+
+**Status**: ✅ Completed  
+**Completion Date**: 2026-02-17  
+**Brief**: `.planning/BRIEF-v1.2.md`  
+
+**Summary**:  
+Enhanced the quiz system to dynamically determine quiz quantity based on topic complexity, using single quizzes for simple concepts and progressive multi-quiz chains (1-5) for deep, complex topics with difficulty gradients following Bloom's taxonomy.
+
+### Phases (5 total)
+
+| Phase | Name | Directory | Plans | Status |
+|-------|------|-----------|-------|--------|
+| 16 | Schema Foundation & Backward Compatibility | `phases/16-schema-foundation/` | 1 | ✅ Completed |
+| 17 | Quizzer Multi-Quiz Generation | `phases/17-quizzer-multi-quiz/` | 2 | ✅ Completed |
+| 18 | Planner Complexity Assignment | `phases/18-planner-complexity/` | 2 | ✅ Completed |
+| 19 | Orchestrator Integration & Backend Progression | `phases/19-orchestrator-integration-backend-progression/` | 2 | ✅ Completed |
+| 20 | Frontend Verification & Polish | `phases/20-frontend-verification/` | 2 | ✅ Completed |
+
+**Key Deliverables**:
+- TopicNode schema extension with `complexity` (Basic/Intermediate/Advanced) and `quiz_count` (1-5) fields
+- Batch QuizSet generation with Bloom's taxonomy difficulty gradients (Recall → Application → Synthesis)
+- AI-driven complexity assessment in PlannerAgent
+- Multi-quiz mastery gates with sequential enforcement (must pass all quizzes to progress)
+- Frontend complexity badges, difficulty labels, and "Quiz X of Y" progress indicators
+
+---
+
 ## Total Progress
 
 | Milestone | Phases | Total Plans | Status |
 |-----------|--------|-------------|--------|
 | v1.0 | 9 | 20 | ✅ Complete |
 | v1.1 | 7 | 14 | ✅ Complete |
-| **Total** | **16** | **34** | ✅ **Complete** |
+| v1.2 | 5 | 9 | ✅ Complete |
+| **Total** | **21** | **43** | ✅ **Complete** |
 
 ---
 
@@ -84,5 +113,6 @@ Extended AgUI into a personal learning dashboard with course persistence, progre
 Completed phase directories are archived in:
 - `.planning/milestones/v1.0-phases/` (Phases 01-08)
 - `.planning/milestones/v1.1-phases/` (Phases 09-15)
+- `.planning/milestones/v1.2-phases/` (Phases 16-20)
 
 See `/gsd-cleanup` command to archive phases from completed milestones.
