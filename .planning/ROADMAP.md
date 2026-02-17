@@ -127,11 +127,10 @@
   2. TopicNode has `quiz_count` field (1-5) with default 1
   3. Existing courses with no complexity/quiz_count data load without errors
   4. Field validation rejects invalid values (e.g., quiz_count=0, quiz_count=10, complexity="Expert")
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 16-01: TopicNode schema extension with backward-compatible defaults
-- [ ] 16-02: Serialization tests and backward compatibility verification
+- [ ] 16-01-PLAN.md — TopicNode schema extension with complexity/quiz_count fields and comprehensive tests
 
 ### Phase 17: Quizzer Multi-Quiz Generation
 **Goal**: QuizzerAgent can generate a complete QuizSet of N quizzes with ascending difficulty in a single LLM call
@@ -217,7 +216,7 @@ Phase 20
 |-------|-----------|----------------|--------|-----------|
 | 1-8 | v1.0 | 20/20 | Complete | 2025-02-01 |
 | 9-15 | v1.1 | 14/14 | Complete | 2025-02-16 |
-| 16. Schema Foundation | v1.2 | 0/2 | Not started | - |
+| 16. Schema Foundation | v1.2 | 0/1 | Not started | - |
 | 17. Quizzer Multi-Quiz | v1.2 | 0/2 | Not started | - |
 | 18. Planner Complexity | v1.2 | 0/2 | Not started | - |
 | 19. Orchestrator Integration | v1.2 | 0/2 | Not started | - |
