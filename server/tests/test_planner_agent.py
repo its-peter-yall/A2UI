@@ -462,8 +462,8 @@ class TestComplexityDistribution(unittest.TestCase):
             any("% of topics are 'Intermediate'" in w for w in result["warnings"])
         )
 
-    def test_intermediate_with_quiz_count_one_warning(self) -> None:
-        """Intermediate topic with quiz_count=1 triggers warning."""
+    def test_intermediate_with_quiz_count_one_error(self) -> None:
+        """Intermediate topic with quiz_count=1 triggers error."""
         outline = _make_outline_with_complexity(
             [
                 ("Basic", 1),
@@ -475,9 +475,27 @@ class TestComplexityDistribution(unittest.TestCase):
         )
         result = validate_complexity_distribution(outline)
 
-        self.assertTrue(result["valid"])
+        self.assertFalse(result["valid"])
         self.assertTrue(
-            any("Intermediate" in w and "quiz_count=1" in w for w in result["warnings"])
+            any("Intermediate" in e and "quiz_count=1" in e for e in result["errors"])
+        )
+
+    def test_intermediate_with_high_quiz_count_error(self) -> None:
+        """Intermediate topic with quiz_count=4 triggers error."""
+        outline = _make_outline_with_complexity(
+            [
+                ("Basic", 1),
+                ("Intermediate", 4),
+                ("Intermediate", 3),
+                ("Advanced", 4),
+                ("Advanced", 3),
+            ]
+        )
+        result = validate_complexity_distribution(outline)
+
+        self.assertFalse(result["valid"])
+        self.assertTrue(
+            any("Intermediate" in e and "quiz_count=4" in e for e in result["errors"])
         )
 
     def test_distribution_counts_correct(self) -> None:

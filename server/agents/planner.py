@@ -325,12 +325,21 @@ def validate_complexity_distribution(
 
     # 2. Quiz count out of range for complexity band
     for topic in outline.topics:
-        if topic.complexity == "Basic" and topic.quiz_count > 1:
+        if topic.complexity == "Basic" and topic.quiz_count != 1:
             errors.append(
                 f"Topic '{topic.title}' is Basic but has "
                 f"quiz_count={topic.quiz_count} (expected 1)"
             )
-        elif topic.complexity == "Advanced" and topic.quiz_count < 3:
+        elif topic.complexity == "Intermediate" and (
+            topic.quiz_count < 2 or topic.quiz_count > 3
+        ):
+            errors.append(
+                f"Topic '{topic.title}' is Intermediate but has "
+                f"quiz_count={topic.quiz_count} (expected 2-3)"
+            )
+        elif topic.complexity == "Advanced" and (
+            topic.quiz_count < 3 or topic.quiz_count > 5
+        ):
             errors.append(
                 f"Topic '{topic.title}' is Advanced but has "
                 f"quiz_count={topic.quiz_count} (expected 3-5)"
@@ -346,13 +355,6 @@ def validate_complexity_distribution(
                 warnings.append(
                     f"{pct}% of topics are '{level}' — consider more variety"
                 )
-
-    # 2. Intermediate with quiz_count=1
-    for topic in outline.topics:
-        if topic.complexity == "Intermediate" and topic.quiz_count == 1:
-            warnings.append(
-                f"Topic '{topic.title}' is Intermediate but has quiz_count=1"
-            )
 
     valid = len(errors) == 0
 
