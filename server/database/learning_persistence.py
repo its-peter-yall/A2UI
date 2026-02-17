@@ -2248,6 +2248,17 @@ class LearningManager:
             # Get the specific quiz based on quiz_index
             quiz = quiz_set.quizzes[quiz_index]
 
+            # Log available option IDs for debugging
+            available_option_ids = [opt.option_id for opt in quiz.options]
+            logger.debug(
+                "Validating quiz submission: node_id=%s, quiz_index=%s, "
+                "selected_option_id=%s, available_options=%s",
+                node_id,
+                quiz_index,
+                selected_option_id,
+                available_option_ids,
+            )
+
             # Find correct option and selected option details
             correct_option = None
             selected_option = None
@@ -2258,6 +2269,11 @@ class LearningManager:
                     selected_option = opt
 
             if selected_option is None:
+                logger.error(
+                    "Invalid option_id submitted: %s not in available options: %s",
+                    selected_option_id,
+                    available_option_ids,
+                )
                 raise ValueError(f"Invalid option id: {selected_option_id}")
 
             is_correct = selected_option.is_correct
@@ -2339,7 +2355,9 @@ class LearningManager:
                 "correct_option_id": correct_option.option_id
                 if correct_option and is_correct
                 else None,
-                "explanation": correct_option.explanation if correct_option and is_correct else "",
+                "explanation": correct_option.explanation
+                if correct_option and is_correct
+                else "",
                 "selected_explanation": selected_option.explanation
                 if not is_correct
                 else None,

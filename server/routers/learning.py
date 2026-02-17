@@ -180,9 +180,7 @@ class QuizSubmitRequest(BaseModel):
 class LastActiveRequest(BaseModel):
     """Request to update last active node for a session."""
 
-    node_id: str = Field(
-        ..., description="ID of the last active node"
-    )
+    node_id: str = Field(..., description="ID of the last active node")
 
 
 class DeleteRevisionResponse(BaseModel):
@@ -234,9 +232,7 @@ def _apply_node_visibility(node: dict, include_flags: bool = False) -> dict:
                 response_node["quiz"] = None
             elif quiz_set.quizzes:
                 review_seed = (
-                    existing_seed
-                    or quiz_set.shuffle_seed
-                    or f"review-{node['id']}"
+                    existing_seed or quiz_set.shuffle_seed or f"review-{node['id']}"
                 )
                 shuffled_set = shuffle_quiz_set_with_seed(quiz_set, review_seed)
                 response_node["quiz_set"] = shuffled_set
@@ -300,8 +296,7 @@ async def generate_course(
         session = result.get("session", {})
         nodes_data = result.get("nodes", [])
         nodes = [
-            ConceptNodeResponse(**_apply_node_visibility(node))
-            for node in nodes_data
+            ConceptNodeResponse(**_apply_node_visibility(node)) for node in nodes_data
         ]
         return LearningSessionWithNodes(**session, nodes=nodes)
     except Exception as e:
@@ -415,27 +410,18 @@ def update_last_active(
 ) -> dict:
     """Update the last active node position for resume."""
     try:
-        learning_manager.update_last_active_node(
-            session_id, request.node_id
-        )
+        learning_manager.update_last_active_node(session_id, request.node_id)
         return {"updated": True}
     except LookupError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                f"Learning session not found: {session_id}"
-            ),
+            detail=(f"Learning session not found: {session_id}"),
         )
     except Exception as e:
-        logger.error(
-            f"Error updating last active node: {e}"
-        )
+        logger.error(f"Error updating last active node: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                f"Failed to update last active node: "
-                f"{str(e)}"
-            ),
+            detail=(f"Failed to update last active node: {str(e)}"),
         )
 
 
@@ -457,8 +443,7 @@ def get_learning_session(session_id: str) -> LearningSessionWithNodes:
 
         nodes_data = learning_manager.get_session_nodes(session_id)
         nodes = [
-            ConceptNodeResponse(**_apply_node_visibility(node))
-            for node in nodes_data
+            ConceptNodeResponse(**_apply_node_visibility(node)) for node in nodes_data
         ]
 
         return LearningSessionWithNodes(**session, nodes=nodes)
@@ -477,9 +462,7 @@ def get_learning_session(session_id: str) -> LearningSessionWithNodes:
     response_model=RevisionSessionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create revision session",
-    description=(
-        "Create a revision session for a completed learning session."
-    ),
+    description=("Create a revision session for a completed learning session."),
 )
 def create_revision(
     session_id: str,
@@ -514,9 +497,7 @@ def create_revision(
     "/sessions/{session_id}/revisions",
     response_model=RevisionSessionListResponse,
     summary="List revision sessions",
-    description=(
-        "Get revision sessions for a learning session with pagination."
-    ),
+    description=("Get revision sessions for a learning session with pagination."),
 )
 def get_revisions_for_session(
     session_id: str,
@@ -845,6 +826,14 @@ def submit_quiz(
                 )
         finally:
             conn.close()
+
+        # Log submission for debugging
+        logger.debug(
+            "Quiz submission: node_id=%s, quiz_index=%s, selected_option_id=%s",
+            node_id,
+            request.quiz_index,
+            request.selected_option_id,
+        )
 
         # Create the quiz attempt
         result = learning_manager.create_quiz_attempt(

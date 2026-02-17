@@ -242,18 +242,13 @@ class QuizzerAgent(BaseAgent):
     @classmethod
     def _validate_difficulty_gradient(cls, quiz_set: QuizSet) -> bool:
         """Validate that quizzes match the expected difficulty sequence."""
-        expected_sequence = cls._expected_difficulty_sequence(
-            len(quiz_set.quizzes)
-        )
+        expected_sequence = cls._expected_difficulty_sequence(len(quiz_set.quizzes))
         actual_sequence = [quiz.difficulty for quiz in quiz_set.quizzes]
 
         if len(actual_sequence) != len(expected_sequence):
             return False
 
-        if any(
-            difficulty not in DIFFICULTY_ORDER
-            for difficulty in actual_sequence
-        ):
+        if any(difficulty not in DIFFICULTY_ORDER for difficulty in actual_sequence):
             return False
 
         return actual_sequence == expected_sequence
@@ -298,9 +293,7 @@ class QuizzerAgent(BaseAgent):
         """Ensure quiz count and difficulty sequence match the request."""
         requested_count = max(1, min(5, quiz_count))
         actual_count = len(quiz_set.quizzes)
-        expected_sequence = cls._expected_difficulty_sequence(
-            requested_count
-        )
+        expected_sequence = cls._expected_difficulty_sequence(requested_count)
         actual_sequence = [quiz.difficulty for quiz in quiz_set.quizzes]
 
         if actual_count < requested_count:
@@ -309,10 +302,7 @@ class QuizzerAgent(BaseAgent):
                 f"requested={requested_count}, actual={actual_count}"
             )
 
-        if (
-            actual_count == requested_count
-            and actual_sequence == expected_sequence
-        ):
+        if actual_count == requested_count and actual_sequence == expected_sequence:
             return quiz_set
 
         aligned_quizzes = cls._align_quizzes_to_sequence(
@@ -425,9 +415,7 @@ class QuizzerAgent(BaseAgent):
     ) -> str:
         """Build prompt for batch quiz generation with a difficulty gradient."""
         bounded_quiz_count = max(1, min(5, quiz_count))
-        difficulty_sequence = self._expected_difficulty_sequence(
-            bounded_quiz_count
-        )
+        difficulty_sequence = self._expected_difficulty_sequence(bounded_quiz_count)
         key_terms_str = ", ".join(topic.key_terms)
         sequence_text = ", ".join(
             f"Q{i + 1}={difficulty}" for i, difficulty in enumerate(difficulty_sequence)
@@ -543,7 +531,26 @@ class QuizzerAgent(BaseAgent):
             context=full_context,
         )
 
+        # Log LLM-generated option IDs for debugging
+        for quiz_idx, quiz in enumerate(quiz_set.quizzes):
+            for opt in quiz.options:
+                logger.debug(
+                    "LLM generated option_id for quiz %s: %s",
+                    quiz_idx,
+                    opt.option_id,
+                )
+
         quiz_set = self._fix_quiz_set_option_ids(quiz_set)
+
+        # Log fixed option IDs for debugging
+        for quiz_idx, quiz in enumerate(quiz_set.quizzes):
+            for opt in quiz.options:
+                logger.debug(
+                    "Fixed option_id for quiz %s: %s",
+                    quiz_idx,
+                    opt.option_id,
+                )
+
         quiz_set = self._enforce_quiz_count(quiz_set, quiz_count)
 
         if not self._validate_difficulty_gradient(quiz_set):
