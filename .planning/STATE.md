@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 ## Current Position
 
 Phase: 16 of 20 (Schema Foundation & Backward Compatibility)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-02-17 — Roadmap created for v1.2
+Plan: 1 of 2 in current phase
+Status: Executing
+Last activity: 2026-02-17 — Completed 16-01 (Schema Foundation)
 
-Progress: [██████████████████████████████████░░░░░░░░░░░░░░] 68% (34/44 plans total)
+Progress: [███████████████████████████████████░░░░░░░░░░░░░] 70% (35/44 plans total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 34 (v1.0: 20, v1.1: 14)
+- Total plans completed: 35 (v1.0: 20, v1.1: 14, v1.2: 1)
 - Average duration: --
 - Total execution time: --
 
@@ -27,7 +27,7 @@ Progress: [███████████████████████
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 16. Schema Foundation | 0/2 | - | - |
+| 16. Schema Foundation | 1/2 | 5min | 5min |
 | 17. Quizzer Multi-Quiz | 0/2 | - | - |
 | 18. Planner Complexity | 0/2 | - | - |
 | 19. Orchestrator Integration | 0/2 | - | - |
@@ -44,6 +44,7 @@ Recent decisions affecting current work:
 - [v1.2 init]: Batch generation (single LLM call per QuizSet) to avoid scatter-gather explosion
 - [v1.2 init]: Bloom's taxonomy for difficulty gradient (Recall → Application → Synthesis)
 - [v1.2 init]: Schema defaults (complexity="Intermediate", quiz_count=1) for backward compat
+- [16-01]: Pydantic Literal + Field(ge/le) sufficient for TopicNode validation -- no custom validators needed
 
 ### Research Context
 
@@ -69,5 +70,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Roadmap created for v1.2, ready to plan Phase 16
+Stopped at: Completed 16-01-PLAN.md (Schema Foundation)
 Resume file: None
