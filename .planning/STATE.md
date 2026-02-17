@@ -1,12 +1,18 @@
 # Project State
 
-## Current Status
+## Current Position
 
-**Active Milestone:** v1.0 - Core Learning Experience
+Phase: Not started (defining requirements)
+Plan: --
+Status: Defining requirements
+Last activity: 2026-02-17 -- Milestone v1.2 started
 
-**Current Phase:** Phase 09 - Knowledge Map Polish
+## Project Reference
 
-**Last activity:** 2026-02-16 - Completed quick task 001: Add delete functionality to course cards
+See: .planning/PROJECT.md (updated 2026-02-17)
+
+**Core value:** Users can learn any topic through AI-generated retrieval-based learning paths with gated progression that reinforces understanding through active recall.
+**Current focus:** v1.2 Dynamic Quiz Generation
 
 ---
 
@@ -22,7 +28,7 @@
 | 06 | Course Generation | Completed | 2026-01-30 |
 | 07 | Interactive Quiz System | Completed | 2026-02-01 |
 | 08 | Your Courses Page | Completed | 2026-02-15 |
-| 09 | Knowledge Map Polish | In Progress | - |
+| 09 | Knowledge Map Polish | Completed | 2026-02-16 |
 
 ---
 
@@ -37,3 +43,12 @@ None currently.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 001 | Add delete functionality to course cards | 2026-02-16 | e73c16a | .planning/quick/001-add-delete-course-cards/ |
+
+---
+
+### Accumulated Context
+
+- Frontend ConceptCard already has QuizSet rendering logic ("Quiz X of Y")
+- LearningManager already supports QuizSet storage
+- Scatter-Gather pattern supports variable-weight tasks
+- Feature spec available: .planning/codebase/features/dynamic-quiz-generation.md
