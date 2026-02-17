@@ -157,11 +157,11 @@ Plans:
   2. User receives quiz counts that correlate with complexity (simple topics get fewer quizzes)
   3. User's complex topics produce higher-quality, more demanding quizzes than simple topics
   4. User's learning path has a plausible complexity distribution (not all Advanced, not all Basic)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 18-01: Planner prompt engineering with complexity assessment instructions
-- [ ] 18-02: Distribution validation and complexity-to-quiz_count mapping tests
+- [ ] 18-01-PLAN.md — Planner prompt engineering with complexity assessment and quiz_count mapping
+- [ ] 18-02-PLAN.md — Distribution validation function and complexity-to-quiz_count mapping tests
 
 ### Phase 19: Orchestrator Integration & Backend Progression
 **Goal**: The full backend pipeline generates, stores, and enforces multi-quiz progression end-to-end
