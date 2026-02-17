@@ -88,6 +88,8 @@ export type NodeStatus =
 
 export type QuizDifficulty = 'easy' | 'medium' | 'hard';
 
+export type Complexity = 'Basic' | 'Intermediate' | 'Advanced';
+
 export interface QuizOption {
   option_id: string;
   display_label: string;
@@ -135,6 +137,7 @@ export interface ConceptNode {
   status: NodeStatus;
   error_message: string | null;
   retry_available: boolean;
+  complexity?: Complexity;
   quiz: QuizCard | null;
   quiz_set: QuizSet | null;
   quiz_hidden: QuizCardHidden | null;

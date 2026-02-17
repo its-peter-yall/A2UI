@@ -1372,6 +1372,7 @@ class LearningManager:
         quiz_set: Optional[QuizSet] = None,
         error_message: Optional[str] = None,
         retry_available: bool = False,
+        complexity: Optional[str] = "Intermediate",
     ) -> Dict[str, Any]:
         """Create a new concept node for a learning session.
 
@@ -1393,9 +1394,9 @@ class LearningManager:
                 """
                 INSERT INTO concept_nodes (
                     id, learning_session_id, sequence_index, title, content_markdown,
-                    status, error_message, retry_available, created_at, updated_at
+                    status, error_message, retry_available, complexity, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     node_id,
@@ -1406,6 +1407,7 @@ class LearningManager:
                     status.value,
                     error_message,
                     int(retry_available),
+                    complexity,
                     now,
                     now,
                 ),
@@ -1465,6 +1467,7 @@ class LearningManager:
                 "status": status.value,
                 "error_message": error_message,
                 "retry_available": retry_available,
+                "complexity": complexity,
                 "created_at": now,
                 "updated_at": now,
                 "quiz": quiz_payload,
@@ -1502,6 +1505,7 @@ class LearningManager:
                     cn.status,
                     cn.error_message,
                     cn.retry_available,
+                    cn.complexity,
                     cn.created_at,
                     cn.updated_at,
                     qd.payload AS quiz_payload
@@ -1529,6 +1533,7 @@ class LearningManager:
                         "retry_available": bool(row["retry_available"])
                         if row["retry_available"] is not None
                         else False,
+                        "complexity": row["complexity"],
                         "created_at": row["created_at"],
                         "updated_at": row["updated_at"],
                         "quiz": quiz_payload,
@@ -2615,6 +2620,7 @@ class LearningManager:
                 cn.status,
                 cn.error_message,
                 cn.retry_available,
+                cn.complexity,
                 cn.created_at,
                 cn.updated_at,
                 qd.payload AS quiz_payload
@@ -2639,6 +2645,7 @@ class LearningManager:
             "retry_available": bool(row["retry_available"])
             if row["retry_available"] is not None
             else False,
+            "complexity": row["complexity"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "quiz": quiz_payload,
@@ -2770,6 +2777,10 @@ class LearningManager:
         if "retry_available" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE concept_nodes ADD COLUMN retry_available INTEGER DEFAULT 0"
+            )
+        if "complexity" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN complexity TEXT DEFAULT 'Intermediate'"
             )
 
     def _ensure_session_progress_columns(self, conn: sqlite3.Connection) -> None:

@@ -456,6 +456,9 @@ class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
     retry_available: bool = Field(
         default=False, description="Whether retry is available"
     )
+    complexity: Optional[Literal["Basic", "Intermediate", "Advanced"]] = Field(
+        default=None, description="Topic complexity rating (matches TopicNode type)"
+    )
 
     def get_visible_quiz(
         self, status: NodeStatus

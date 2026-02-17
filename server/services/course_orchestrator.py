@@ -344,6 +344,7 @@ class CourseOrchestrator:
                 content_markdown=content.content_markdown,
                 status=initial_status,
                 quiz_set=quiz_set,
+                complexity=topic.complexity,
             )
 
             logger.info(
