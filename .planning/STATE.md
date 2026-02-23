@@ -13,7 +13,7 @@ See: .planning/PROJECT.md (updated 2026-02-17)
 **Current Plan:** 2 of 2
 **Total Plans in Phase:** 2
 **Status:** Milestone v1.2 complete
-**Last Activity:** 2026-02-17 - Completed quick task 3: Refactor quiz generation to remove option_id from LLM output
+**Last Activity:** 2026-02-17 - Completed quick task 4: Improve quiz navigation and fix persistence tests
 
 **Progress:** [██████████] 100%
 
@@ -82,6 +82,8 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 2 | Debug multi-quiz submission: option ID mismatch in QuizSet validation | 2026-02-17 | 388f662 | [2-debug-multi-quiz-submission-option-id-mi](./quick/2-debug-multi-quiz-submission-option-id-mi/) |
 | 3 | Refactor quiz generation to remove option_id from LLM output | 2026-02-17 | 92740bb | [3-refactor-quiz-generation-remove-option-i](./quick/3-refactor-quiz-generation-remove-option-i/) |
+| 4 | Improve quiz navigation: disable prev on first quiz, support multi-quiz back nav | 2026-02-17 | [pending] | [4-quiz-navigation-improvements](./quick/4-quiz-navigation-improvements/) |
+| 5 | Upgrade server virtual environment to Python 3.14.3 | 2026-02-23 | N/A (venv not tracked) | [5-upgrade-server-venv-to-python-3-14-3-ver](./quick/5-upgrade-server-venv-to-python-3-14-3-ver/) |
 
 ### Blockers/Concerns
 
@@ -92,6 +94,6 @@ None yet.
 
 ## Session Continuity
 
-**Last session:** 2026-02-17T14:30:00Z
-**Stopped at:** Completed 20-02-PLAN.md (Phase 20 complete, v1.2 Dynamic Quiz Generation feature complete)
+**Last session:** 2026-02-23
+**Stopped at:** Completed quick task 5: Upgrade server virtual environment to Python 3.14.3
 **Resume file:** None
