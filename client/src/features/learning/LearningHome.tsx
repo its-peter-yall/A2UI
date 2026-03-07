@@ -71,6 +71,7 @@ import axios from 'axios';
 import { createRevisionSession, deleteSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
 import type { SessionListResponse } from '@/types/learning';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { TopicInput } from './TopicInput';
 import { CourseCard } from './CourseCard';
 import { CourseFilter } from './CourseFilter';
@@ -255,6 +256,7 @@ export function LearningHome() {
             >
               Learn
             </Link>
+            <ThemeToggle />
           </nav>
         </div>
       </header>
@@ -385,7 +387,7 @@ export function LearningHome() {
 
                       {/* Load More / Show Less buttons */}
                       {(hasMore || offset > 0) && (
-                        <div className="flex justify-center gap-3 mt-6">
+                        <div className="flex justify-center gap-3 mt-6 mb-6">
                           {offset > 0 && (
                             <button
                               onClick={() => setOffset(0)}

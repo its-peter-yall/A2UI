@@ -17,6 +17,7 @@ import { useRevisionSession } from './useRevisionSession';
 import { useRevisionMutations } from './useRevisionMutations';
 import { RevisionConceptCard } from './RevisionConceptCard';
 import { RevisionSummaryModal } from './RevisionSummaryModal';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
 import {
   carouselSlideVariants,
@@ -292,7 +293,9 @@ export function RevisionPage() {
               </span>
             </div>
             
-            <div className="w-24" /> {/* Spacer for alignment */}
+            <div className="w-24 flex justify-end">
+              <ThemeToggle />
+            </div> {/* Spacer for alignment */}
           </div>
 
           {/* Revision progress bar */}
@@ -391,6 +394,7 @@ export function RevisionPage() {
                   className="w-full relative"
                 >
                   <RevisionConceptCard
+                    key={currentNode.id}
                     node={currentNode}
                     revisionMode={revisionSession.mode}
                     revisionProgress={currentRevisionProgress}
