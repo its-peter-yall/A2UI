@@ -214,6 +214,13 @@ export const retryQuiz = async (nodeId: string): Promise<ConceptNode> => {
   return response.data;
 };
 
+export const previousQuiz = async (nodeId: string): Promise<ConceptNode> => {
+  const response = await api.post<ConceptNode>(
+    `/learning/nodes/${nodeId}/previous-quiz`
+  );
+  return response.data;
+};
+
 export const getQuizAttempts = async (
   nodeId: string
 ): Promise<QuizAttemptHistory> => {

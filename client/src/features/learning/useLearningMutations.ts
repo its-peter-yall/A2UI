@@ -96,6 +96,7 @@ import {
   transitionNode,
   submitQuiz,
   retryQuiz,
+  previousQuiz,
   regenerateNode,
 } from '@/lib/learningApi';
 import type {
@@ -316,6 +317,25 @@ export function useLearningMutations({
   });
 
   // ============================================================
+  // PREVIOUS QUIZ: IN_QUIZ → IN_QUIZ (decrement index)
+  // ============================================================
+  const previousQuizMutation = useMutation({
+    mutationFn: (nodeId: string) => previousQuiz(nodeId),
+    
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey });
+    },
+    
+    onError: (error) => {
+      onError?.(error as Error, 'previousQuiz');
+    },
+    
+    onSettled: () => {
+      invalidateSession();
+    },
+  });
+
+  // ============================================================
   // ADVANCE TO NEXT QUIZ: SHOWING_FEEDBACK → IN_QUIZ
   // User clicks "Next Quiz" after correct answer in multi-quiz set
   // Reuses retry-quiz endpoint - server already advanced current_index
@@ -512,6 +532,16 @@ export function useLearningMutations({
   };
 
   /**
+   * Go to previous quiz in a multi-quiz set.
+   * Only valid from IN_QUIZ state.
+   * 
+   * @param nodeId - Node with the quiz set
+   */
+  const goToPreviousQuiz = (nodeId: string) => {
+    previousQuizMutation.mutate(nodeId);
+  };
+
+  /**
    * Advance to next quiz in a multi-quiz set.
    * Only valid from SHOWING_FEEDBACK state after correct answer.
    * Reuses retry-quiz endpoint; server has already advanced current_index.
@@ -527,6 +557,7 @@ export function useLearningMutations({
     transitionMutation,
     submitQuizMutation,
     retryQuizMutation,
+    previousQuizMutation,
     advanceToNextQuizMutation,
     regenerateMutation,
 
@@ -534,6 +565,7 @@ export function useLearningMutations({
     proceedToQuiz,
     submitAnswer,
     retry,
+    goToPreviousQuiz,
     continueToNext,
     regenerate,
     advanceToNextQuiz,
@@ -542,6 +574,7 @@ export function useLearningMutations({
     isTransitioning: transitionMutation.isPending,
     isSubmitting: submitQuizMutation.isPending,
     isRetrying: retryQuizMutation.isPending,
+    isGoingPreviousQuiz: previousQuizMutation.isPending,
     isAdvancingQuiz: advanceToNextQuizMutation.isPending,
     isRegenerating: regenerateMutation.isPending,
     isCompleting: completeMasteryMutation.isPending,
@@ -551,6 +584,7 @@ export function useLearningMutations({
       transitionMutation.isPending ||
       submitQuizMutation.isPending ||
       retryQuizMutation.isPending ||
+      previousQuizMutation.isPending ||
       advanceToNextQuizMutation.isPending ||
       regenerateMutation.isPending ||
       completeMasteryMutation.isPending,

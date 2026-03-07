@@ -91,8 +91,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
 
-    --primary: 50 100% 50%; /* #FFD300 */
-    --primary-foreground: 240 5.9% 10%;
+    --primary: 45 100% 40%; /* Darker amber/gold for light mode - better contrast */
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;

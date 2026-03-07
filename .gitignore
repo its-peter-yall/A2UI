@@ -33,6 +33,8 @@ dist/
 .env.production
 
 # IDE
+.claude/
+.gemini/
 .vscode/
 .idea/
 *.swp

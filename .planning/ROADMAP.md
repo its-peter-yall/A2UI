@@ -193,10 +193,66 @@ Plans:
 - [ ] 20-01-PLAN.md — Backend complexity pipeline (DB schema + server schemas + orchestrator + TypeScript types)
 - [ ] 20-02-PLAN.md — Frontend multi-quiz UI (advanceToNextQuiz mutation + component wiring + badges/labels)
 
+### Phase 21: E2E Testing — Multi-Quiz Course Generation
+**Goal:** Human-verified E2E flow for generating and completing a multi-quiz course
+**Depends on:** Phase 19 (multi-quiz backend complete)
+**Requirements:** PROG-01, PROG-02 (real-world validation)
+**Success Criteria** (what must be TRUE):
+  1. Human tester generates a course with at least one topic having quiz_count > 1
+  2. Human tester completes all quizzes in the chain sequentially without errors
+  3. Mastery gate correctly prevents topic advancement until all quizzes passed
+  4. Sequential enforcement works: quiz N+1 inaccessible until quiz N passed
+**Plans**: 1 plan
+
+Plans:
+- [ ] 21-01-PLAN.md — E2E test script for multi-quiz course generation and completion flow
+
+### Phase 22: E2E Testing — Node Regeneration
+**Goal:** Human-verified E2E flow for regenerating a failed multi-quiz node
+**Depends on:** Phase 19 (regenerate_node with QuizSet support)
+**Requirements:** PROG-04 (real-world validation)
+**Success Criteria** (what must be TRUE):
+  1. Human tester triggers regeneration on a node with quiz_count > 1
+  2. Regenerated node contains full QuizSet matching original quiz_count
+  3. Quiz difficulty gradient preserved in regenerated QuizSet
+  4. Node status correctly transitions from ERROR to VIEWING_EXPLANATION or LOCKED
+**Plans**: 1 plan
+
+Plans:
+- [ ] 22-01-PLAN.md — E2E test script for multi-quiz node regeneration with QuizSet verification
+
+### Phase 23: Visual Verification — Complexity & Difficulty Badges
+**Goal:** Visual polish verification for complexity badges, progress indicators, and difficulty labels
+**Depends on:** Phase 20 (frontend components complete)
+**Requirements:** UXUI-01, UXUI-03, UXUI-04 (visual validation)
+**Success Criteria** (what must be TRUE):
+  1. Complexity badges (Basic/Intermediate/Advanced) display correctly on topic cards in light/dark modes
+  2. "Quiz X of Y" progress indicator styled consistently with Cyber Yellow accent
+  3. Difficulty labels (Easy/Medium/Hard) visible and color-coded on quiz cards
+  4. Visual hierarchy clear: complexity badge, progress indicator, difficulty labels distinct
+**Plans**: 1 plan
+
+Plans:
+- [ ] 23-01-PLAN.md — Visual verification checklist and styling adjustments for badges/indicators
+
+### Phase 24: UX Verification — Navigation & Regression
+**Goal:** UX flow verification for Next Quiz navigation and backward compatibility testing
+**Depends on:** Phase 20 (navigation handlers complete)
+**Requirements:** UXUI-02 (navigation), backward compatibility (regression)
+**Success Criteria** (what must be TRUE):
+  1. "Next Quiz" button smoothly advances to next quiz in chain without page reload
+  2. Navigation animation/transition feels responsive and polished
+  3. Existing courses (created before v1.2) load without errors or visual glitches
+  4. Single-quiz topics (quiz_count=1) display correctly without progress indicator
+**Plans**: 1 plan
+
+Plans:
+- [ ] 24-01-PLAN.md — UX navigation flow testing and backward compatibility regression suite
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 16 → 17 → 18 → 19 → 20
+Phases execute in numeric order: 16 → 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24
 
 **Dependency Graph:**
 ```
@@ -210,6 +266,12 @@ Phase 19 ←─────┘
     ↓
 Phase 20
 (Frontend)
+    ↓
+Phase 21 ───┐
+(E2E Gen)   │
+            ├──→ Phase 23 (Visual)
+Phase 22 ───┘     ↓
+(E2E Regen)   Phase 24 (UX/Regression)
 ```
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -221,10 +283,28 @@ Phase 20
 | 18. Planner Complexity | v1.2 | Complete    | 2026-02-17 | - |
 | 19. Orchestrator Integration | 2/2 | Complete    | 2026-02-17 | - |
 | 20. Frontend Verification | v1.2 | 2/2 | Complete | 2026-02-17 |
+| 21. E2E Testing — Multi-Quiz Generation | v1.3 | 0/1 | Pending | - |
+| 22. E2E Testing — Node Regeneration | v1.3 | 0/1 | Pending | - |
+| 23. Visual Verification — Badges | v1.3 | 0/1 | Pending | - |
+| 24. UX Verification — Navigation | v1.3 | 0/1 | Pending | - |
 
 ---
 
-## Future Milestones (v1.3+)
+### ✅ v1.3 Human Verification & E2E Testing (Planned)
+
+**Milestone Goal:** Complete human verification and E2E testing recommended in v1.2 audit to ensure production-ready polish and real-world validation.
+
+**Phase Numbering:**
+- Integer phases (21, 22, ...): Planned v1.3 work
+
+- [ ] **Phase 21: E2E Testing — Multi-Quiz Course Generation** — Human E2E testing for multi-quiz course flow with quiz_count > 1
+- [ ] **Phase 22: E2E Testing — Node Regeneration** — Human E2E testing for multi-quiz node regeneration with QuizSet verification
+- [ ] **Phase 23: Visual Verification — Complexity & Difficulty Badges** — Visual verification for complexity badge display, progress indicators, and difficulty gradient styling
+- [ ] **Phase 24: UX Verification — Navigation & Regression** — UX verification for Next Quiz navigation smoothness and backward compatibility testing
+
+**Total v1.3 Plans:** 4/4
+
+## Future Milestones (v1.4+)
 
 - **Spaced Repetition Automation**: SM-2 algorithm with scheduled review notifications
 - **Adaptive Difficulty**: Quizzer adjusts question difficulty based on performance history

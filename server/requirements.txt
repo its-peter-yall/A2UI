@@ -6,3 +6,4 @@ pydantic
 instructor
 tenacity
 jsonref
+watchdog

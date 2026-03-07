@@ -84,7 +84,12 @@ from typing import Any, Dict, List, Optional
 from pydantic import ValidationError
 
 from server.database.persistence import DB_PATH
-from server.schemas.learning import NodeStatus, QuizCard, QuizSet
+from server.schemas.learning import (
+    NodeStatus,
+    QuizCard,
+    QuizSet,
+    convert_legacy_to_quiz_set,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1903,8 +1908,9 @@ class LearningManager:
 
             # Handle legacy format (single QuizCard) stored without format_version
             if format_version is None or format_version < 1:
-                # Legacy: payload is a QuizCard, return directly
-                return QuizCard.model_validate(payload)
+                # Legacy: payload is a QuizCard, return converted
+                from server.schemas.learning import convert_legacy_quiz_card
+                return convert_legacy_quiz_card(payload)
 
             # New format: payload is a QuizSet. Fall back to legacy parsing
             # if format_version was incorrectly set during prior migrations.
@@ -1916,7 +1922,8 @@ class LearningManager:
                     "node_id=%s. Falling back to legacy parsing.",
                     node_id,
                 )
-                return QuizCard.model_validate(payload)
+                from server.schemas.learning import convert_legacy_quiz_card
+                return convert_legacy_quiz_card(payload)
             if quiz_set.quizzes:
                 # Use current_index from database column, not from payload
                 idx = (
@@ -2050,9 +2057,8 @@ class LearningManager:
 
             # Handle legacy format - wrap single quiz in QuizSet
             if format_version is None or format_version < 1:
-                # Legacy: payload is a QuizCard, wrap in QuizSet
-                single_quiz = QuizCard.model_validate(payload)
-                quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                # Legacy: payload is a QuizCard, convert and wrap in QuizSet
+                quiz_set = convert_legacy_to_quiz_set(payload)
                 shuffle_seed = row["shuffle_seed"]
                 current_index = row["current_index"] or 0
             else:
@@ -2066,8 +2072,7 @@ class LearningManager:
                         "node_id=%s. Falling back to wrapped legacy quiz.",
                         node_id,
                     )
-                    single_quiz = QuizCard.model_validate(payload)
-                    quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                    quiz_set = convert_legacy_to_quiz_set(payload)
                     shuffle_seed = None
                     current_index = 0
                     format_version = 0
@@ -2120,6 +2125,63 @@ class LearningManager:
             return updated
         except sqlite3.Error as e:
             logger.error(f"Error updating quiz shuffle seed: {e}")
+            raise
+        finally:
+            conn.close()
+
+    def decrement_quiz_set_progress(
+        self, node_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Decrement the current quiz index for a QuizSet.
+
+        Returns:
+            Updated node data dict, or None if not found or not a QuizSet.
+        """
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.cursor()
+
+            # Get current quiz data
+            cursor.execute(
+                "SELECT payload, format_version, current_index FROM quiz_data WHERE node_id = ?",
+                (node_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            format_version = row["format_version"]
+            # Only support QuizSet (version 1)
+            if format_version is None or format_version < 1:
+                # Legacy single quiz, cannot decrement
+                return None
+
+            current_index = row["current_index"]
+            if current_index <= 0:
+                # Already at start, cannot decrement further.
+                # Return current node state.
+                return self._get_node_by_id(node_id, conn)
+
+            new_index = current_index - 1
+
+            cursor.execute(
+                """
+                UPDATE quiz_data
+                SET current_index = ?, updated_at = ?
+                WHERE node_id = ?
+                """,
+                (new_index, now, node_id),
+            )
+            conn.commit()
+
+            logger.info(
+                f"Decremented QuizSet progress for node {node_id}: index={new_index}"
+            )
+
+            return self._get_node_by_id(node_id, conn)
+        except sqlite3.Error as e:
+            logger.error(f"Error decrementing QuizSet progress: {e}")
             raise
         finally:
             conn.close()
@@ -2444,8 +2506,7 @@ class LearningManager:
 
                 if format_version is None or format_version < 1:
                     try:
-                        single_quiz = QuizCard.model_validate(payload)
-                        quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                        quiz_set = convert_legacy_to_quiz_set(payload)
                     except ValidationError:
                         logger.warning(
                             f"Failed to parse legacy quiz payload for node {node_id}"
@@ -2455,8 +2516,7 @@ class LearningManager:
                         quiz_set = QuizSet.model_validate(payload)
                     except ValidationError:
                         try:
-                            single_quiz = QuizCard.model_validate(payload)
-                            quiz_set = QuizSet(quizzes=[single_quiz], current_index=0)
+                            quiz_set = convert_legacy_to_quiz_set(payload)
                         except ValidationError:
                             logger.warning(
                                 f"Failed to parse quiz payload for node {node_id}"

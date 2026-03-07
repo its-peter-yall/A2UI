@@ -86,6 +86,7 @@ from server.schemas.learning import (
     NodeStatus,
     QuizAttemptHistory,
     QuizAttemptResponse,
+    QuizSetHidden,
     RevisionCreateRequest,
     RevisionNodeProgress,
     RevisionQuizSubmissionResult,
@@ -230,9 +231,20 @@ def _apply_node_visibility(node: dict, include_flags: bool = False) -> dict:
                 hidden_quiz = hide_quiz_card(shuffled_quiz)
                 response_node["quiz_hidden"] = hidden_quiz
                 response_node["quiz"] = None
+
+                # Populate quiz_set_hidden for multi-quiz progress indicator
+                if len(quiz_set.quizzes) > 1:
+                    hidden_quizzes = [hide_quiz_card(q) for q in shuffled_set.quizzes]
+                    response_node["quiz_set_hidden"] = QuizSetHidden(
+                        quizzes=hidden_quizzes,
+                        current_index=current_index,
+                        total_quizzes=len(quiz_set.quizzes),
+                    )
             elif quiz_set.quizzes:
                 review_seed = (
-                    existing_seed or quiz_set.shuffle_seed or f"review-{node['id']}"
+                    existing_seed
+                    or quiz_set.shuffle_seed
+                    or _ensure_quiz_shuffle_seed(node["id"])
                 )
                 shuffled_set = shuffle_quiz_set_with_seed(quiz_set, review_seed)
                 response_node["quiz_set"] = shuffled_set
@@ -925,6 +937,50 @@ def retry_quiz(node_id: str) -> ConceptNodeResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retry quiz: {str(e)}",
+        )
+
+
+@router.post(
+    "/nodes/{node_id}/previous-quiz",
+    response_model=ConceptNodeResponse,
+    summary="Previous quiz",
+    description="Transition to the previous quiz in a quiz set.",
+)
+def previous_quiz(node_id: str) -> ConceptNodeResponse:
+    """Decrement the current quiz index for a node's quiz set."""
+    try:
+        updated_node = learning_manager.decrement_quiz_set_progress(node_id)
+
+        if not updated_node:
+            # Check if node exists to distinguish 404 from "cannot decrement"
+            conn = learning_manager._get_connection()
+            try:
+                node = learning_manager._get_node_by_id(node_id, conn)
+                if not node:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Concept node not found: {node_id}",
+                    )
+                # If node exists but decrement returned None (e.g. legacy quiz), just return node
+                updated_node = node
+            finally:
+                conn.close()
+
+        # Ensure we are in IN_QUIZ state for the returned node
+        if NodeStatus(updated_node["status"]) != NodeStatus.IN_QUIZ:
+            learning_manager.update_node_status(node_id, NodeStatus.IN_QUIZ)
+            updated_node["status"] = NodeStatus.IN_QUIZ.value
+
+        _ensure_quiz_shuffle_seed(node_id)
+        response_node = _apply_node_visibility(updated_node)
+        return ConceptNodeResponse(**response_node)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error going to previous quiz: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to go to previous quiz: {str(e)}",
         )
 
 

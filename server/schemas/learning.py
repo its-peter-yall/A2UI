@@ -1042,19 +1042,30 @@ def convert_legacy_quiz_option(legacy: dict) -> QuizOption:
     New format: {"option_id": "uuid-...", "display_label": "A", "text": "...", "is_correct": true, "explanation": "..."}
 
     BACKWARD COMPATIBILITY:
-    - Generates stable UUID from legacy id for option_id
+    - Generates stable UUID from legacy id AND text to prevent collisions
     - Maps legacy id to display_label
     - Preserves text, is_correct, explanation
     """
     import uuid
+    import hashlib
 
-    legacy_id = legacy.get("id", "A")
-    stable_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"option-{legacy_id}"))
+    # Support both legacy "id" and modern "display_label"
+    legacy_id = legacy.get("id") or legacy.get("display_label") or "A"
+    text = legacy.get("text", "")
+    
+    # If it already has an option_id, use it
+    if "option_id" in legacy:
+        stable_uuid = legacy["option_id"]
+    else:
+        # Use a more specific seed to avoid collisions between different questions
+        # But still deterministic for the same question content
+        seed = f"option-{legacy_id}-{text}"
+        stable_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, seed))
 
     return QuizOption(
         option_id=stable_uuid,
         display_label=legacy_id,
-        text=legacy.get("text", ""),
+        text=text,
         is_correct=legacy.get("is_correct", False),
         explanation=legacy.get("explanation", ""),
     )
@@ -1068,7 +1079,15 @@ def convert_legacy_quiz_card(legacy_quiz: dict) -> QuizCard:
     - Generates UUIDs based on legacy IDs for deterministic option_id
     """
     legacy_options = legacy_quiz.get("options", [])
-    new_options = [convert_legacy_quiz_option(opt) for opt in legacy_options]
+    if isinstance(legacy_options, dict):
+        # Handle cases where options might be a dict (A: {...}, B: {...})
+        new_options = []
+        for lid, opt in legacy_options.items():
+            if "id" not in opt:
+                opt["id"] = lid
+            new_options.append(convert_legacy_quiz_option(opt))
+    else:
+        new_options = [convert_legacy_quiz_option(opt) for opt in legacy_options]
 
     return QuizCard(
         question_text=legacy_quiz.get("question_text", ""),

@@ -90,6 +90,7 @@ interface ConceptCardProps {
   onRetryQuiz?: (nodeId: string) => void;
   onContinueToNext?: (nodeId: string) => void;
   onNextQuiz?: () => void;
+  onPreviousQuiz?: (nodeId: string) => void;
   onRegenerate?: (nodeId: string) => void;
   onSkipNode?: (nodeId: string) => void;
   onPrevious?: () => void;
@@ -107,6 +108,7 @@ export function ConceptCard({
   onRetryQuiz,
   onContinueToNext,
   onNextQuiz,
+  onPreviousQuiz,
   onRegenerate,
   onSkipNode,
   onPrevious,
@@ -166,8 +168,8 @@ export function ConceptCard({
     LOCKED: 'opacity-50 bg-muted cursor-not-allowed',
     VIEWING_EXPLANATION: 'border-primary bg-card',
     IN_QUIZ: 'border-primary bg-card',
-    SHOWING_FEEDBACK: 'border-amber-500 bg-amber-50 dark:bg-amber-950',
-    COMPLETED: 'border-green-500 bg-green-50 dark:bg-green-950',
+    SHOWING_FEEDBACK: 'border-amber-500 bg-card',
+    COMPLETED: 'border-green-500 bg-card',
     ERROR: 'border-destructive bg-destructive/10',
   };
 
@@ -337,7 +339,23 @@ export function ConceptCard({
                       ))}
                     </fieldset>
                     <div className="flex justify-between items-center pt-4 border-t">
-                      {renderPreviousButton()}
+                      {isQuizSetHidden && currentQuizIndex > 0 ? (
+                        <button
+                          onClick={() => onPreviousQuiz?.(node.id)}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors text-sm font-medium"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          <span>Previous</span>
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground/30 cursor-not-allowed transition-colors text-sm font-medium"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                          <span>Previous</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => handleSubmitQuiz(currentQuizIndex)}
                         disabled={!selectedOption}

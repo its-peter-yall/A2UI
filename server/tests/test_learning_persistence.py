@@ -416,9 +416,9 @@ class TestQuizAttempts(unittest.TestCase):
         self.assertEqual(result["selected_option_id"], incorrect_option_id)
         self.assertFalse(result["is_correct"])
         self.assertEqual(result["score_percent"], 0)
-        self.assertEqual(result["correct_option_id"], correct_option_id)
+        self.assertIsNone(result["correct_option_id"])
         self.assertFalse(result["is_mastered"])
-        self.assertIn("does not equal 5", result["explanation"])
+        self.assertIn("does not equal 5", result["selected_explanation"])
 
     def test_create_quiz_attempt_invalid_option(self) -> None:
         """Submitting an invalid option ID should raise ValueError."""
@@ -2656,3 +2656,100 @@ class TestRevisionQuizAttemptsMigration(unittest.TestCase):
             self.assertIsNone(row["revision_session_id"])
         finally:
             conn.close()
+
+
+class TestQuizSetNavigation(unittest.TestCase):
+    """Tests for navigating within a QuizSet."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = Path(self.temp_dir.name) / "navigation_learning.db"
+        self.manager = LearningManager(self.db_path)
+        self.manager.init_learning_tables()
+
+    def tearDown(self) -> None:
+        self.temp_dir.cleanup()
+
+    def _create_node_with_quiz_set(self, num_quizzes: int = 3):
+        session = self.manager.create_learning_session(
+            query="Nav test", course_title="Nav Course", user_id="user-1"
+        )
+
+        quizzes = []
+        for i in range(num_quizzes):
+            options = [
+                QuizOption(
+                    option_id=_make_stable_uuid(f"q{i}-{l}"),
+                    display_label=l,
+                    text=f"Opt {l}",
+                    is_correct=(l == "A"),
+                    explanation="Exp",
+                )
+                for l in ["A", "B", "C", "D"]
+            ]
+            quizzes.append(
+                QuizCard(
+                    question_text=f"Q{i+1}",
+                    options=options,
+                    difficulty=QuizDifficulty.EASY,
+                )
+            )
+
+        quiz_set = QuizSet(quizzes=quizzes, current_index=0)
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz_set=quiz_set,
+        )
+        return node["id"]
+
+    def test_decrement_quiz_set_progress(self) -> None:
+        """Test decrementing the current quiz index."""
+        node_id = self._create_node_with_quiz_set(3)
+
+        # Advance to index 2
+        self.manager.update_quiz_set_progress(node_id, 2)
+        quiz_set_data = self.manager.get_quiz_set_for_node(node_id)
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["current_index"], 2)
+
+        # Decrement to index 1
+        updated_node = self.manager.decrement_quiz_set_progress(node_id)
+        self.assertIsNotNone(updated_node)
+        quiz_set_data = self.manager.get_quiz_set_for_node(node_id)
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["current_index"], 1)
+
+        # Decrement to index 0
+        self.manager.decrement_quiz_set_progress(node_id)
+        quiz_set_data = self.manager.get_quiz_set_for_node(node_id)
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["current_index"], 0)
+
+        # Decrement at 0 should stay at 0
+        self.manager.decrement_quiz_set_progress(node_id)
+        quiz_set_data = self.manager.get_quiz_set_for_node(node_id)
+        assert quiz_set_data is not None
+        self.assertEqual(quiz_set_data["current_index"], 0)
+
+    def test_decrement_non_quiz_set_returns_none(self) -> None:
+        """Decrementing a node with a single legacy quiz should return None."""
+        session = self.manager.create_learning_session(
+            query="Test", course_title="Test", user_id="user-1"
+        )
+        quiz = _make_quiz_card()
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=0,
+            title="Node",
+            content_markdown="Content",
+            status=NodeStatus.IN_QUIZ,
+            quiz=quiz,
+        )
+
+        result = self.manager.decrement_quiz_set_progress(node["id"])
+        self.assertIsNone(result)
+

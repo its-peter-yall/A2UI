@@ -63,6 +63,7 @@ vi.mock('@/lib/learningApi', () => ({
   transitionNode: vi.fn(),
   submitQuiz: vi.fn(),
   retryQuiz: vi.fn(),
+  previousQuiz: vi.fn(),
   regenerateNode: vi.fn(),
 }));
 
@@ -365,6 +366,51 @@ describe('useLearningMutations - Sequential Flow', () => {
 
       await waitFor(() => {
         expect(result.current.isAdvancingQuiz).toBe(false);
+      });
+    });
+  });
+
+  describe('goToPreviousQuiz (IN_QUIZ → IN_QUIZ)', () => {
+    it('calls previousQuiz API', async () => {
+      (api.previousQuiz as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'node-1',
+        status: 'IN_QUIZ',
+        quiz_set_hidden: { current_index: 0, total_quizzes: 2 },
+      });
+
+      const { result } = renderHook(
+        () => useLearningMutations({ sessionId: 'session-1' }),
+        { wrapper: createWrapper() }
+      );
+
+      result.current.goToPreviousQuiz('node-1');
+
+      await waitFor(() => {
+        expect(api.previousQuiz).toHaveBeenCalledWith('node-1');
+      });
+    });
+
+    it('sets isGoingPreviousQuiz while mutation is pending', async () => {
+      let resolvePrev: (value: unknown) => void;
+      (api.previousQuiz as ReturnType<typeof vi.fn>).mockImplementation(
+        () => new Promise((resolve) => { resolvePrev = resolve; })
+      );
+
+      const { result } = renderHook(
+        () => useLearningMutations({ sessionId: 'session-1' }),
+        { wrapper: createWrapper() }
+      );
+
+      result.current.goToPreviousQuiz('node-1');
+
+      await waitFor(() => {
+        expect(result.current.isGoingPreviousQuiz).toBe(true);
+      });
+
+      resolvePrev!({ id: 'node-1', status: 'IN_QUIZ' });
+
+      await waitFor(() => {
+        expect(result.current.isGoingPreviousQuiz).toBe(false);
       });
     });
   });
