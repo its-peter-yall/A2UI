@@ -1,5 +1,34 @@
 # Project Milestones
 
+## Milestone: v1.3 — Human Verification & E2E Testing
+
+**Status**: ✅ Completed
+**Completion Date**: 2026-03-08
+**Brief**: Human verification and E2E testing recommended in v1.2 audit
+
+**Summary**:
+Completed human verification and E2E testing for the multi-quiz feature to ensure production-ready polish and real-world validation.
+
+### Phases (4 total)
+
+| Phase | Name | Directory | Plans | Status |
+|-------|------|-----------|-------|--------|
+| 21 | E2E Testing — Multi-Quiz Course Generation | `phases/21-e2e-testing-multi-quiz/` | 1 | ✅ Completed |
+| 22 | E2E Testing — Node Regeneration | `phases/22-e2e-testing-node-regeneration/` | 1 | ✅ Completed |
+| 23 | Visual Verification — Complexity & Difficulty Badges | `phases/23-visual-verification-badges/` | 1 | ✅ Completed |
+| 24 | UX Verification — Navigation & Regression | `phases/24-ux-verification-navigation/` | 1 | ✅ Completed |
+
+**Key Deliverables**:
+- Human-verified E2E flow for multi-quiz course generation (quiz_count > 1)
+- Human-verified E2E flow for regenerating failed multi-quiz nodes
+- Visual verification of complexity badges (Basic/Intermediate/Advanced) in light/dark modes
+- Visual verification of "Quiz X of Y" progress indicator with Cyber Yellow accent
+- Visual verification of difficulty labels (Easy/Medium/Hard) color-coding
+- UX verification of smooth Next Quiz navigation without page reloads
+- Backward compatibility testing for pre-v1.2 courses
+
+---
+
 This document tracks completed milestones and their associated phases.
 
 ---
@@ -104,7 +133,8 @@ Enhanced the quiz system to dynamically determine quiz quantity based on topic c
 | v1.0 | 9 | 20 | ✅ Complete |
 | v1.1 | 7 | 14 | ✅ Complete |
 | v1.2 | 5 | 9 | ✅ Complete |
-| **Total** | **21** | **43** | ✅ **Complete** |
+| v1.3 | 4 | 4 | ✅ Complete |
+| **Total** | **25** | **47** | ✅ **Complete** |
 
 ---
 
