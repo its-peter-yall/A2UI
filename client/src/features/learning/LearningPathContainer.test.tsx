@@ -1,47 +1,36 @@
 /**
  * ============================================================================
  * FILE: LearningPathContainer.test.tsx
+ * LOCATION: client/src/features/learning/LearningPathContainer.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for LearningPathContainer component. Validates loading states,
- * error handling, empty state display, and session/node rendering.
- * 
- * KEY TESTS:
- * - Shows loading state when fetching session
- * - Shows "Creating your learning path" when generating course
- * - Shows "Session not found" for 404 responses
- * - Shows "No topics yet" for empty sessions
- * - Shows "Failed to generate course" on generation errors
- * 
+ *    Unit and integration tests for LearningPathContainer. Validates loading
+ *    states, error handling, empty state display, session/node rendering,
+ *    carousel initialisation, and debounced last-active tracking.
+ *
+ * ROLE IN PROJECT:
+ *    Primary test suite for the learning feature's central orchestrator.
+ *    Covers both happy-path rendering and edge cases (404, empty nodes,
+ *    generation failure, resume navigation, debounced PATCH behaviour).
+ *
+ * KEY COMPONENTS:
+ *    - Loading state tests: Session fetch and course generation pending states
+ *    - Error state tests: 404 not found, generation failure, all-nodes error
+ *    - Empty state tests: Session with no nodes
+ *    - Resume navigation tests: initialNodeId positioning and fallback
+ *    - Debounce tests: Last-active PATCH timing and deduplication
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing
- * - @tanstack/react-query: Query client provider
- * - axios: For axiosError detection
- * - client/src/features/learning/LearningPathContainer: Component
- * - client/src/lib/learningApi: API functions (mocked)
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run LearningPathContainer tests
- * npm run test -- src/features/learning/LearningPathContainer.test.tsx
- * ```
- * 
- * TEST SETUP:
- * - Mocks @/lib/learningApi module
- * - Uses QueryClient with retry: false
- * - Tests both sessionId query and query (generation) modes
- * - Uses axios.isAxiosError for error detection
- * 
- * RELATED FILES:
- * - client/src/features/learning/LearningPathContainer.tsx
- * - client/src/types/learning.ts
- * 
- * NOTES:
- * - Can load existing session or generate new one
- * - Props: sessionId (load) or query (generate)
- * - Handles axios errors specifically for 404 detection
+ *    - External: vitest, @testing-library/react, @tanstack/react-query,
+ *                react-router-dom, axios
+ *    - Internal: ./LearningPathContainer, @/lib/learningApi (mocked),
+ *                @/types/learning
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/LearningPathContainer.test.tsx
+ *    ```
  * ============================================================================
  */
 

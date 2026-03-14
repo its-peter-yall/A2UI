@@ -1,62 +1,29 @@
 """
-=============================================================================
+============================================================================
 FILE: test_learning_schemas.py
-=============================================================================
-
+LOCATION: server/tests/test_learning_schemas.py
+============================================================================
 PURPOSE:
-Unit tests for learning schema validation. Validates Pydantic model
-constraints, enum values, minimum list requirements, and default values
-for all learning-related schemas.
-
-KEY TESTS:
-- test_status_values: Validates NodeStatus enum values
-- test_quiz_option_valid: Valid QuizOption creation (stable option_id + display_label)
-- test_quiz_card_requires_min_options: Four options required
-- test_topic_node_valid: Valid TopicNode creation
-- test_course_outline_min_topics: Minimum 3 topics required
-- test_learning_session_valid: Valid LearningSessionCreate
-- test_concept_node_create: Default NodeStatus.LOCKED validation
-- test_quiz_set_valid: Multi-quiz set with single quiz
-- test_quiz_set_multiple_quizzes: Multiple quizzes per node
-- test_convert_legacy_quiz_option: Backward compatibility for legacy format
-- test_quiz_option_hidden_no_correctness: Hidden options don't expose answers
-- test_quiz_card_hidden_validation: Hidden quiz cards don't leak correctness
-- test_quiz_set_hidden_structure: QuizSetHidden has total_quizzes field
-- test_quiz_submission_with_quiz_index: Multi-quiz submission support
-- test_quiz_option_id_rules: Stable IDs must be unique and non-empty
-
+    Unit tests for learning schema validation. Validates Pydantic model
+    constraints, enum values, minimum list requirements, and default
+    values for all learning-related schemas.
+ROLE IN PROJECT:
+    Ensures all learning Pydantic schemas enforce correct constraints and
+    reject invalid payloads at the boundary layer.
+    - Covers positive and negative validation cases for all schemas
+    - Validates backward compatibility for legacy quiz formats
+KEY COMPONENTS:
+    - TestNodeStatusSchema: NodeStatus enum validation tests
+    - TestQuizSchemas: QuizOption, QuizCard, QuizSet validation tests
+    - TestLearningSessionSchemas: Session and node schema tests
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- pydantic: ValidationError for schema validation tests
-- server.schemas.learning: All learning-related schemas
-
-USAGE PATTERN:
-```python
-# Run all learning schema tests
-python -m unittest server.tests.test_learning_schemas
-
-# Run specific test class
-python -m unittest server.tests.test_learning_schemas.TestQuizSchemas
-
-# Run single test
-python -m unittest server.tests.test_learning_schemas.TestQuizSchemas.test_quiz_card_requires_min_options
-```
-
-TEST SETUP:
-- Creates mock QuizOption, TopicNode, and other schema objects
-- Tests both positive (valid) and negative (ValidationError) cases
-- No external dependencies - pure schema validation
-
-RELATED FILES:
-- server/schemas/learning.py - All learning schemas under test
-
-NOTES:
-- QuizCard requires exactly 4 options
-- QuizOption requires explanation field
-- CourseOutline requires 3-5 topics
-- NodeStatus enum: LOCKED, VIEWING_EXPLANATION, IN_QUIZ, SHOWING_FEEDBACK, COMPLETED, ERROR
-- Phase 1: Secure option identity with stable option_id (UUID) separate from display_label
-=============================================================================
+    - External: unittest, pydantic
+    - Internal: server.schemas.learning
+USAGE:
+    ```python
+    python -m unittest server.tests.test_learning_schemas
+    ```
+============================================================================
 """
 
 # test_learning_schemas.py

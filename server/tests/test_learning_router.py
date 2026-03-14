@@ -1,29 +1,27 @@
 """
-=============================================================================
+============================================================================
 FILE: test_learning_router.py
-=============================================================================
-
+LOCATION: server/tests/test_learning_router.py
+============================================================================
 PURPOSE:
-Unit tests for learning router behavior that coordinates persistence updates
-after quiz submissions. Focuses on server-side multi-quiz progression logic.
-
-KEY TESTS:
-- test_submit_quiz_advances_quiz_set_after_correct_non_mastered: Ensures
-  correct answers in multi-quiz flow advance current quiz index.
-
+    Unit tests for learning router behavior that coordinates persistence
+    updates after quiz submissions. Focuses on server-side multi-quiz
+    progression logic.
+ROLE IN PROJECT:
+    Ensures the learning router correctly advances quiz set state and
+    triggers node transitions after quiz submissions.
+    - Covers multi-quiz index advancement on correct answers
+    - Tests router function directly without a network layer
+KEY COMPONENTS:
+    - TestLearningRouterQuizProgression: Multi-quiz progression tests
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- unittest.mock: Patching module-level learning_manager dependency
-- server.routers.learning: submit_quiz endpoint function under test
-
-RELATED FILES:
-- server/routers/learning.py: Quiz submission route implementation
-- server/database/learning_persistence.py: Quiz set progress persistence
-
-NOTES:
-- Tests call router function directly with patched dependencies.
-- No network or FastAPI test client required for these regressions.
-=============================================================================
+    - External: unittest, unittest.mock, fastapi
+    - Internal: server.routers.learning, server.schemas.learning
+USAGE:
+    ```python
+    python -m unittest server.tests.test_learning_router
+    ```
+============================================================================
 """
 
 import unittest

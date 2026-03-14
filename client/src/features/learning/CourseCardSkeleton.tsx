@@ -1,3 +1,28 @@
+/**
+ * ============================================================================
+ * FILE: CourseCardSkeleton.tsx
+ * LOCATION: client/src/features/learning/CourseCardSkeleton.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Animated pulse skeleton placeholder matching the CourseCard layout.
+ *
+ * ROLE IN PROJECT:
+ *    Shown in the course dashboard grid while useCourseList is fetching data.
+ *    Mirrors CourseCard structure (title, query, progress bar, action area)
+ *    to prevent layout shift on load.
+ *
+ * KEY COMPONENTS:
+ *    - CourseCardSkeleton: CSS animate-pulse skeleton with aria-busy
+ *
+ * DEPENDENCIES:
+ *    - External: none
+ *    - Internal: @/lib/utils (cn)
+ *
+ * USAGE:
+ *    {isLoading && <CourseCardSkeleton />}
+ * ============================================================================
+ */
 // CourseCardSkeleton.tsx
 // Skeleton loading placeholder for CourseCard components
 

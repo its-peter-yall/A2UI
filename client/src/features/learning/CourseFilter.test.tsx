@@ -1,3 +1,27 @@
+/**
+ * ============================================================================
+ * FILE: CourseFilter.test.tsx
+ * LOCATION: client/src/features/learning/CourseFilter.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Unit tests for the CourseFilter component covering rendering and interactions.
+ *
+ * ROLE IN PROJECT:
+ *    Validates filter pill rendering, active state aria attributes, click
+ *    callbacks for status and sort controls, and tablist accessibility roles.
+ *
+ * KEY COMPONENTS:
+ *    - CourseFilter tests: pill rendering, aria-selected, callback invocations
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react
+ *    - Internal: ./CourseFilter
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/CourseFilter.test.tsx
+ * ============================================================================
+ */
 // CourseFilter.test.tsx
 // Tests for CourseFilter component rendering and interactions
 

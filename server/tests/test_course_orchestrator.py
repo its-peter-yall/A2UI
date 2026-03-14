@@ -1,58 +1,32 @@
 """
-=============================================================================
+============================================================================
 FILE: test_course_orchestrator.py
-=============================================================================
-
+LOCATION: server/tests/test_course_orchestrator.py
+============================================================================
 PURPOSE:
-Async unit tests for CourseOrchestrator scatter-gather orchestration flow.
-Validates generate_course orchestration, _generate_concept_unit parallel
-generation, partial failure handling, and regenerate_node behavior.
-
-KEY TESTS:
-- test_generate_course_scatter_gather_success: Full orchestration flow
-- test_generate_concept_unit_success: Individual node generation
-- test_generate_concept_unit_failure_returns_skeleton: Error handling
-- test_process_gather_results_handles_failures: Result aggregation
-- test_regenerate_node_success: Node regeneration flow
-- test_regenerate_node_returns_none_when_missing: Missing node handling
-
+    Async unit tests for CourseOrchestrator scatter-gather orchestration
+    flow. Validates generate_course, _generate_concept_unit, partial
+    failure handling, and regenerate_node behavior.
+ROLE IN PROJECT:
+    Ensures the central orchestration service correctly coordinates agents
+    and persists results, including error recovery paths.
+    - Covers scatter-gather parallel generation with mocked agents
+    - Validates partial failure and skeleton card fallback logic
+KEY COMPONENTS:
+    - TestCourseOrchestratorGenerateCourse: Full orchestration flow tests
+    - TestCourseOrchestratorGenerateConceptUnit: Per-node generation tests
+    - TestCourseOrchestratorGatherResults: Result aggregation tests
+    - TestCourseOrchestratorRegenerateNode: Node regeneration tests
+    - TestMultiQuizMasteryIntegration: Multi-quiz mastery progression tests
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- unittest.mock: AsyncMock for mocking agents and DB
-- types: SimpleNamespace for mock objects
-- importlib: Dynamic module reloading
-- server.services.course_orchestrator: CourseOrchestrator under test
-- server.schemas.learning: CourseOutline, NodeStatus, TopicNode schemas
-
-USAGE PATTERN:
-```python
-# Run all orchestrator tests
-python -m unittest server.tests.test_course_orchestrator
-
-# Run specific test class
-python -m unittest server.tests.test_course_orchestrator.TestCourseOrchestratorGenerateCourse
-
-# Run single test
-python -m unittest server.tests.test_course_orchestrator.TestCourseOrchestratorGenerateCourse.test_generate_course_scatter_gather_success
-```
-
-TEST SETUP:
-- Uses IsolatedAsyncioTestCase for async test support
-- Mocks planner_agent, generator_agent, quizzer_agent, and learning_manager
-- Simulates scatter-gather pattern with parallel concept generation
-- No actual LLM or database calls - fully mock-based
-
-RELATED FILES:
-- server/services/course_orchestrator.py - CourseOrchestrator implementation
-- server/agents/planner.py - PlannerAgent
-- server/agents/generator.py - GeneratorAgent
-- server/agents/quizzer.py - QuizzerAgent
-
-NOTES:
-- Scatter-gather: Plan first, then generate all concepts in parallel
-- Partial failure: Failed nodes get skeleton cards, success continues
-- Metrics track cards_failed and generation_ms per node
-=============================================================================
+    - External: unittest, unittest.mock, types, importlib
+    - Internal: server.services.course_orchestrator,
+                server.schemas.learning
+USAGE:
+    ```python
+    python -m unittest server.tests.test_course_orchestrator
+    ```
+============================================================================
 """
 
 # test_course_orchestrator.py

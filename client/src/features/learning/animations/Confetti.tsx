@@ -1,61 +1,38 @@
 /**
  * ============================================================================
  * FILE: Confetti.tsx
+ * LOCATION: client/src/features/learning/animations/Confetti.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Canvas-based confetti particle celebration effect that creates a burst of
- * colorful falling rectangles with physics simulation (gravity, rotation,
- * velocity). Used to celebrate learning achievements (topic mastery, course
- * completion). Renders directly to HTML Canvas for GPU-accelerated performance
- * with requestAnimationFrame-based animation loop.
- * 
+ *    Canvas-based confetti particle celebration effect with physics simulation
+ *    (gravity, rotation, velocity) for learning achievement moments.
+ *
+ * ROLE IN PROJECT:
+ *    Provides the visual particle burst inside MasteryCelebration. Renders
+ *    directly to an HTML Canvas overlay for GPU-accelerated performance,
+ *    with a reduced-motion fallback for accessibility.
+ *
  * KEY COMPONENTS:
- * - Confetti: Main component rendering canvas overlay with particle physics
- * - Particle system: Each particle has position, velocity, color, size, rotation
- * - Physics simulation: Gravity pulls particles down, rotation adds visual interest
- * - Reduced motion fallback: Static sparkle emoji for accessibility
- * 
+ *    - Confetti: Main component rendering canvas overlay with particle physics
+ *    - Particle system: Position, velocity, color, size, rotation per particle
+ *    - Reduced motion fallback: Static sparkle emoji (✨) for accessibility
+ *
  * DEPENDENCIES:
- * - react: useEffect, useRef, useCallback for canvas and animation management
- * - @/features/learning/animations/index: prefersReducedMotion helper
- * 
- * USAGE PATTERN:
- * ```tsx
- * import { Confetti } from './animations/Confetti';
- * 
- * // In celebration component:
- * <Confetti
- *   active={isCelebrating}
- *   duration={3000}
- *   particleCount={100}
- *   onComplete={() => setIsCelebrating(false)}
- * />
- * ```
- * 
- * ERROR HANDLING:
- * - Handles missing canvas context gracefully (early return)
- * - Clears animation frame on unmount to prevent memory leaks
- * - Removes resize listener on cleanup
- * - Reduced motion calls onComplete after 500ms timeout
- * 
- * PERFORMANCE NOTES:
- * - Uses requestAnimationFrame for smooth 60fps animation
- * - Canvas clears each frame for clean redraw
- * - Particles fade out over duration (opacity = 1 - progress)
- * - mixBlendMode: 'screen' creates additive blending for bright effect
- * - Default particle count: 100; course completion: 200
- * - Physics: gravity 0.3, initial velocity -15 to -5 (upward burst)
- * 
- * RELATED FILES:
- * - MasteryCelebration.tsx: Parent component that triggers confetti
- * - index.ts: prefersReducedMotion helper used here
- * 
- * NOTES:
- * - Accessibility: Static sparkle (✨) shown instead when prefers-reduced-motion
- * - Particle colors: green, blue, amber, pink, violet, teal (celebratory palette)
- * - Initial burst from center-top (canvas.width/2, canvas.height/3)
- * - Particles have random rotation speed for varied tumbling effect
+ *    - External: react (useEffect, useRef, useCallback)
+ *    - Internal: @/features/learning/animations/index (prefersReducedMotion)
+ *
+ * USAGE:
+ *    ```tsx
+ *    import { Confetti } from './animations/Confetti';
+ *
+ *    <Confetti
+ *      active={isCelebrating}
+ *      duration={3000}
+ *      particleCount={100}
+ *      onComplete={() => setIsCelebrating(false)}
+ *    />
+ *    ```
  * ============================================================================
  */
 

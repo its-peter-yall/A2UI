@@ -1,71 +1,40 @@
 /**
  * ============================================================================
  * FILE: QuizFeedback.tsx
+ * LOCATION: client/src/features/learning/QuizFeedback.tsx
  * ============================================================================
  *
  * PURPOSE:
- * Displays detailed quiz results after a user submits an answer. Shows whether
- * the answer was correct/incorrect, displays the correct answer, provides
- * explanations for all options, and offers action buttons to retry or continue.
- * Now supports both single QuizCard and QuizSet (multiple quizzes per node).
- * Rendered inside ConceptCard when node status is SHOWING_FEEDBACK.
+ *    Displays detailed quiz results after a user submits an answer. Shows
+ *    correct/incorrect state, option explanations, and action buttons to
+ *    retry or continue. Supports both single QuizCard and QuizSet.
+ *
+ * ROLE IN PROJECT:
+ *    Feedback layer within the learning feature, rendered by ConceptCard when
+ *    node status is SHOWING_FEEDBACK. Drives the retry-or-continue decision
+ *    point in the sequential learning flow.
  *
  * KEY COMPONENTS:
- * - QuizFeedback: Main component with result header and action buttons
- * - Result Header: Shows correct/incorrect icon, attempt count, score percentage
- * - Quiz Set Progress: Shows "Quiz X of Y" when displaying a QuizSet
- * - Option Feedback: Each quiz option shows correct/incorrect state with explanation
- * - Action Buttons: Retry (if not mastered), Next Quiz (if in set), or Continue
+ *    - QuizFeedback: Main component with result header and action buttons
+ *    - Result Header: Shows correct/incorrect icon, attempt count, score
+ *    - Quiz Set Progress: Shows "Quiz X of Y" when displaying a QuizSet
+ *    - Option Feedback: Each option shows correct/incorrect state with explanation
+ *    - Action Buttons: Retry, Next Quiz, or Continue
  *
  * DEPENDENCIES:
- * - @/lib/utils: cn() utility for conditional className composition
- * - @/types/learning: QuizCard, QuizSet, QuizSubmitResponse types
+ *    - External: (none)
+ *    - Internal: @/lib/utils (cn), @/types/learning (QuizCard, QuizSet, QuizSubmitResponse)
  *
- * USAGE PATTERN:
- * ```tsx
- * // Single quiz feedback
- * <QuizFeedback
- *   quiz={node.quiz}
- *   result={feedbackResult}
- *   attemptCount={attemptCount}
- *   onRetry={() => handleRetry()}
- *   onContinue={feedbackResult.is_mastered ? () => onContinueToNext?.(node.id) : undefined}
- * />
- *
- * // Quiz set feedback
- * <QuizFeedback
- *   quiz={node.quiz_set}
- *   result={feedbackResult}
- *   attemptCount={attemptCount}
- *   currentQuizIndex={currentIndex}
- *   onNextQuiz={() => handleNextQuiz()}
- *   onRetry={() => handleRetry()}
- *   onContinue={() => onContinueToNext?.(node.id)}
- * />
- * ```
- *
- * ERROR HANDLING:
- * - This component assumes quiz and result are always provided
- * - Error states handled by parent ConceptCard (LoadingState/ErrorState)
- * - Gracefully handles edge cases like empty quiz sets
- *
- * PERFORMANCE NOTES:
- * - Lightweight component with minimal re-renders
- * - Uses CSS transitions for hover states
- * - Conditional rendering only includes relevant option feedback
- * - Memoized quiz extraction to prevent unnecessary recalculation
- *
- * RELATED FILES:
- * - ConceptCard.tsx: Parent component that renders QuizFeedback
- * - useQuizFeedback.ts: Hook that fetches and manages feedback data
- * - @/types/learning.ts: QuizCard, QuizSet, QuizSubmitResponse type definitions
- *
- * NOTES:
- * - Shows "Mastered!" badge when is_mastery_achieved is true
- * - Score percent shows user's current score (not cumulative)
- * - "Continue to Next Topic" or "Complete Course" based on next_node_unlocked
- * - QuizSet navigation only shows when there are more quizzes and current is correct
- * - display_label (A-D) is preserved even when options are shuffled
+ * USAGE:
+ *    ```tsx
+ *    <QuizFeedback
+ *      quiz={node.quiz}
+ *      result={feedbackResult}
+ *      attemptCount={attemptCount}
+ *      onRetry={() => handleRetry()}
+ *      onContinue={feedbackResult.is_mastered ? () => onContinueToNext?.(node.id) : undefined}
+ *    />
+ *    ```
  * ============================================================================
  */
 

@@ -1,62 +1,42 @@
 /**
  * ============================================================================
  * FILE: index.ts
+ * LOCATION: client/src/features/learning/animations/index.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Central export hub and animation utility library for the learning feature.
- * Provides reusable Framer Motion variants, timing constants, and transition
- * presets that power all learning-related animations (card unlocks, content
- * swaps, quiz feedback, mastery celebrations, and carousel slides).
- * 
+ *    Central export hub and animation utility library for the learning feature.
+ *    Provides Framer Motion variants, timing constants, and transition presets.
+ *
+ * ROLE IN PROJECT:
+ *    Single source of truth for all learning animation definitions. Other
+ *    animation files (CardTransitions, QuizAnimations, etc.) import from here
+ *    to ensure consistent timing and motion across the feature.
+ *
  * KEY COMPONENTS:
- * - TIMING: Animation duration constants (fast: 0.2s, normal: 0.3s, slow: 0.5s, celebration: 0.8s)
- * - springTransition/easeOutTransition: Reusable transition presets for smooth motion
- * - unlockVariants: Card unlock animation (LOCKED → VIEWING_EXPLANATION)
- * - contentSwapVariants: Fade + slide animation for explanation ↔ quiz transitions
- * - optionResultVariants: Quiz option highlighting (correct/incorrect states)
- * - masteryCelebrationVariants: Scale pulse for mastery achievement
- * - progressStepVariants: Progress bar step completion animation
- * - carouselSlideVariants: Direction-aware slide transitions for learning carousel
- * - prefersReducedMotion(): Accessibility helper to detect user's motion preferences
- * - getVariants(): Returns full or reduced-motion variants based on user preference
- * 
+ *    - TIMING: Duration constants (fast: 0.2s, normal: 0.3s, slow: 0.5s, celebration: 0.8s)
+ *    - unlockVariants: Card unlock animation (LOCKED → VIEWING_EXPLANATION)
+ *    - contentSwapVariants: Fade + slide for explanation ↔ quiz transitions
+ *    - optionResultVariants: Quiz option correct/incorrect highlighting
+ *    - carouselSlideVariants: Direction-aware slide transitions
+ *    - prefersReducedMotion(): Accessibility helper for motion preferences
+ *    - getVariants(): Returns full or reduced-motion variants based on preference
+ *
  * DEPENDENCIES:
- * - framer-motion: Animation library for React (Variants, Transition types)
- * 
- * USAGE PATTERN:
- * ```tsx
- * import { unlockVariants, TIMING, prefersReducedMotion } from './animations';
- * 
- * // In component:
- * <motion.div
- *   variants={unlockVariants}
- *   initial="locked"
- *   animate="unlocked"
- *   transition={{ duration: TIMING.normal }}
- * />
- * ```
- * 
- * ERROR HANDLING:
- * - prefersReducedMotion() returns false if window/matchMedia unavailable (SSR safety)
- * - Custom function variants receive `custom` param for direction-aware animations
- * 
- * PERFORMANCE NOTES:
- * - All durations in seconds (Framer Motion convention)
- * - Reduced motion fallback provides instant transitions instead of animations
- * - Carousel variants use spring physics for natural feel
- * 
- * RELATED FILES:
- * - QuizAnimations.tsx: Quiz-specific animation components
- * - MasteryCelebration.tsx: Full-screen celebration overlay
- * - Confetti.tsx: Canvas-based particle celebration
- * - CardTransitions.tsx: Card state transition wrappers
- * - LearningPathContainer.tsx: Uses these variants for node animations
- * 
- * NOTES:
- * - Accessibility: Always check prefersReducedMotion() before applying complex animations
- * - Variants are composable and can be combined in components
- * - The module also re-exports all animation components for convenience
+ *    - External: framer-motion (Variants, Transition types)
+ *    - Internal: none
+ *
+ * USAGE:
+ *    ```tsx
+ *    import { unlockVariants, TIMING, prefersReducedMotion } from './animations';
+ *
+ *    <motion.div
+ *      variants={unlockVariants}
+ *      initial="locked"
+ *      animate="unlocked"
+ *      transition={{ duration: TIMING.normal }}
+ *    />
+ *    ```
  * ============================================================================
  */
 

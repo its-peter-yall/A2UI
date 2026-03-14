@@ -1,68 +1,29 @@
 """
-=============================================================================
+============================================================================
 FILE: test_session_lifecycle.py
-=============================================================================
-
+LOCATION: server/tests/test_session_lifecycle.py
+============================================================================
 PURPOSE:
-Integration tests for v1.1 feature set covering full session lifecycle,
-revision sessions, and edge cases. Validates end-to-end persistence layer
-behavior including session creation, node progression, status transitions,
-revision creation, quiz tracking, and cascade deletion.
-
-KEY TESTS:
-- TestMultiCourseLifecycle: Full course lifecycle through persistence layer
-  - Session creation with in_progress status and 0% progress
-  - Progress updates on node completion with timestamp tracking
-  - Session auto-completion when all nodes are done
-  - Multiple independent sessions coexisting
-  - Accurate progress calculations (0%, 33%, 66%, 100%)
-
-- TestRevisionLifecycle: Revision feature end-to-end through persistence
-  - Creating revisions for completed sessions
-  - Blocking revisions for in-progress sessions
-  - Full review mode with mark-reviewed and quiz submission
-  - Quiz-only mode submission
-  - Revision auto-completion
-  - Separate tracking of revision vs original quiz attempts
-  - Performance comparison in revision summary
-
-- TestEdgeCases: Edge case handling
-  - Cascade deletion of sessions to revisions
-  - Concurrent sessions not interfering with each other
-  - Progress bounds handling (never exceeds 100%)
-  - Error node handling in sessions
-  - Empty session list responses
-
+    Integration tests for v1.1 feature set covering full session lifecycle,
+    revision sessions, and edge cases. Validates end-to-end persistence
+    layer behavior including session creation, node progression, status
+    transitions, revision creation, quiz tracking, and cascade deletion.
+ROLE IN PROJECT:
+    Provides end-to-end coverage of the learning persistence layer across
+    the full session and revision lifecycle.
+    - Tests multi-course coexistence and accurate progress calculations
+    - Validates revision creation, completion, and performance comparison
+KEY COMPONENTS:
+    - TestMultiCourseLifecycle: Full course lifecycle through persistence
+    - TestRevisionLifecycle: Revision feature end-to-end tests
+    - TestEdgeCases: Cascade deletion and concurrent session handling
+    - setUp/tearDown: Per-test temporary SQLite database management
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- tempfile: Temporary database file creation
-- pathlib: Path manipulation
-- server.database.learning_persistence: LearningManager under test
-- server.schemas.learning: NodeStatus, QuizCard, QuizDifficulty, QuizSet schemas
-
-USAGE PATTERN:
-```python
-# Run all lifecycle tests
-python -m unittest server.tests.test_session_lifecycle
-
-# Run specific test class
-python -m unittest server.tests.test_session_lifecycle.TestMultiCourseLifecycle
-
-# Run revision tests
-python -m unittest server.tests.test_session_lifecycle.TestRevisionLifecycle
-```
-
-RELATED FILES:
-- server/database/learning_persistence.py - LearningManager implementation
-- server/tests/test_learning_persistence.py - Unit tests for persistence layer
-
-NOTES:
-- Each test uses a dedicated temporary SQLite database file
-- Nodes must be walked through ALL transitions to complete:
-  LOCKED -> VIEWING_EXPLANATION -> IN_QUIZ -> SHOWING_FEEDBACK -> COMPLETED
-- Revision sessions require original session to be completed first
-- Quiz attempts in revisions are tracked separately from original attempts
-=============================================================================
+    - External: unittest, tempfile, pathlib
+    - Internal: server.database.learning_persistence, server.schemas.learning
+USAGE:
+    python -m unittest server.tests.test_session_lifecycle
+============================================================================
 """
 
 import tempfile

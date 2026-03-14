@@ -1,55 +1,30 @@
 """
-=============================================================================
+============================================================================
 FILE: test_quizzer_agent.py
-=============================================================================
-
+LOCATION: server/tests/test_quizzer_agent.py
+============================================================================
 PURPOSE:
-Unit tests for QuizzerAgent class and system prompt. Validates agent role,
-assessment design guidelines, quiz generation with distractors, and generate_quiz()
-wiring. Also tests QuizCard schema validation for exactly one correct answer.
-
-KEY TESTS:
-- test_agent_role: Verifies QuizzerAgent has correct 'quizzer' role
-- test_system_prompt_contains_distractor_guidelines: Validates distractor design
-- test_generate_quiz_returns_valid_card: Tests QuizCard structure validation
-- test_quiz_card_requires_exactly_one_correct_option: Schema validation
-- test_quiz_card_requires_exactly_four_options: Schema validation
-- test_quiz_option_requires_explanation: Validates explanation requirement
-
+    Unit tests for QuizzerAgent class and system prompt. Validates agent
+    role, assessment design guidelines, quiz generation with distractors,
+    and generate_quiz() wiring. Also tests QuizCard schema validation for
+    exactly one correct answer.
+ROLE IN PROJECT:
+    Ensures the QuizzerAgent correctly generates quiz content and validates
+    schema constraints for quiz cards and options.
+    - Validates distractor design guidelines in system prompt
+    - Verifies QuizCard schema enforcement (one correct, four options)
+KEY COMPONENTS:
+    - TestQuizzerAgent: Tests role, prompt, and generate_quiz() wiring
+    - TestQuizCardValidation: Schema validation for QuizCard/QuizOption
+    - test_agent_role: Verifies QuizzerAgent has correct 'quizzer' role
+    - test_generate_quiz_returns_valid_card: Tests QuizCard structure
+    - test_quiz_card_requires_exactly_one_correct_option: Schema check
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- unittest.mock: AsyncMock for mocking instructor client
-- pydantic: ValidationError for schema testing
-- server.agents.quizzer: QuizzerAgent implementation
-- server.schemas.learning: QuizCard, QuizOption, QuizDifficulty schemas
-
-USAGE PATTERN:
-```python
-# Run all quizzer agent tests
-python -m unittest server.tests.test_quizzer_agent
-
-# Run specific test class
-python -m unittest server.tests.test_quizzer_agent.TestQuizCardValidation
-
-# Run single test
-python -m unittest server.tests.test_quizzer_agent.TestQuizCardValidation.test_quiz_card_requires_exactly_one_correct_option
-```
-
-TEST SETUP:
-- Uses unittest.mock AsyncMock to mock instructor_client.create_structured
-- Tests both positive cases (valid QuizCard) and negative cases (ValidationError)
-- No actual LLM calls - fully mock-based
-
-RELATED FILES:
-- server/agents/quizzer.py - QuizzerAgent implementation
-- server/schemas/learning.py - QuizCard, QuizOption, QuizDifficulty schemas
-
-NOTES:
-- Retrieval-based learning / testing effect principles
-- Distractors must be plausible misconceptions
-- Each option requires explanation for learning value
-- Difficulty calibration: easy/medium/hard
-=============================================================================
+    - External: unittest, unittest.mock, pydantic
+    - Internal: server.agents.quizzer, server.schemas.learning
+USAGE:
+    python -m unittest server.tests.test_quizzer_agent
+============================================================================
 """
 
 # test_quizzer_agent.py

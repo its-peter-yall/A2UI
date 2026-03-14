@@ -1,41 +1,31 @@
 /**
  * ============================================================================
- * FILE: animations/index.test.ts
+ * FILE: index.test.ts
+ * LOCATION: client/src/features/learning/animations/index.test.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for animation utility functions. Validates timing constants,
- * prefersReducedMotion detection, and variant selection logic.
- * 
- * KEY TESTS:
- * - TIMING constants: fast, normal, slow, celebration values
- * - prefersReducedMotion: Returns correct value based on media query
- * - getVariants: Selects full or reduced variants based on preference
- * - unlockVariants: Required states (locked, unlocking, unlocked)
- * - reducedMotionVariants: Required states (hidden, visible, exit)
- * 
+ *    Unit tests for animation utility functions exported from index.ts.
+ *
+ * ROLE IN PROJECT:
+ *    Validates that timing constants, prefersReducedMotion detection, and
+ *    variant selection logic behave correctly across motion and reduced-motion
+ *    scenarios.
+ *
+ * KEY COMPONENTS:
+ *    - TIMING constants: fast, normal, slow, celebration values
+ *    - prefersReducedMotion: Returns correct value based on media query
+ *    - getVariants: Selects full or reduced variants based on preference
+ *    - unlockVariants / reducedMotionVariants: Required animation states
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - client/src/features/learning/animations/index: Utils under test
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run animation utility tests
- * npm run test -- src/features/learning/animations/index.test.ts
- * ```
- * 
- * TEST SETUP:
- * - Mocks window.matchMedia for prefersReducedMotion testing
- * - Restores original matchMedia in afterEach
- * - Tests both motion-preferred and reduced-motion scenarios
- * 
- * RELATED FILES:
- * - client/src/features/learning/animations/index.ts
- * 
- * NOTES:
- * - Reduced motion respects user accessibility preferences
- * - Variants are framer-motion animation definitions
- * - TIMING values in seconds for CSS/JS animation
+ *    - External: vitest
+ *    - Internal: @/features/learning/animations/index
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/animations/index.test.ts
+ *    ```
  * ============================================================================
  */
 

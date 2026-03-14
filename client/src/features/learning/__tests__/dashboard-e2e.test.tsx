@@ -1,3 +1,31 @@
+/**
+ * ============================================================================
+ * FILE: dashboard-e2e.test.tsx
+ * LOCATION: client/src/features/learning/__tests__/dashboard-e2e.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    End-to-end integration tests for the learning dashboard user flows.
+ *
+ * ROLE IN PROJECT:
+ *    Validates the full dashboard experience from the /learn route, covering
+ *    empty state, course card rendering, filter/sort interactions, pagination,
+ *    navigation, and progress bar behavior. API calls are mocked for
+ *    deterministic test execution.
+ *
+ * KEY COMPONENTS:
+ *    - Dashboard e2e flows: Test suite covering all major dashboard interactions
+ *    - createSession / createResponse: Factory helpers for mock data
+ *    - renderDashboard: Renders LearningHome inside full router + query context
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query, react-router-dom
+ *    - Internal: ../LearningHome, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/__tests__/dashboard-e2e.test.tsx
+ * ============================================================================
+ */
 // dashboard-e2e.test.tsx
 // Integration tests for learning dashboard end-to-end flows.
 //

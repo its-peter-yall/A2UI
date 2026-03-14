@@ -1,7 +1,28 @@
 #!/usr/bin/env python3
 """
-Test script to verify quiz option shuffling is working correctly.
-Run from the AgUI directory with: python server/test_shuffle_manual.py
+============================================================================
+FILE: test_shuffle_manual.py
+LOCATION: server/test_shuffle_manual.py
+============================================================================
+PURPOSE:
+    Manual verification script for quiz option shuffling. Mirrors
+    test_shuffle_debug.py but runs from the project root with full
+    server package imports instead of relative path insertion.
+ROLE IN PROJECT:
+    Alternate entry point for shuffle validation when running from the
+    AgUI project root rather than the server/ directory.
+    - Validates CSPRNG shuffle balance over 100 iterations
+    - Confirms deterministic seed-based replay consistency
+KEY COMPONENTS:
+    - position_counts: Tracks correct-answer position across 100 shuffles
+    - is_balanced: Asserts each position appears 15-35% of the time
+    - same_order: Confirms deterministic replay with stored seed
+DEPENDENCIES:
+    - External: uuid
+    - Internal: server.schemas.learning, server.services.quiz_randomization
+USAGE:
+    python server/test_shuffle_manual.py  (run from AgUI/ root directory)
+============================================================================
 """
 
 import sys

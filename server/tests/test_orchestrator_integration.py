@@ -1,44 +1,28 @@
 """
-=============================================================================
+============================================================================
 FILE: test_orchestrator_integration.py
-=============================================================================
-
+LOCATION: server/tests/test_orchestrator_integration.py
+============================================================================
 PURPOSE:
-Integration tests for CourseOrchestrator with live dependencies. Provides
-end-to-end course generation test against real Vertex AI and database.
-
-KEY TESTS:
-- test_generate_course_end_to_end: Full course generation with live services
-
+    Integration tests for CourseOrchestrator with live dependencies.
+    Provides end-to-end course generation test against real Vertex AI
+    and database.
+ROLE IN PROJECT:
+    Manual verification gate for production readiness of the orchestration
+    pipeline with live agent credentials.
+    - Skipped by default; enabled via RUN_INTEGRATION_TESTS=1
+    - Consumes real API quota; use sparingly
+KEY COMPONENTS:
+    - TestCourseOrchestratorIntegration: End-to-end generation test
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- server.services.course_orchestrator: CourseOrchestrator with live wiring
-
-USAGE PATTERN:
-```bash
-# Run integration tests (requires credentials)
-RUN_INTEGRATION_TESTS=1 python -m unittest server.tests.test_orchestrator_integration
-```
-
-TEST SETUP:
-- Skipped by default via @unittest.skipUnless
-- Requires RUN_INTEGRATION_TESTS=1 environment variable
-- Requires live Vertex AI credentials configured
-- Requires reachable SQLite database
-- Tests against real LLM responses
-
-RELATED FILES:
-- server/services/course_orchestrator.py - CourseOrchestrator implementation
-- server/agents/planner.py - PlannerAgent (live)
-- server/agents/generator.py - GeneratorAgent (live)
-- server/agents/quizzer.py - QuizzerAgent (live)
-
-NOTES:
-- SKIPPED by default - not run in CI/CD
-- Manual verification test for production readiness
-- Use sparingly - consumes API quota
-- Verify credentials before running
-=============================================================================
+    - External: unittest, os
+    - Internal: server.services.course_orchestrator
+USAGE:
+    ```bash
+    RUN_INTEGRATION_TESTS=1 python -m unittest \
+        server.tests.test_orchestrator_integration
+    ```
+============================================================================
 """
 
 # test_orchestrator_integration.py

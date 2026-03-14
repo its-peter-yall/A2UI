@@ -1,74 +1,34 @@
 /**
  * ============================================================================
  * FILE: useQuizFeedback.ts
+ * LOCATION: client/src/features/learning/useQuizFeedback.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Custom React hook for managing quiz feedback state and retrieving attempt
- * history. Fetches the latest quiz result and historical attempt data for a
- * specific node, enabling the UI to display correct/incorrect feedback with
- * explanations. Supports both immediate results (from submission) and cached
- * historical data (for page reloads or navigation).
- * 
+ *    Custom React hook for managing quiz feedback state and retrieving attempt
+ *    history. Fetches the latest quiz result and historical attempt data for a
+ *    specific node, enabling the UI to display correct/incorrect feedback.
+ *
+ * ROLE IN PROJECT:
+ *    Bridges immediate mutation results with persisted attempt history so the
+ *    feedback view works correctly on both first submission and page reload.
+ *    Consumed by ConceptCard when a node is in SHOWING_FEEDBACK state.
+ *
  * KEY COMPONENTS:
- * - useQuizFeedback: Main hook returning result, attemptCount, loading, error
- * - Quiz result resolution: Prefers latestResult prop, falls back to history
- * - Attempt count aggregation: Combines latest result and historical data
- * - Fallback result builder: Constructs QuizSubmitResponse from history if needed
- * 
+ *    - useQuizFeedback: Returns result, attemptCount, isLoading, error
+ *    - Fallback result builder: Reconstructs QuizSubmitResponse from history
+ *
  * DEPENDENCIES:
- * - @tanstack/react-query: useQuery for fetching attempt history
- * - @/lib/learningApi: getQuizAttempts API function
- * - @/types/learning: NodeStatus, QuizCard, QuizSubmitResponse types
- * 
- * USAGE PATTERN:
- * ```tsx
- * import { useQuizFeedback } from '@/features/learning/useQuizFeedback';
- * 
- * // In ConceptCard (SHOWING_FEEDBACK state):
- * const { result, attemptCount, isLoading, error } = useQuizFeedback({
- *   nodeId: node.id,
- *   latestResult: quizResult, // From mutation response
- *   nodeStatus: node.status,
- *   quiz: node.quiz,
- *   enabled: node.status === 'SHOWING_FEEDBACK',
- * });
- * 
- * if (isLoading) return <Skeleton />;
- * if (error) return <ErrorMessage error={error} />;
- * 
- * return (
- *   <QuizFeedbackDisplay
- *     isCorrect={result?.is_correct}
- *     score={result?.score_percent}
- *     explanation={result?.explanation}
- *     attemptNumber={attemptCount}
- *   />
- * );
- * ```
- * 
- * ERROR HANDLING:
- * - Returns error state from React Query if history fetch fails
- * - Returns undefined result if history exists but options are missing
- * - Gracefully handles missing correctOption or selectedOption in fallback
- * 
- * PERFORMANCE NOTES:
- * - React Query caches attempt history by nodeId
- * - Query is disabled when latestResult is provided (no unnecessary fetch)
- * - Fallback result is computed once per render, not memoized (simple object)
- * 
- * RELATED FILES:
- * - @/lib/learningApi: getQuizAttempts API call
- * - @/types/learning: QuizSubmitResponse type definition
- * - ConceptCard.tsx: Primary consumer of this hook
- * - QuizFeedback.tsx: Display component using result data
- * 
- * NOTES:
- * - The hook serves two use cases: (1) immediate result after submission,
- *   (2) historical result when revisiting a completed node
- * - attemptCount combines both latest result and history for display
- * - Fallback logic reconstructs QuizSubmitResponse shape from raw history
- * - Server is authoritative; this provides client-side data reconciliation
+ *    - External: @tanstack/react-query
+ *    - Internal: @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    ```tsx
+ *    const { result, attemptCount, isLoading } = useQuizFeedback({
+ *      nodeId: node.id, latestResult: quizResult, nodeStatus: node.status,
+ *      quiz: node.quiz, enabled: node.status === 'SHOWING_FEEDBACK',
+ *    });
+ *    ```
  * ============================================================================
  */
 

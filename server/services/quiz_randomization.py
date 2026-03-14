@@ -1,71 +1,37 @@
 """
-=============================================================================
+============================================================================
 FILE: quiz_randomization.py
-=============================================================================
-
+LOCATION: server/services/quiz_randomization.py
+============================================================================
 PURPOSE:
-Secure quiz randomization service implementing Fisher-Yates shuffle with
-CSPRNG (Cryptographically Secure Pseudo-Random Number Generator). Provides
-stable option identity across shuffles, response filtering for IN_QUIZ state,
-and option ID-based evaluation.
-
+    Secure quiz randomization service implementing Fisher-Yates
+    shuffle with CSPRNG. Provides stable option identity across
+    shuffles, response filtering for IN_QUIZ state, and option
+    ID-based evaluation.
+ROLE IN PROJECT:
+    Service layer component for the learning feature's quiz delivery.
+    - Provides stable option identity across shuffles via option_id
+    - Filters correctness data for IN_QUIZ state to prevent leakage
 KEY COMPONENTS:
-- shuffle_quiz_options(): Fisher-Yates shuffle using secrets.randbelow()
-- shuffle_quiz_options_with_seed(): Deterministic shuffle for reproducibility
-- hide_quiz_card(): Remove correctness/explanation for IN_QUIZ state
-- hide_quiz_set(): Hide correctness for QuizSet with multiple quizzes
-- evaluate_quiz_answer(): Evaluate submission using stable option_id
-- get_or_create_shuffle_order(): Persist shuffle state for consistent refresh
-
+    - shuffle_quiz_options(): Fisher-Yates shuffle using secrets.randbelow()
+    - shuffle_quiz_options_with_seed(): Deterministic shuffle for reproducibility
+    - hide_quiz_card(): Remove correctness/explanation for IN_QUIZ state
+    - hide_quiz_set(): Hide correctness for QuizSet with multiple quizzes
+    - evaluate_quiz_answer(): Evaluate submission using stable option_id
+    - get_or_create_shuffle_order(): Persist shuffle state for consistent refresh
 DEPENDENCIES:
-- secrets: CSPRNG for cryptographic security (secrets.randbelow)
-- hashlib: Seed hashing for deterministic shuffle
-- random.Random: Seeded random for reproducible shuffle (after seed hashing)
-- server.schemas.learning: QuizCard, QuizOption, QuizCardHidden, QuizSet schemas
-
-USAGE PATTERN:
-```python
-from server.services.quiz_randomization import (
-    shuffle_quiz_options,
-    hide_quiz_card,
-    evaluate_quiz_answer,
-    get_or_create_shuffle_order,
-)
-
-# Shuffle quiz options securely
-shuffled = shuffle_quiz_options(quiz_card)
-
-# Hide correctness for IN_QUIZ state
-hidden = hide_quiz_card(shuffled)
-
-# Evaluate using stable option_id (works regardless of shuffle)
-result = evaluate_quiz_answer(quiz_card, selected_option_id)
-
-# Persist shuffle order for consistent refresh
-shuffled, shuffle_seed = get_or_create_shuffle_order(
-    quiz, existing_seed=stored_seed, quiz_set_seed=quiz_set.shuffle_seed
-)
-```
-
-ALGORITHM NOTES:
-- Fisher-Yates: O(n) unbiased shuffle algorithm
-- CSPRNG: secrets.randbelow() provides cryptographic security
-- Deterministic shuffle: Seed hashed with SHA-256, then used with Random()
-- Stable identity: option_id persists, display_label changes position
-
-SECURITY NOTES:
-- Never use random.shuffle() for quiz options (predictable)
-- Correctness data hidden via type transformation (QuizCard -> QuizCardHidden)
-- Explanation leakage prevented by QuizOptionHidden schema
-
-RELATED FILES:
-- server/schemas/learning.py: Quiz schemas with option_id/display_label separation
-- server/routers/learning.py: API endpoints using randomization service
-- server/tests/test_quiz_randomization.py: Unit tests for this module
-
-@see: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
-@note: CSPRNG ensures shuffle order cannot be predicted by users
-=============================================================================
+    - External: secrets, hashlib, random
+    - Internal: server.schemas.learning
+USAGE:
+    ```python
+    from server.services.quiz_randomization import (
+        shuffle_quiz_options, hide_quiz_card, evaluate_quiz_answer,
+    )
+    shuffled = shuffle_quiz_options(quiz_card)
+    hidden = hide_quiz_card(shuffled)
+    result = evaluate_quiz_answer(quiz_card, selected_option_id)
+    ```
+============================================================================
 """
 
 from __future__ import annotations

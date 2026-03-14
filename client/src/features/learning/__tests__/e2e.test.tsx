@@ -1,54 +1,35 @@
 /**
  * ============================================================================
  * FILE: e2e.test.tsx
+ * LOCATION: client/src/features/learning/__tests__/e2e.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * End-to-end integration tests for the learning feature. Tests complete
- * user flows from topic input through mastery achievement, validating
- * component integration and state transitions across the learning journey.
- * 
- * KEY TESTS:
- * - Navigate from topic input to session page
- * - Show explanation first, transition to quiz on proceed
- * - Show retry flow when quiz answer incorrect
- * - Unlock next node when quiz answer correct
- * - Show error state when session fails to load
- * - Show completion overlay when all nodes complete
- * 
+ *    End-to-end integration tests for the learning feature. Tests complete
+ *    user flows from topic input through mastery achievement, validating
+ *    component integration and state transitions across the learning journey.
+ *
+ * ROLE IN PROJECT:
+ *    Provides confidence that the full learning flow works end-to-end by
+ *    testing component integration rather than isolated units. Catches
+ *    regressions in navigation, state transitions, and API interactions.
+ *
+ * KEY COMPONENTS:
+ *    - Topic input to session navigation flow
+ *    - Explanation → quiz transition on proceed
+ *    - Retry flow on incorrect answer
+ *    - Node unlock on correct answer
+ *    - Error state and completion overlay
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing
- * - @tanstack/react-query: Query client provider
- * - react-router-dom: MemoryRouter for navigation
- * - client/src/features/learning/LearningHome: Home/start page
- * - client/src/features/learning/LearningPage: Session page
- * - client/src/lib/learningApi: API functions (mocked)
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run e2e tests
- * npm run test -- src/features/learning/__tests__/e2e.test.tsx
- * 
- * # Run specific flow
- * npm run test -- -t "navigates from topic input"
- * ```
- * 
- * TEST SETUP:
- * - Mocks entire @/lib/learningApi module
- * - Uses MemoryRouter with defined routes
- * - Creates mock sessions with nodes in various states
- * - Tests complete user journeys end-to-end
- * 
- * RELATED FILES:
- * - client/src/features/learning/LearningHome.tsx
- * - client/src/features/learning/LearningPage.tsx
- * - client/src/types/learning.ts
- * 
- * NOTES:
- * - Uses mockNavigate from react-router-dom
- * - Tests both success and error flows
- * - Validates full component integration, not isolated units
+ *    - External: vitest, @testing-library/react, @tanstack/react-query, react-router-dom
+ *    - Internal: ../LearningHome, ../LearningPage, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/__tests__/e2e.test.tsx
+ *    npm run test -- -t "navigates from topic input"
+ *    ```
  * ============================================================================
  */
 

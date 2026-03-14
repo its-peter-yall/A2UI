@@ -1,56 +1,37 @@
 /**
  * ============================================================================
  * FILE: index.ts
+ * LOCATION: client/src/features/learning/index.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Barrel export file for the entire learning feature module. Provides a
- * centralized access point for importing all components, hooks, utilities,
- * and types from the learning feature. Simplifies imports throughout the
- * application and enables tree-shaking of unused exports.
- * 
- * EXPORTED CATEGORIES:
- * - Components: LearningPage, LearningHome, LearningPathContainer, ConceptCard,
- *               QuizFeedback, TopicInput, ProgressBar, SkeletonCard, MarkdownRenderer,
- *               LearningErrorBoundary, ErrorState, NotFoundState, EmptyState,
- *               LoadingState, GeneratingState
- * - Hooks: useQuizFeedback, useNodeState, useLearningMutations, useErrorToast
- * - Utilities: optimisticUpdates (status, completion, unlock, mastery), learningQueryKeys
- * - Animations: Confetti, MasteryCelebration, AnimatedCard, ContentTransition
- * - Types: LearningSession, LearningSessionWithNodes, ConceptNode, NodeStatus,
- *          QuizCard, QuizOption, QuizSubmitResponse, QuizAttemptHistory
- * 
+ *    Barrel export file for the entire learning feature module. Provides a
+ *    centralized access point for all components, hooks, utilities, and types.
+ *
+ * ROLE IN PROJECT:
+ *    Public API surface of the learning feature. Consumers import from this
+ *    file rather than individual modules, enabling tree-shaking and keeping
+ *    internal paths encapsulated.
+ *
+ * KEY COMPONENTS:
+ *    - Components: LearningPage, LearningHome, LearningPathContainer,
+ *                  ConceptCard, QuizFeedback, TopicInput, ProgressBar,
+ *                  LearningErrorBoundary, ErrorState, NotFoundState, etc.
+ *    - Hooks: useQuizFeedback, useNodeState, useLearningMutations, useErrorToast
+ *    - Utilities: optimisticUpdates, learningQueryKeys
+ *    - Animations: Confetti, MasteryCelebration, AnimatedCard, ContentTransition
+ *
  * DEPENDENCIES:
- * - All dependencies are re-exported from individual feature files
- * - Types from @/types/learning
- * 
- * USAGE PATTERN:
- * ```tsx
- * // Import single component
- * import { LearningPage } from '@/features/learning';
- * 
- * // Import multiple items
- * import { LearningPathContainer, useLearningMutations, learningQueryKeys } from '@/features/learning';
- * 
- * // Import types
- * import type { ConceptNode, NodeStatus, QuizSubmitResponse } from '@/features/learning';
- * ```
- * 
- * ERROR HANDLING:
- * - This is a re-export file; no error handling needed
- * 
- * PERFORMANCE NOTES:
- * - Named exports enable tree-shaking
- * - Type-only imports (import type) don't affect bundle
- * 
- * RELATED FILES:
- * - All individual component/hook/utility files in the learning directory
- * - @/types/learning.ts: Type definitions
- * 
- * NOTES:
- * - Import from this file rather than individual files for consistency
- * - Re-exports are simply pass-throughs from source files
- * - Some hooks export both the hook and related types (UseLearningMutationsProps, NodeActions, NodeStateResult)
+ *    - External: (none — re-exports only)
+ *    - Internal: All individual files in client/src/features/learning/,
+ *                @/types/learning
+ *
+ * USAGE:
+ *    ```tsx
+ *    import { LearningPage } from '@/features/learning';
+ *    import { LearningPathContainer, useLearningMutations } from '@/features/learning';
+ *    import type { ConceptNode, NodeStatus } from '@/features/learning';
+ *    ```
  * ============================================================================
  */
 

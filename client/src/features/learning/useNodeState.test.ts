@@ -1,50 +1,33 @@
 /**
  * ============================================================================
  * FILE: useNodeState.test.ts
+ * LOCATION: client/src/features/learning/useNodeState.test.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for useNodeState hook. Validates state machine logic for
- * concept node progression including view determination, action availability,
- * transition validation, and next status calculation.
- * 
- * KEY TESTS:
- * - LOCKED state: No actions available, locked view
- * - VIEWING_EXPLANATION: Can view and proceed to quiz
- * - IN_QUIZ: Can only submit quiz (pure retrieval practice)
- * - SHOWING_FEEDBACK: Retry/continue based on mastery
- * - COMPLETED: Review mode, terminal state
- * - ERROR: Can only regenerate
- * - isValidTransition: Valid/invalid state transitions
- * - getNextStatus: Next status calculation with mastery flag
- * 
+ *    Unit tests for useNodeState hook. Validates state machine logic for
+ *    concept node progression including view determination, action availability,
+ *    transition validation, and next status calculation.
+ *
+ * ROLE IN PROJECT:
+ *    Ensures the client-side node state machine correctly enforces the
+ *    sequential learning flow and mirrors server-side transition rules.
+ *    Guards against regressions in action availability and view mapping.
+ *
+ * KEY COMPONENTS:
+ *    - useNodeState tests: Action availability per status
+ *    - isValidTransition tests: Valid/invalid state transitions
+ *    - getNextStatus tests: Next status calculation with mastery flag
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - client/src/features/learning/useNodeState: Hook under test
- * - client/src/types/learning: ConceptNode, NodeStatus types
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run useNodeState tests
- * npm run test -- src/features/learning/useNodeState.test.ts
- * 
- * # Run specific describe block
- * npm run test -- -t "LOCKED state"
- * ```
- * 
- * TEST SETUP:
- * - Creates mock ConceptNode with various statuses
- * - Tests both with and without quizResult parameter
- * - Pure function tests - no React component rendering needed
- * 
- * RELATED FILES:
- * - client/src/features/learning/useNodeState.ts
- * - client/src/types/learning.ts
- * 
- * NOTES:
- * - Node status machine: LOCKED -> VIEWING_EXPLANATION -> IN_QUIZ -> SHOWING_FEEDBACK -> COMPLETED
- * - ERROR is special state for failed generation (can regenerate)
- * - Mastery requires 100% score (correct answer on first try)
+ *    - External: vitest
+ *    - Internal: ./useNodeState, @/types/learning
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/useNodeState.test.ts
+ *    npm run test -- -t "LOCKED state"
+ *    ```
  * ============================================================================
  */
 

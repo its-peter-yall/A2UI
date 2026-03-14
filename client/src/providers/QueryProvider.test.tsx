@@ -1,40 +1,30 @@
 /**
  * ============================================================================
  * FILE: QueryProvider.test.tsx
+ * LOCATION: client/src/providers/QueryProvider.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for QueryProvider React Query wrapper. Validates that
- * QueryProvider correctly initializes and provides a QueryClient
- * to child components via React Context.
- * 
- * KEY TESTS:
- * - Provides QueryClient to children: Client exists and is accessible
- * 
+ *    Unit tests for QueryProvider React Query wrapper. Validates that
+ *    QueryProvider correctly initializes and provides a QueryClient
+ *    to child components via React Context.
+ *
+ * ROLE IN PROJECT:
+ *    Ensures the app-level React Query provider is correctly configured so
+ *    all useQuery/useMutation hooks have access to a QueryClient instance.
+ *    Catches regressions in provider setup that would break data fetching.
+ *
+ * KEY COMPONENTS:
+ *    - QueryClient availability test: Client exists and is accessible to children
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing
- * - @tanstack/react-query: QueryClient, useQueryClient
- * - client/src/providers/QueryProvider: Component under test
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run QueryProvider tests
- * npm run test -- src/providers/QueryProvider.test.tsx
- * ```
- * 
- * TEST SETUP:
- * - Uses useQueryClient hook to verify client availability
- * - Wraps child in QueryProvider
- * - Catches errors if client not available
- * 
- * RELATED FILES:
- * - client/src/providers/QueryProvider.tsx
- * 
- * NOTES:
- * - QueryProvider wraps entire app in main.tsx
- * - Provides default QueryClient with staleTime configuration
- * - Enables React Query caching throughout app
+ *    - External: vitest, @testing-library/react, @tanstack/react-query
+ *    - Internal: ./QueryProvider
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/providers/QueryProvider.test.tsx
+ *    ```
  * ============================================================================
  */
 

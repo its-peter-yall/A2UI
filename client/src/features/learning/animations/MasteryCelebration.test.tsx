@@ -1,44 +1,32 @@
 /**
  * ============================================================================
  * FILE: MasteryCelebration.test.tsx
+ * LOCATION: client/src/features/learning/animations/MasteryCelebration.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for MasteryCelebration component. Validates celebration
- * rendering with topic mastery and course completion messages, plus
- * callback triggering after animation duration.
- * 
- * KEY TESTS:
- * - Shows "Topic Mastered!" with topic title
- * - Shows "Course Complete!" when isCourseComplete
- * - Calls onComplete after animation (2500ms)
- * - Does not render when inactive (active=false)
- * 
+ *    Unit tests for MasteryCelebration component. Validates celebration
+ *    rendering and callback triggering after animation duration.
+ *
+ * ROLE IN PROJECT:
+ *    Ensures the celebration overlay renders correct messages for topic
+ *    mastery vs course completion, and that onComplete fires after the
+ *    expected timeout.
+ *
+ * KEY COMPONENTS:
+ *    - Shows "Topic Mastered!" with topic title
+ *    - Shows "Course Complete!" when isCourseComplete
+ *    - Calls onComplete after animation (2500ms)
+ *    - Does not render when inactive (active=false)
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing
- * - client/src/features/learning/animations/MasteryCelebration: Component
- * - client/src/features/learning/animations/Confetti: Confetti effect (mocked)
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run mastery celebration tests
- * npm run test -- src/features/learning/animations/MasteryCelebration.test.tsx
- * ```
- * 
- * TEST SETUP:
- * - Mocks Confetti component to avoid canvas warnings
- * - Uses waitFor with extended timeout for animation timing
- * - Tests both topic-level and course-level celebrations
- * 
- * RELATED FILES:
- * - client/src/features/learning/animations/MasteryCelebration.tsx
- * - client/src/features/learning/animations/Confetti.tsx
- * 
- * NOTES:
- * - Staggered reveal: 200ms delay before message
- * - Auto-dismiss after 2500ms total
- * - Confetti canvas effect for visual celebration
+ *    - External: vitest, @testing-library/react
+ *    - Internal: ./MasteryCelebration, ./Confetti (mocked)
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/animations/MasteryCelebration.test.tsx
+ *    ```
  * ============================================================================
  */
 

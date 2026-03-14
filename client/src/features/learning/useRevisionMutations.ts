@@ -1,3 +1,33 @@
+/**
+ * ============================================================================
+ * FILE: useRevisionMutations.ts
+ * LOCATION: client/src/features/learning/useRevisionMutations.ts
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    React Query mutations for revision mode: mark node reviewed and submit quiz.
+ *
+ * ROLE IN PROJECT:
+ *    Consumed by RevisionPage to handle user interactions with revision cards.
+ *    Applies optimistic updates for instant UI feedback, rolls back on error,
+ *    and invalidates the revision session cache after each mutation settles.
+ *
+ * KEY COMPONENTS:
+ *    - useRevisionMutations: Hook exposing markReviewed, submitAnswer, and loading flags
+ *    - optimisticNodeUpdate: Applies and returns rollback for cache optimistic writes
+ *    - markReviewedMutation: Marks a node reviewed in full_review mode
+ *    - submitQuizMutation: Submits a quiz answer and surfaces the result via callback
+ *
+ * DEPENDENCIES:
+ *    - External: @tanstack/react-query
+ *    - Internal: @/lib/learningApi (markNodeReviewed, submitRevisionQuiz),
+ *                @/types/learning, ./useRevisionSession (revisionQueryKeys)
+ *
+ * USAGE:
+ *    const { markReviewed, submitAnswer, isMarkingReviewed, isSubmitting } =
+ *      useRevisionMutations({ revisionId, onError, onQuizResult });
+ * ============================================================================
+ */
 // useRevisionMutations.ts
 // React Query mutations for revision mode: mark reviewed, submit quiz
 

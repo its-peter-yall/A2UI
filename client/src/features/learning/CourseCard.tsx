@@ -1,3 +1,30 @@
+/**
+ * ============================================================================
+ * FILE: CourseCard.tsx
+ * LOCATION: client/src/features/learning/CourseCard.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Card component displaying a single learning course with progress and actions.
+ *
+ * ROLE IN PROJECT:
+ *    Renders course summaries in the dashboard grid with two states: in-progress
+ *    (progress bar, Resume button, last active topic) and completed (green badge,
+ *    Revise/Practice Quizzes buttons). Includes delete confirmation and expandable
+ *    revision history.
+ *
+ * KEY COMPONENTS:
+ *    - CourseCard: Animated article card with progress bar and action buttons
+ *    - Delete confirmation overlay: Inline confirm/cancel dialog
+ *
+ * DEPENDENCIES:
+ *    - External: react, framer-motion, lucide-react
+ *    - Internal: @/types/learning, @/lib/utils, ./RevisionHistoryList
+ *
+ * USAGE:
+ *    <CourseCard session={session} onResume={handleResume} onRevise={handleRevise} />
+ * ============================================================================
+ */
 // CourseCard.tsx
 // Card component displaying a single learning course with progress and actions
 

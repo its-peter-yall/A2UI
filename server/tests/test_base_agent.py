@@ -1,44 +1,27 @@
 """
-=============================================================================
+============================================================================
 FILE: test_base_agent.py
-=============================================================================
-
+LOCATION: server/tests/test_base_agent.py
+============================================================================
 PURPOSE:
-Unit tests for BaseAgent retry behavior. Validates that BaseAgent retries
-on Pydantic validation failures with proper delay handling.
-
-KEY TESTS:
-- test_generate_retries_on_validation_error: Validates retry on validation error
-
+    Unit tests for BaseAgent retry behavior. Validates that BaseAgent
+    retries on Pydantic validation failures with proper delay handling.
+ROLE IN PROJECT:
+    Ensures the shared agent base class correctly retries on transient
+    LLM validation errors before propagating failures.
+    - Covers retry-on-validation-error path in BaseAgent.generate()
+    - Verifies sleep is awaited to avoid tight retry loops
+KEY COMPONENTS:
+    - TestBaseAgentRetry: Tests retry logic on ValidationError
+    - _DummyAgent / _DummyModel: Minimal fixtures for testing
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- unittest.mock: AsyncMock for mocking instructor client and sleep
-- pydantic: ValidationError for simulating validation failures
-- server.agents.base: BaseAgent implementation under test
-
-USAGE PATTERN:
-```python
-# Run base agent tests
-python -m unittest server.tests.test_base_agent
-
-# Run single test
-python -m unittest server.tests.test_base_agent.TestBaseAgentRetry.test_generate_retries_on_validation_error
-```
-
-TEST SETUP:
-- Creates dummy _DummyAgent and _DummyModel for testing
-- Mocks instructor_client.create_structured to raise ValidationError then succeed
-- Mocks asyncio.sleep to avoid test delays
-- Verifies retry occurs exactly once on validation failure
-
-RELATED FILES:
-- server/agents/base.py - BaseAgent implementation with retry logic
-
-NOTES:
-- BaseAgent uses tenacity for retry logic
-- Retry triggered on Pydantic ValidationError
-- Sleep mocked to keep tests fast
-=============================================================================
+    - External: unittest, pydantic
+    - Internal: server.agents.base
+USAGE:
+    ```python
+    python -m unittest server.tests.test_base_agent
+    ```
+============================================================================
 """
 
 # test_base_agent.py

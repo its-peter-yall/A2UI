@@ -1,50 +1,29 @@
 """
-=============================================================================
+============================================================================
 FILE: common.py
-=============================================================================
-
+LOCATION: server/schemas/common.py
+============================================================================
 PURPOSE:
-Provides reusable Pydantic v2 base classes and mixins for all domain schemas
-in the AgUI backend. Establishes consistent field patterns across response models.
-
+    Provides reusable Pydantic v2 base classes and mixins for all domain
+    schemas in the AgUI backend. Establishes consistent field patterns
+    across response models.
+ROLE IN PROJECT:
+    Foundation layer for all Pydantic response schemas.
+    - Ensures every resource response has a consistent id field
+    - Standardizes timestamp fields across all domain models
 KEY COMPONENTS:
-- TimestampMixin: Adds created_at (required) and updated_at (optional) datetime fields
-- ResponseBase: Adds required id string field for all resource responses
-
+    - TimestampMixin: Adds created_at (required) and updated_at (optional)
+    - ResponseBase: Adds required id string field for all resource responses
 DEPENDENCIES:
-- pydantic: BaseModel, Field, ConfigDict for schema definition
-- datetime: datetime class for timestamp fields
-
-USAGE PATTERN:
-```python
-from server.schemas.common import ResponseBase, TimestampMixin
-from pydantic import Field
-
-class MyResourceResponse(ResponseBase, TimestampMixin):
-    name: str = Field(..., description="Resource name")
-    description: str = Field(..., description="Resource description")
-
-# Automatically provides: id, created_at, updated_at fields
-```
-
-ERROR HANDLING:
-- No runtime exceptions from these mixins - pure field definitions
-- Pydantic validates datetime formats on instantiation
-
-PERFORMANCE NOTES:
-- Zero runtime overhead - these are simple field definitions
-- Uses default_factory for created_at to avoid mutable default argument issues
-
-RELATED FILES:
-- server/schemas/learning.py: Extends ResponseBase and TimestampMixin
-- server/schemas/session.py: Likely uses these mixins for chat sessions
-- server/database/models.py: SQLAlchemy models may mirror these fields
-
-NOTES:
-- Uses Pydantic v2 ConfigDict(from_attributes=True) for ORM compatibility
-- TimestampMixin uses datetime.utcnow (not timezone-aware) for SQLite compatibility
-- All response schemas should inherit from ResponseBase for consistent ID handling
-=============================================================================
+    - External: pydantic
+    - Internal: None
+USAGE:
+    ```python
+    from server.schemas.common import ResponseBase, TimestampMixin
+    class MyResponse(ResponseBase, TimestampMixin):
+        name: str
+    ```
+============================================================================
 """
 
 from datetime import datetime

@@ -1,76 +1,33 @@
 """
-=============================================================================
+============================================================================
 FILE: learning.py
-=============================================================================
-
+LOCATION: server/routers/learning.py
+============================================================================
 PURPOSE:
-FastAPI router providing REST API endpoints for the adaptive learning system.
-Handles course generation, session retrieval, concept node management, and
-quiz state transitions with server-authoritative validation.
-
+    FastAPI router providing REST API endpoints for the adaptive learning
+    system. Handles course generation, session retrieval, concept node
+    management, and quiz state transitions.
+ROLE IN PROJECT:
+    Defines the HTTP interface for the learning feature.
+    - Maps URL routes to business logic in CourseOrchestrator
+    - Enforces server-authoritative state validation on all transitions
 KEY COMPONENTS:
-- generate_course: Creates structured learning courses from topic queries
-- get_learning_session: Retrieves session with all concept nodes
-- get_concept_node: Fetches node with state-based content visibility flags
-- transition_node: Validates and applies state transitions
-- submit_quiz: Records answer, provides feedback, unlocks next node on mastery
-- retry_quiz: Resets node state for retry after incorrect answer
-- get_quiz_attempts: Retrieves quiz attempt history for a node
-
+    - generate_course: Creates structured learning courses from topic queries
+    - get_learning_session: Retrieves session with all concept nodes
+    - get_concept_node: Fetches node with state-based content visibility
+    - transition_node: Validates and applies state transitions
+    - submit_quiz: Records answer and unlocks next node on mastery
+    - retry_quiz: Resets node state for retry after incorrect answer
 DEPENDENCIES:
-- fastapi: Web framework for API router and HTTPException
-- pydantic: Request/response schema validation
-- server.database.learning_persistence: Learning data access layer
-- server.schemas.learning: Response models (ConceptNodeResponse, etc.)
-- server.services.course_orchestrator: Course generation orchestration
-
-USAGE PATTERN:
-```python
-# Generate a new learning course
-response = await client.post("/learning/generate", json={
-    "query": "Python basics",
-    "user_id": "user123"
-})
-
-# Get session with nodes
-session = client.get("/learning/sessions/{session_id}")
-
-# Get node with visibility flags
-node = client.get("/learning/nodes/{node_id}")
-
-# Transition node state
-client.post("/learning/nodes/{node_id}/transition", json={
-    "target_status": "VIEWING_EXPLANATION"
-})
-
-# Submit quiz answer
-result = client.post("/learning/nodes/{node_id}/submit-quiz", json={
-    "selected_option_id": "A"
-})
-```
-
-ERROR HANDLING:
-- HTTPException 404: Session, node, or concept not found
-- HTTPException 400: Invalid state transition (ValueError from validation)
-- HTTPException 500: Unexpected errors during processing
-- All endpoints log errors before raising HTTPException
-
-PERFORMANCE NOTES:
-- Database connections are obtained and closed per-request
-- get_concept_node filters sensitive content server-side based on state
-- Quiz submission auto-unlocks next node only when mastered (reduces latency)
-
-RELATED FILES:
-- server/services/course_orchestrator.py: Planner-Worker pattern for course generation
-- server/database/learning_persistence.py: Learning data access (sessions, nodes, attempts)
-- server/schemas/learning.py: Pydantic models for requests/responses
-
-NOTES:
-- Content visibility is enforced server-side: content_hidden in VIEWING_EXPLANATION,
-  quiz_hidden in LOCKED state to prevent cheating
-- Node states: LOCKED -> VIEWING_EXPLANATION -> IN_QUIZ -> SHOWING_FEEDBACK -> COMPLETED
-- Mastery triggers automatic unlock of next node (if exists)
-=============================================================================
+    - External: fastapi
+    - Internal: server.database.learning_persistence, server.schemas.learning,
+              server.services.course_orchestrator
+USAGE:
+    ```python
+    response = await client.post("/learning/generate",
+        json={"query": "Python basics", "user_id": "user123"})
+    ```
+============================================================================
 """
 
 import logging

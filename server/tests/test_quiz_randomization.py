@@ -1,54 +1,29 @@
 """
-=============================================================================
+============================================================================
 FILE: test_quiz_randomization.py
-=============================================================================
-
+LOCATION: server/tests/test_quiz_randomization.py
+============================================================================
 PURPOSE:
-Unit tests for Phase 2: Backend Randomization and Evaluation.
-Validates Fisher-Yates shuffle integrity, CSPRNG usage, visibility rules,
-and option ID-based evaluation for secure quiz randomization.
-
-KEY TESTS:
-- test_fisher_yates_shuffle_preserves_stable_ids: Stable IDs persist post-shuffle
-- test_shuffle_uses_csprng: Secrets module provides cryptographic randomness
-- test_shuffle_assigns_unique_display_labels: A-D labels after shuffle
-- test_shuffle_unbiased_distribution: Statistical test for shuffle randomness
-- test_hide_correctness_in_quiz_state: Correctness/explanation hidden in IN_QUIZ
-- test_evaluation_with_shuffled_options: Correct evaluation using stable IDs
-- test_persist_shuffle_order: Shuffle state stored for consistent refresh
-
+    Unit tests for Phase 2: Backend Randomization and Evaluation.
+    Validates Fisher-Yates shuffle integrity, CSPRNG usage, visibility
+    rules, and option ID-based evaluation for secure quiz randomization.
+ROLE IN PROJECT:
+    Verifies the quiz randomization service produces unbiased, secure
+    shuffles and correctly hides answer data during active quiz state.
+    - Tests cryptographic randomness and shuffle distribution
+    - Validates evaluation logic using stable option IDs
+KEY COMPONENTS:
+    - TestFisherYatesShuffle: Shuffle integrity and CSPRNG tests
+    - TestQuizVisibility: Correctness/explanation hiding in IN_QUIZ state
+    - TestQuizEvaluation: ID-based evaluation with shuffled options
+    - test_shuffle_unbiased_distribution: Statistical randomness check
+    - test_persist_shuffle_order: Shuffle state persistence test
 DEPENDENCIES:
-- unittest: Python standard testing framework
-- server.services.quiz_randomization: Quiz randomization service
-- server.schemas.learning: Quiz schemas with option_id/display_label separation
-
-USAGE PATTERN:
-```python
-# Run all randomization tests
-python -m unittest server.tests.test_quiz_randomization
-
-# Run specific test class
-python -m unittest server.tests.test_quiz_randomization.TestFisherYatesShuffle
-
-# Run single test
-python -m unittest server.tests.test_quiz_randomization.TestFisherYatesShuffle.test_shuffle_preserves_stable_ids
-```
-
-TEST SETUP:
-- Creates mock QuizCard and QuizOption objects with stable UUIDs
-- Tests shuffle determinism with seed for reproducibility
-- Tests CSPRNG for cryptographic security
-
-RELATED FILES:
-- server/services/quiz_randomization.py - Service under test
-- server/schemas/learning.py - Quiz schemas
-
-NOTES:
-- Phase 2 implementation: Secure server-side option shuffling
-- Fisher-Yates ensures unbiased permutation
-- CSPRNG prevents prediction of shuffle order
-- Stable option_id persists across shuffles for evaluation
-=============================================================================
+    - External: unittest
+    - Internal: server.services.quiz_randomization, server.schemas.learning
+USAGE:
+    python -m unittest server.tests.test_quiz_randomization
+============================================================================
 """
 
 # test_quiz_randomization.py

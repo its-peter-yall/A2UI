@@ -1,6 +1,27 @@
 """
-Test script to verify quiz option shuffling is working correctly.
-Run from the server directory with: python test_shuffle_debug.py
+============================================================================
+FILE: test_shuffle_debug.py
+LOCATION: server/test_shuffle_debug.py
+============================================================================
+PURPOSE:
+    Manual debug script to verify quiz option shuffling works correctly.
+    Runs shuffle_quiz_options() 100 times and checks position distribution,
+    then validates deterministic replay via get_or_create_shuffle_order().
+ROLE IN PROJECT:
+    Standalone diagnostic tool for validating the quiz randomization service
+    outside the unittest framework during development and debugging.
+    - Checks CSPRNG-based shuffle produces balanced position distribution
+    - Verifies same seed yields identical shuffle order on replay
+KEY COMPONENTS:
+    - position_counts: Tracks correct-answer position across 100 shuffles
+    - is_balanced: Asserts each position appears 15-35% of the time
+    - same_order: Confirms deterministic replay with stored seed
+DEPENDENCIES:
+    - External: uuid
+    - Internal: schemas.learning, services.quiz_randomization
+USAGE:
+    python test_shuffle_debug.py  (run from server/ directory)
+============================================================================
 """
 
 import sys

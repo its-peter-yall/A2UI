@@ -1,48 +1,33 @@
 /**
  * ============================================================================
  * FILE: SkeletonCard.tsx
+ * LOCATION: client/src/features/learning/SkeletonCard.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Skeleton loader component that displays animated placeholder content while
- * a concept node is being generated. Provides visual feedback during the
- * scatter-gather process and matches the layout of ConceptCard for smooth
- * transitions when content loads.
- * 
+ *    Skeleton loader component displaying animated placeholder content while
+ *    a concept node is being generated. Matches ConceptCard layout for smooth
+ *    transitions when content loads.
+ *
+ * ROLE IN PROJECT:
+ *    Loading-state UI within the learning feature. Used by LearningPathContainer
+ *    and ErrorStates during the scatter-gather generation process to provide
+ *    visual feedback without layout shift.
+ *
  * KEY COMPONENTS:
- * - SkeletonCard: Single card skeleton matching ConceptCard layout
- * - SkeletonPath: Multiple skeleton cards in a column (for loading states)
- * 
+ *    - SkeletonCard: Single card skeleton matching ConceptCard layout
+ *    - SkeletonPath: Multiple skeleton cards in a column
+ *
  * DEPENDENCIES:
- * - @/lib/utils: cn() utility for conditional className composition
- * - tailwindcss: animate-pulse utility for loading animation
- * 
- * USAGE PATTERN:
- * ```tsx
- * // Single skeleton for one node
- * <SkeletonCard />
- * 
- * // Multiple skeletons for loading state
- * <SkeletonPath count={5} />
- * ```
- * 
- * ERROR HANDLING:
- * - Pure presentation component; no error handling needed
- * 
- * PERFORMANCE NOTES:
- * - Uses CSS-only animation (animate-pulse) for performance
- * - aria-busy="true" announces loading state to screen readers
- * - Hidden text "Loading content..." for screen reader context
- * 
- * RELATED FILES:
- * - ConceptCard.tsx: Target layout that skeleton matches
- * - ErrorStates.tsx: GeneratingState component for initial generation loading
- * 
- * NOTES:
- * - Layout mirrors ConceptCard: header, body, footer sections
- * - Header: icon placeholder, title lines, sequence number
- * - Body: multiple paragraph lines with varying widths
- * - Footer: button placeholder
+ *    - External: tailwindcss (animate-pulse)
+ *    - Internal: @/lib/utils (cn)
+ *
+ * USAGE:
+ *    ```tsx
+ *    <SkeletonCard />
+ *
+ *    <SkeletonPath count={5} />
+ *    ```
  * ============================================================================
  */
 

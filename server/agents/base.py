@@ -1,67 +1,32 @@
 """
-=============================================================================
+============================================================================
 FILE: base.py
-=============================================================================
-
+LOCATION: server/agents/base.py
+============================================================================
 PURPOSE:
-Abstract base class providing common functionality for all AI agents in the
-adaptive learning system. Defines the contract for structured LLM generation,
-system prompt building, and context formatting that all specialized agents
-(Planner, Generator, Quizzer) inherit from.
-
+    Abstract base class providing common functionality for all AI
+    agents in the adaptive learning system.
+ROLE IN PROJECT:
+    Foundation for the agent hierarchy (Planner, Generator, Quizzer).
+    - Defines the contract for structured LLM generation
+    - Provides system prompt building and context formatting
 KEY COMPONENTS:
-- BaseAgent (ABC): Abstract base class with common agent functionality
-- generate(): Core method for structured response generation via InstructorClient
-- _build_system_prompt(): Combines base prompt with contextual data
-- _format_context(): Formats context dictionary for prompt injection
-- get_model_config(): Retrieves model configuration for the agent's role
-
+    - BaseAgent (ABC): Abstract base with common agent functionality
+    - generate(): Core method for structured response generation
+    - _build_system_prompt(): Combines base prompt with context
+    - _format_context(): Formats context dict for prompt injection
+    - get_model_config(): Retrieves model config for the agent role
 DEPENDENCIES:
-- pydantic: BaseModel for response validation
-- server.utils.instructor_client: Structured output client wrapper
-- server.schemas.learning: Pydantic models for response validation
-- asyncio: For retry delay handling
-
-USAGE PATTERN:
-```python
-from server.agents.base import BaseAgent
-from server.schemas.learning import CourseOutline
-
-class MyAgent(BaseAgent):
-    @property
-    def system_prompt(self) -> str:
-        return "You are a specialized agent..."
-
-    async def do_something(self, query: str) -> CourseOutline:
-        return await self.generate(
-            response_model=CourseOutline,
-            user_message=f"Process: {query}"
-        )
-```
-
-ERROR HANDLING:
-- ValidationError: Raised after max retry attempts when LLM output doesn't match schema
-- ValueError: Raised when instructor client is not initialized
-- Exception: Catches and re-raises other generation failures after logging
-- Retry Logic: 2 attempts with exponential backoff (0.5s, 1.0s)
-
-PERFORMANCE NOTES:
-- Default max_attempts=2 for validation retries
-- Brief sleep between retries to avoid immediate rate limiting
-- Context formatting creates formatted strings; minimal overhead
-
-RELATED FILES:
-- server/utils/instructor_client.py: Wraps Vertex AI for structured outputs
-- server/schemas/learning.py: Pydantic models (CourseOutline, TopicNode, QuizCard)
-- server/agents/planner.py: PlannerAgent implementation
-- server/agents/generator.py: GeneratorAgent implementation
-- server/agents/quizzer.py: QuizzerAgent implementation
-
-NOTES:
-- Subclasses MUST implement the abstract system_prompt property
-- Role parameter must match keys in MODEL_CONFIGS (planner, generator, quizzer)
-- Singleton instances provided in each agent module for application-wide use
-=============================================================================
+    - External: pydantic, asyncio
+    - Internal: server.utils.instructor_client
+USAGE:
+    ```python
+    class MyAgent(BaseAgent):
+        @property
+        def system_prompt(self) -> str:
+            return 'You are a specialized agent...'
+    ```
+============================================================================
 """
 
 from __future__ import annotations

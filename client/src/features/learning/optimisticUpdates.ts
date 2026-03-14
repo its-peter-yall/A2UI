@@ -1,72 +1,41 @@
 /**
  * ============================================================================
  * FILE: optimisticUpdates.ts
+ * LOCATION: client/src/features/learning/optimisticUpdates.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Implements optimistic update utilities for React Query cache management in
- * the learning feature. Provides functions to immediately update the UI before
- * mutations complete, with rollback support if errors occur. Implements the
- * TanStack Query v5 "snapshot and rollback" pattern for smooth user experience.
- * 
- * KEY FUNCTIONS:
- * - optimisticStatusUpdate: Update a single node's status in cache
- * - optimisticCompletionUpdate: Update completed_nodes count
- * - optimisticUnlockNext: Unlock the next node after mastery
- * - optimisticMasteryUpdate: Batch update (complete + unlock + increment)
- * - combineRollbacks: Combine multiple rollbacks into one
- * - learningQueryKeys: Query key factory for consistent cache keys
- * 
+ *    Implements optimistic update utilities for React Query cache management
+ *    in the learning feature. Provides functions to immediately update the UI
+ *    before mutations complete, with rollback support if errors occur.
+ *
+ * ROLE IN PROJECT:
+ *    Shared cache-manipulation layer consumed by useLearningMutations. Keeps
+ *    optimistic-update logic isolated and testable, implementing the TanStack
+ *    Query v5 "snapshot and rollback" pattern for a smooth user experience.
+ *
+ * KEY COMPONENTS:
+ *    - optimisticStatusUpdate: Update a single node's status in cache
+ *    - optimisticCompletionUpdate: Update completed_nodes count
+ *    - optimisticUnlockNext: Unlock the next node after mastery
+ *    - optimisticMasteryUpdate: Batch update (complete + unlock + increment)
+ *    - combineRollbacks: Combine multiple rollbacks into one
+ *    - learningQueryKeys: Query key factory for consistent cache keys
+ *
  * DEPENDENCIES:
- * - @tanstack/react-query: QueryClient type and cache operations
- * - @/types/learning: LearningSessionWithNodes, NodeStatus types
- * 
- * USAGE PATTERN:
- * ```tsx
- * // In useMutation callbacks:
- * 
- * // onMutate (optimistically update)
- * onMutate: async ({ nodeId, targetStatus, nodeIndex }) => {
- *   await queryClient.cancelQueries({ queryKey: ['learningSession', sessionId] });
- *   
- *   const rollbackStatus = optimisticStatusUpdate(queryClient, sessionId, nodeId, targetStatus);
- *   const rollbackUnlock = optimisticUnlockNext(queryClient, sessionId, nodeIndex);
- *   const rollbackMastery = optimisticMasteryUpdate(queryClient, sessionId, nodeId, nodeIndex);
- *   
- *   return { rollback: combineRollbacks(rollbackStatus, rollbackUnlock, rollbackMastery) };
- * },
- * 
- * // onError (rollback on failure)
- * onError: (error, variables, context) => {
- *   context?.rollback?.();
- * },
- * 
- * // onSettled (refetch to ensure sync)
- * onSettled: () => {
- *   queryClient.invalidateQueries({ queryKey: ['learningSession', sessionId] });
- * },
- * ```
- * 
- * ERROR HANDLING:
- * - Each function returns a noop rollback if previous data doesn't exist
- * - Rollback functions restore exact previous state on error
- * - Combined rollbacks execute in reverse order (LIFO)
- * 
- * PERFORMANCE NOTES:
- * - Single cache write per update (efficient batch updates in optimisticMasteryUpdate)
- * - Returns previousData for exact restoration
- * - Query key factory ensures consistent cache keys across app
- * 
- * RELATED FILES:
- * - useLearningMutations.ts: Main consumer of these utilities
- * - @/types/learning.ts: Type definitions
- * - @tanstack/react-query: QueryClient and optimistic update patterns
- * 
- * NOTES:
- * - Pattern: onMutate -> snapshot -> update -> return rollback
- * - Always cancelQueries before optimistic updates
- * - Always invalidateQueries after mutation settles
- * - Rollback must be called in onError to restore previous state
+ *    - External: @tanstack/react-query (QueryClient)
+ *    - Internal: @/types/learning (LearningSessionWithNodes, NodeStatus)
+ *
+ * USAGE:
+ *    ```tsx
+ *    onMutate: async ({ nodeId, targetStatus, nodeIndex }) => {
+ *      await queryClient.cancelQueries({ queryKey: ['learningSession', sessionId] });
+ *      const rollback = optimisticMasteryUpdate(queryClient, sessionId, nodeId, nodeIndex);
+ *      return { rollback };
+ *    },
+ *    onError: (_err, _vars, context) => { context?.rollback?.(); },
+ *    onSettled: () => { queryClient.invalidateQueries({ queryKey: ['learningSession', sessionId] }); },
+ *    ```
  * ============================================================================
  */
 

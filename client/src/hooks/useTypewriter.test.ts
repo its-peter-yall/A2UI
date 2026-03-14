@@ -1,43 +1,31 @@
 /**
  * ============================================================================
  * FILE: useTypewriter.test.ts
+ * LOCATION: client/src/hooks/useTypewriter.test.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for useTypewriter hook. Validates typewriter effect behavior
- * including character-by-character reveal, timing configuration, and
- * initial empty state.
- * 
- * KEY TESTS:
- * - Returns empty string initially (before animation starts)
- * - Types out text character by character over time
- * - Respects delay parameter for typing speed
- * - Completes to full string after sufficient time advancement
- * 
+ *    Unit tests for useTypewriter hook. Validates typewriter effect behavior
+ *    including character-by-character reveal, timing configuration, and
+ *    initial empty state.
+ *
+ * ROLE IN PROJECT:
+ *    Ensures the typewriter animation hook behaves correctly under fake timers,
+ *    guarding against regressions in the character reveal timing logic used
+ *    for AI response display effects.
+ *
+ * KEY COMPONENTS:
+ *    - Initial state test: Returns empty string before animation starts
+ *    - Timing test: Characters revealed progressively over time
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: renderHook, act
- * - client/src/hooks/useTypewriter: Hook under test
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run useTypewriter tests
- * npm run test -- src/hooks/useTypewriter.test.ts
- * ```
- * 
- * TEST SETUP:
- * - Uses renderHook from @testing-library/react
- * - Uses vi.useFakeTimers() for time control
- * - Uses act() to advance timers synchronously
- * - Tests with 30ms delay per character
- * 
- * RELATED FILES:
- * - client/src/hooks/useTypewriter.ts
- * 
- * NOTES:
- * - Text reveals character by character (not all at once)
- * - Delay parameter controls typing speed (ms per character)
- * - Useful for AI response streaming effects
+ *    - External: vitest, @testing-library/react
+ *    - Internal: ./useTypewriter
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/hooks/useTypewriter.test.ts
+ *    ```
  * ============================================================================
  */
 

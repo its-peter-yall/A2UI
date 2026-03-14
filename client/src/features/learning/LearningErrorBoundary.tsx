@@ -1,61 +1,37 @@
 /**
  * ============================================================================
  * FILE: LearningErrorBoundary.tsx
+ * LOCATION: client/src/features/learning/LearningErrorBoundary.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * React Error Boundary component that catches rendering errors in learning
- * feature components. Prevents blank screens when runtime errors occur and
- * provides recovery options (retry or navigate home). Logs errors to console
- * for debugging support.
- * 
+ *    React Error Boundary that catches rendering errors in learning feature
+ *    components. Prevents blank screens and provides retry/home navigation.
+ *
+ * ROLE IN PROJECT:
+ *    Safety net wrapping LearningPathContainer and its children. Catches
+ *    unexpected runtime errors, logs them, and renders a recoverable fallback
+ *    UI so the rest of the application remains functional.
+ *
  * KEY COMPONENTS:
- * - LearningErrorBoundary: Class component implementing React error boundary
- * - Fallback UI: Error message with retry and navigation options
- * - Dev Tools: Error details shown only in development mode
- * 
+ *    - LearningErrorBoundary: Class component implementing React error boundary
+ *    - Fallback UI: Error message with retry and home navigation options
+ *    - Dev Tools: Error details shown only in development mode
+ *
  * DEPENDENCIES:
- * - react: Component base class, ErrorInfo type
- * - react-router-dom: Link for navigation back to learning home
- * 
- * USAGE PATTERN:
- * ```tsx
- * // Wrap learning content with error boundary
- * <LearningErrorBoundary
- *   onError={(error, errorInfo) => {
- *     console.error('Learning crashed:', error);
- *   }}
- * >
- *   <LearningPathContainer sessionId={sessionId} />
- * </LearningErrorBoundary>
- * 
- * // With custom fallback
- * <LearningErrorBoundary
- *   fallback={<CustomErrorUI message="Custom error" />}
- * >
- *   <Content />
- * </LearningErrorBoundary>
- * ```
- * 
- * ERROR HANDLING:
- * - Catches: All JavaScript errors in child component tree
- * - Does NOT catch: Event handlers, async code, SSR errors
- * - Logs: Error and component stack to console
- * - Recovery: Retry button resets error state, allows re-render
- * 
- * PERFORMANCE NOTES:
- * - Error boundary only re-renders when error occurs
- * - getDerivedStateFromError is synchronous (no side effects)
- * - componentDidCatch is for side effects (logging, reporting)
- * 
- * RELATED FILES:
- * - LearningPathContainer.tsx: Wraps content with this boundary
- * - ErrorStates.tsx: Reusable error state components
- * 
- * NOTES:
- * - Only catches errors in child components, not in the boundary itself
- * - Error details shown only in development (import.meta.env.DEV)
- * - Link navigation: /learn returns to LearningHome
+ *    - External: react, react-router-dom
+ *    - Internal: (none)
+ *
+ * USAGE:
+ *    ```tsx
+ *    <LearningErrorBoundary onError={(err, info) => console.error(err)}>
+ *      <LearningPathContainer sessionId={sessionId} />
+ *    </LearningErrorBoundary>
+ *
+ *    <LearningErrorBoundary fallback={<CustomErrorUI />}>
+ *      <Content />
+ *    </LearningErrorBoundary>
+ *    ```
  * ============================================================================
  */
 

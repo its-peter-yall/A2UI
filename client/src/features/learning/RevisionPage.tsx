@@ -1,3 +1,35 @@
+/**
+ * ============================================================================
+ * FILE: RevisionPage.tsx
+ * LOCATION: client/src/features/learning/RevisionPage.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Main page for revision sessions, rendering concept cards in a carousel.
+ *
+ * ROLE IN PROJECT:
+ *    Mounted at /learn/:sessionId/revise/:revisionId. Fetches both the
+ *    original learning session (for node content/quizzes) and the revision
+ *    session (for per-node progress). Tracks revision-specific progress
+ *    independently of the original session and shows a summary modal on
+ *    completion.
+ *
+ * KEY COMPONENTS:
+ *    - RevisionPage: Page root with header, progress bar, carousel, and footer
+ *    - Carousel: AnimatePresence-driven slide navigation with keyboard support
+ *    - getRevisionStepColor: Maps node status to step indicator color
+ *
+ * DEPENDENCIES:
+ *    - External: react, react-router-dom, @tanstack/react-query, axios, framer-motion
+ *    - Internal: @/lib/learningApi, ./useRevisionSession, ./useRevisionMutations,
+ *                ./RevisionConceptCard, ./RevisionSummaryModal, @/components/ThemeToggle,
+ *                ./animations, ./ErrorStates, @/types/learning
+ *
+ * USAGE:
+ *    // Rendered automatically via react-router-dom route:
+ *    // <Route path="/learn/:sessionId/revise/:revisionId" element={<RevisionPage />} />
+ * ============================================================================
+ */
 // RevisionPage.tsx
 // Main page for revision mode, displaying concept cards in either
 // full_review or quiz_only mode with revision-specific progress tracking.

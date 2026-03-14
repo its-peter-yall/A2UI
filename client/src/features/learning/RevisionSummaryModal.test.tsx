@@ -1,3 +1,32 @@
+/**
+ * ============================================================================
+ * FILE: RevisionSummaryModal.test.tsx
+ * LOCATION: client/src/features/learning/RevisionSummaryModal.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Tests for RevisionSummaryModal component rendering and interactions.
+ *
+ * ROLE IN PROJECT:
+ *    Validates the completion modal displays correct stats, comparison data
+ *    with positive/negative/zero improvement styling, action button callbacks,
+ *    and accessibility behaviors (Escape key, backdrop click, aria attributes).
+ *
+ * KEY COMPONENTS:
+ *    - Mode badge rendering (full_review / quiz_only)
+ *    - Stats: topics reviewed, quiz score, quizzes passed/failed, time spent
+ *    - Comparison section with improvement badge variants
+ *    - Action buttons: Revise Again, Back to Dashboard
+ *    - Accessibility: Escape key, backdrop click, role/aria-modal
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react
+ *    - Internal: ./RevisionSummaryModal, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- RevisionSummaryModal.test.tsx
+ * ============================================================================
+ */
 // RevisionSummaryModal.test.tsx
 // Tests for RevisionSummaryModal component rendering and interactions
 

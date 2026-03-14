@@ -337,23 +337,64 @@ git log --show-notes
 ### File Header Requirements
 **MANDATORY** for `.ts`, `.tsx`, `.py`, `.pyi`, `.js`, `.jsx`:
 
+**TypeScript/JavaScript:**
 ```typescript
-// {FILE_NAME}
-// {Brief 1-line description}
+/**
+ * ============================================================================
+ * FILE: <filename>
+ * LOCATION: <filepath>
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Brief 1-line description of what this file does
+ *
+ * ROLE IN PROJECT:
+ *    How this file fits into the larger system (2-3 lines)
+ *
+ * KEY COMPONENTS:
+ *    - Component1: What it does
+ *    - Component2: What it does
+ *
+ * DEPENDENCIES:
+ *    - External: List external libraries
+ *    - Internal: List internal modules
+ *
+ * USAGE:
+ *    Example code snippet or how to use
+ * ============================================================================
+ */
+```
 
-// Longer description (2-4 lines):
-// - What problem does this solve?
-// - What are the key functions/classes?
-// - Any important context for future maintainers
-
-// @see: {Related files}
-// @note: {Important caveats or gotchas}
+**Python:**
+```python
+"""
+============================================================================
+FILE: <filename>
+LOCATION: <filepath>
+============================================================================
+PURPOSE:
+    Brief description of what this file does (1-2 sentences)
+ROLE IN PROJECT:
+    How this file fits into the larger system (2-3 lines)
+    - Key responsibility 1
+    - Key responsibility 2
+KEY COMPONENTS:
+    - Component1: What it does
+    - Component2: What it does
+DEPENDENCIES:
+    - External: List external libraries used
+    - Internal: List internal modules imported
+USAGE:
+    Brief usage example or how to run/test
+============================================================================
+"""
 ```
 
 **Enforcement:**
 - New files: ALWAYS add header before first write
 - Existing files: Add header when modifying >30%
 - Config files: Optional but encouraged
+- Separator line: Exactly 76 `=` characters
 
 ## Product Context
 

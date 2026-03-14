@@ -1,64 +1,30 @@
 """
-=============================================================================
+============================================================================
 FILE: main.py
-=============================================================================
-
+LOCATION: server/main.py
+============================================================================
 PURPOSE:
-FastAPI application entry point for the AgUI backend server. Initializes
-the web application, configures CORS middleware, manages application
-lifecycle (startup/shutdown), and registers all API route routers.
-
+    FastAPI application entry point. Initializes the web application,
+    configures CORS middleware, manages application lifecycle, and registers
+    all API route routers.
+ROLE IN PROJECT:
+    Top-level server entry point that wires together all backend components.
+    - Bootstraps database, Vertex AI, and Instructor on startup
+    - Mounts all API routers and exposes health check endpoints
 KEY COMPONENTS:
-- app: FastAPI application instance with title and version metadata
-- lifespan(): Async context manager handling startup/shutdown lifecycle
-- root(): Health check endpoint returning server status
-- health(): Detailed health check exposing Vertex AI connection status
-- AutoReloader: File watcher that restarts server on code changes
-
+    - app: FastAPI application instance with title and version metadata
+    - lifespan(): Async context manager handling startup/shutdown lifecycle
+    - root(): Root endpoint returning server status
+    - health(): Detailed health check exposing Vertex AI connection status
 DEPENDENCIES:
-- fastapi: Web framework for building REST APIs
-- fastapi.middleware.cors: Cross-origin resource sharing configuration
-- server.utils.vertex_client: Vertex AI SDK initialization utilities
-- server.utils.instructor_client: Instructor client singleton
-- server.database.learning_persistence: Database initialization
-- server.routers: API route definitions (learning_router)
-- watchdog: File system monitoring for auto-reload
-
-USAGE PATTERN:
-```bash
-# Run the server (auto-reload enabled by default)
-python server/main.py
-
-# Or with uvicorn directly
-python -m uvicorn server.main:app --reload --port 8000
-```
-
-ERROR HANDLING:
-- Startup errors (DB, Vertex AI, Instructor) logged but don't crash server
-- Each initialization wrapped in try/except with error logging
-- Health endpoint reflects connection status for monitoring
-
-PERFORMANCE NOTES:
-- CORS configured to allow localhost:5173 (Vite dev server)
-- Lifespan context ensures cleanup on shutdown
-- Async initialization prevents blocking event loop
-- File watcher ignores common non-Python directories
-
-RELATED FILES:
-- server/routers/learning_router.py: Main API route definitions
-- server/database/learning_persistence.py: Learning data persistence
-- server/utils/vertex_client.py: Vertex AI initialization
-- server/utils/instructor_client.py: AI client initialization
-- client/: React frontend expecting CORS access to port 8000
-
-NOTES:
-- Default port is 8000 (standard FastAPI/uvicorn default)
-- CORS whitelist includes both localhost:5173 and 127.0.0.1:5173
-- Health endpoint returns vertex_ai status: "connected" or "disconnected"
-- Database and AI clients initialized in order during startup
-- Auto-reload monitors all .py files in server/ directory
-- graceful shutdown logs message on context exit
-=============================================================================
+    - External: fastapi, uvicorn, watchdog
+    - Internal: server.utils.vertex_client, server.utils.instructor_client,
+              server.database.learning_persistence, server.routers
+USAGE:
+    ```bash
+    python -m uvicorn server.main:app --reload --port 8000
+    ```
+============================================================================
 """
 
 from contextlib import asynccontextmanager

@@ -1,54 +1,34 @@
 /**
  * ============================================================================
  * FILE: App.tsx
+ * LOCATION: client/src/App.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Main application router component that defines client-side navigation routes
- * for the AgUI learning platform. Uses React Router to coordinate page-level
- * transitions between the learning home and active learning sessions.
- * 
+ *    Main application router component that defines client-side navigation
+ *    routes for the AgUI learning platform.
+ *
+ * ROLE IN PROJECT:
+ *    Top-level routing shell mounted by main.tsx inside QueryProvider.
+ *    Maps URL paths to page-level components and handles unknown route
+ *    fallback via redirect.
+ *
  * KEY COMPONENTS:
- * - BrowserRouter: Wraps entire app enabling client-side routing
- * - Routes: Defines route mappings for all application paths
- * - Route (LearningHome): Default landing page at "/" and "/learn"
- * - Route (LearningPage): Active session view at "/learn/:sessionId"
- * - Navigate: Redirects unknown routes to default learning home
- * 
+ *    - BrowserRouter: Wraps entire app enabling client-side routing
+ *    - Routes/Route: Defines route mappings for all application paths
+ *    - Navigate: Redirects unknown routes to default learning home
+ *
  * DEPENDENCIES:
- * - react-router-dom: Client-side routing and navigation
- * - @/features/learning: LearningHome and LearningPage components
- * 
- * USAGE PATTERN:
- * ```tsx
- * // App is mounted in main.tsx within QueryProvider
- * // Routes are matched in this order:
- * <BrowserRouter>
- *   <Routes>
- *     <Route path="/" element={<LearningHome />} />
- *     <Route path="/learn" element={<LearningHome />} />
- *     <Route path="/learn/:sessionId" element={<LearningPage />} />
- *     <Route path="*" element={<Navigate to="/" replace />} />
- *   </Routes>
- * </BrowserRouter>
- * ```
- * 
- * ERROR HANDLING:
- * - Unknown routes fallback to "/" via Navigate component with replace flag
- * - 404 page not explicitly shown; users are redirected to learning home
- * 
- * PERFORMANCE NOTES:
- * - Route matching uses first-match-wins; specific routes should precede catch-all
- * - React Router v6+ uses optimistic UI updates for navigation
- * 
- * RELATED FILES:
- * - client/src/main.tsx: App bootstrap where QueryProvider wraps this component
- * - client/src/features/learning/index.tsx: LearningHome and LearningPage exports
- * 
- * NOTES:
- * - QueryProvider is applied at root level in main.tsx, not here
- * - VITE_API_URL environment variable controls backend API location
- * - Session IDs in URL enable direct linking to specific learning sessions
+ *    - External: react-router-dom
+ *    - Internal: @/features/learning (LearningHome, LearningPage), @/features/learning/RevisionPage
+ *
+ * USAGE:
+ *    ```tsx
+ *    // Mounted in main.tsx within QueryProvider
+ *    <QueryProvider>
+ *      <App />
+ *    </QueryProvider>
+ *    ```
  * ============================================================================
  */
 

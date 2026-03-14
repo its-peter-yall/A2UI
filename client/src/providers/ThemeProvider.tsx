@@ -1,3 +1,28 @@
+/**
+ * ============================================================================
+ * FILE: ThemeProvider.tsx
+ * LOCATION: client/src/providers/ThemeProvider.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Context provider that manages theme state and applies it to the DOM.
+ *
+ * ROLE IN PROJECT:
+ *    Wraps the app at the root level to supply theme state to all children.
+ *    Persists the selected theme to localStorage and syncs with the OS
+ *    prefers-color-scheme media query when theme is set to "system".
+ *
+ * KEY COMPONENTS:
+ *    - ThemeProvider: Provider component with localStorage persistence
+ *
+ * DEPENDENCIES:
+ *    - External: react (useEffect, useState)
+ *    - Internal: ./theme-context (ThemeProviderContext)
+ *
+ * USAGE:
+ *    <ThemeProvider defaultTheme="system"><App /></ThemeProvider>
+ * ============================================================================
+ */
 import { useEffect, useState } from "react"
 import { ThemeProviderContext } from "./theme-context"
 

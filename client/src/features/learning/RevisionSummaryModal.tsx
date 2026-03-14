@@ -1,3 +1,36 @@
+/**
+ * ============================================================================
+ * FILE: RevisionSummaryModal.tsx
+ * LOCATION: client/src/features/learning/RevisionSummaryModal.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Modal displayed on revision completion showing performance summary.
+ *
+ * ROLE IN PROJECT:
+ *    Shown by RevisionPage when a revision session reaches "completed" status.
+ *    Presents quiz scores, topics reviewed, time spent, and a comparison with
+ *    the original attempt. Provides actions to return to the dashboard or
+ *    start a new revision.
+ *
+ * KEY COMPONENTS:
+ *    - RevisionSummaryModal: Dialog with stats grid, comparison section, actions
+ *    - ImprovementBadge: Color-coded badge for positive/negative/zero improvement
+ *    - formatDuration: Converts seconds to human-readable "Xm Ys" string
+ *
+ * DEPENDENCIES:
+ *    - External: react, framer-motion, lucide-react
+ *    - Internal: @/types/learning (RevisionSummary), @/lib/utils
+ *
+ * USAGE:
+ *    <RevisionSummaryModal
+ *      revisionSummary={summaryData}
+ *      onClose={handleClose}
+ *      onReviseAgain={handleReviseAgain}
+ *      onBackToDashboard={handleBackToDashboard}
+ *    />
+ * ============================================================================
+ */
 // RevisionSummaryModal.tsx
 // Modal displayed on revision completion showing performance summary and comparison
 

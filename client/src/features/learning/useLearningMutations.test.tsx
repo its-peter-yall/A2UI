@@ -1,51 +1,36 @@
 /**
  * ============================================================================
  * FILE: useLearningMutations.test.tsx
+ * LOCATION: client/src/features/learning/useLearningMutations.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for useLearningMutations hook. Validates sequential learning
- * flow mutations: proceedToQuiz, submitAnswer, retry, and regenerate.
- * Tests loading states, callbacks, and error handling.
- * 
- * KEY TESTS:
- * - proceedToQuiz: VIEWING_EXPLANATION -> IN_QUIZ transition
- * - submitAnswer: IN_QUIZ -> SHOWING_FEEDBACK, callbacks for mastery/retry
- * - retry: SHOWING_FEEDBACK -> IN_QUIZ transition
- * - regenerate: ERROR -> VIEWING_EXPLANATION transition
- * - Loading states: isTransitioning, isSubmitting, isRetrying, isAnyLoading
- * - Error handling: onError callback with operation type
- * 
+ *    Unit tests for useLearningMutations hook. Validates sequential learning
+ *    flow mutations: proceedToQuiz, submitAnswer, retry, and regenerate.
+ *    Tests loading states, callbacks, and error handling.
+ *
+ * ROLE IN PROJECT:
+ *    Test coverage for the central mutations hook, verifying all state
+ *    transitions, loading flags, and callback contracts that ConceptCard
+ *    and LearningPathContainer depend on.
+ *
+ * KEY COMPONENTS:
+ *    - proceedToQuiz tests: VIEWING_EXPLANATION -> IN_QUIZ transition
+ *    - submitAnswer tests: callbacks for mastery/retry, isSubmitting flag
+ *    - retry/advanceToNextQuiz/goToPreviousQuiz tests: state transitions
+ *    - regenerate tests: ERROR -> VIEWING_EXPLANATION
+ *    - error handling tests: onError callback with operation type
+ *    - loading state tests: isAnyLoading, independent flags
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: renderHook for hook testing
- * - @tanstack/react-query: QueryClient for provider wrapper
- * - client/src/features/learning/useLearningMutations: Hook under test
- * - client/src/lib/learningApi: API functions (mocked)
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run mutations tests
- * npm run test -- src/features/learning/useLearningMutations.test.tsx
- * 
- * # Run specific describe block
- * npm run test -- -t "submitAnswer"
- * ```
- * 
- * TEST SETUP:
- * - Uses renderHook with createWrapper() for QueryClientProvider
- * - Mocks @/lib/learningApi with vi.fn()
- * - Uses waitFor for async mutation completion
- * - Tests Promise resolution/rejection with mock implementations
- * 
- * RELATED FILES:
- * - client/src/features/learning/useLearningMutations.tsx
- * - client/src/lib/learningApi.ts
- * 
- * NOTES:
- * - Callbacks: onQuizResult, onMasteryAchieved, onRetryNeeded, onError
- * - Loading states independent per mutation type
- * - isAnyLoading true when any mutation pending
+ *    - External: vitest, @testing-library/react, @tanstack/react-query
+ *    - Internal: ./useLearningMutations, @/lib/learningApi (mocked)
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/useLearningMutations.test.tsx --run
+ *    npm run test -- -t "submitAnswer"
+ *    ```
  * ============================================================================
  */
 

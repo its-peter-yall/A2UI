@@ -1,34 +1,24 @@
 """
-=============================================================================
+============================================================================
 FILE: __init__.py
-=============================================================================
-
+LOCATION: server/tests/__init__.py
+============================================================================
 PURPOSE:
-Package initialization for server tests. This file makes the tests/
-directory a Python package, enabling test discovery and imports.
-
+    Package initialization for server tests. Makes the tests/ directory
+    a Python package, enabling test discovery and imports.
+ROLE IN PROJECT:
+    Package marker that enables unittest discovery across all test modules.
+    - Allows 'from server.tests import ...' syntax
+    - Required for python -m unittest server.tests to work
 KEY COMPONENTS:
-- Test discovery: unittest discovers tests in this package
-- Import aliasing: Enables 'from server.tests import ...' syntax
-
-USAGE PATTERN:
-```python
-# Import test modules
-from server.tests import test_planner_agent
-from server.tests import test_generator_agent
-
-# Run all tests in package
-python -m unittest server.tests
-```
-
+    - Package marker: Empty file enabling test discovery
 DEPENDENCIES:
-- None - this is a package marker file
-
-RELATED FILES:
-- server/tests/test_*.py - All test modules in this package
-
-NOTES:
-- Empty file is intentional - serves only as package marker
-- All test code lives in test_*.py modules
-=============================================================================
+    - External: None
+    - Internal: None
+USAGE:
+    ```python
+    # Run all tests in package
+    python -m unittest server.tests
+    ```
+============================================================================
 """

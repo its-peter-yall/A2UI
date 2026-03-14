@@ -1,72 +1,32 @@
 """
-=============================================================================
+============================================================================
 FILE: instructor_client.py
-=============================================================================
-
+LOCATION: server/utils/instructor_client.py
+============================================================================
 PURPOSE:
-Wrapper around the Instructor library for structured output validation with
-Google Vertex AI Gemini models. Provides Pydantic-validated responses from
-AI models with role-based configuration (planner, generator, quizzer) for
-the learning system's agent architecture.
-
+    Wrapper around the Instructor library for structured output
+    validation with Google Vertex AI Gemini models.
+ROLE IN PROJECT:
+    Utility layer providing Pydantic-validated AI responses.
+    - Wraps Vertex AI Gemini with role-based model configuration
+    - Used by BaseAgent for all structured generation calls
 KEY COMPONENTS:
-- InstructorClient: Main class wrapping Vertex AI Gemini with Instructor validation
-- MODEL_CONFIGS: Dictionary defining model, temperature, and token limits per role
-- create_structured(): Async method generating Pydantic-validated AI responses
-- instructor_client: Global singleton instance for application-wide use
-
+    - InstructorClient: Main class wrapping Vertex AI with Instructor
+    - MODEL_CONFIGS: Model, temperature, and token limits per role
+    - create_structured(): Async method for Pydantic-validated responses
+    - instructor_client: Global singleton instance
 DEPENDENCIES:
-- instructor: Library for structured output extraction from LLMs
-- pydantic: Data validation using Python type annotations
-- tenacity: Retry logic with exponential backoff for transient failures
-- vertexai: Google Vertex AI SDK (must be initialized via vertex_client)
-- server.config: Provides PROJECT_ID and LOCATION settings
-
-USAGE PATTERN:
-```python
-from server.utils.instructor_client import instructor_client
-from pydantic import BaseModel
-
-# Define expected response structure
-class LearningPath(BaseModel):
-    title: str
-    concepts: list[str]
-    estimated_minutes: int
-
-# Initialize after vertexai.init() in application startup
-instructor_client.init()
-
-# Generate validated structured response
-response = await instructor_client.create_structured(
-    role="planner",
-    response_model=LearningPath,
-    messages=[{"role": "user", "content": "Create a learning path for Python"}]
-)
-```
-
-ERROR HANDLING:
-- ValueError: Raised if client not initialized or invalid role specified
-- Exception: Re-raised after retry attempts exhausted for API errors
-- Retry logic: 3 attempts with exponential backoff (2-10 seconds)
-- Validation errors: Pydantic validation failures propagate as exceptions
-
-PERFORMANCE NOTES:
-- Async client enabled for concurrent request handling
-- Role-based client caching avoids repeated initialization
-- Retry exponential backoff: multiplier=1, min=2s, max=10s
-- Only retries on transient errors (not ValueError or TypeError)
-
-RELATED FILES:
-- server/utils/vertex_client.py: Must call init_vertex() before InstructorClient.init()
-- server/agents/base.py: BaseAgent uses this client for generation
-- server/services/course_orchestrator.py: Coordinates agents using this client
-
-NOTES:
-- Must be initialized AFTER vertexai.init() completes
-- Each role has different model: planner=gemini-2.5-pro, others=gemini-2.5-flash
-- Temperature ranges from 0.2 (quizzer/precision) to 0.7 (generator/creative)
-- max_output_tokens varies by role: 4096 (planner, quizzer) to 2048 (generator)
-=============================================================================
+    - External: instructor, pydantic, tenacity, vertexai
+    - Internal: server.config
+USAGE:
+    ```python
+    from server.utils.instructor_client import instructor_client
+    instructor_client.init()
+    response = await instructor_client.create_structured(
+        role='planner', response_model=MyModel, messages=[...]
+    )
+    ```
+============================================================================
 """
 
 from __future__ import annotations

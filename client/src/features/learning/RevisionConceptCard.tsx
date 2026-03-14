@@ -1,3 +1,37 @@
+/**
+ * ============================================================================
+ * FILE: RevisionConceptCard.tsx
+ * LOCATION: client/src/features/learning/RevisionConceptCard.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Card component for revision mode that renders content or quiz based on mode.
+ *
+ * ROLE IN PROJECT:
+ *    Replaces ConceptCard in revision sessions. Adapts its layout for
+ *    full_review (shows content + mark-reviewed button + quiz) or quiz_only
+ *    (shows quiz immediately). All nodes are unlocked — no sequential gating.
+ *
+ * KEY COMPONENTS:
+ *    - RevisionConceptCard: Main card component with mode-aware rendering
+ *    - statusBadges: Config map for pending/reviewed/quiz_passed/quiz_failed states
+ *    - renderQuizSection: Inline quiz renderer with feedback display
+ *
+ * DEPENDENCIES:
+ *    - External: react, lucide-react
+ *    - Internal: @/lib/utils, @/types/learning, ./MarkdownRenderer
+ *
+ * USAGE:
+ *    <RevisionConceptCard
+ *      node={conceptNode}
+ *      revisionMode="full_review"
+ *      revisionProgress={progressData}
+ *      onMarkReviewed={handleMarkReviewed}
+ *      onQuizSubmit={handleQuizSubmit}
+ *    />
+ * ============================================================================
+ */
+
 // RevisionConceptCard.tsx
 // Card component for revision mode that adapts rendering based on
 // full_review or quiz_only mode, with status badges and no sequential locking.

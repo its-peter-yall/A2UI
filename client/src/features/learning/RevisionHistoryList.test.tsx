@@ -1,3 +1,31 @@
+/**
+ * ============================================================================
+ * FILE: RevisionHistoryList.test.tsx
+ * LOCATION: client/src/features/learning/RevisionHistoryList.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Tests for RevisionHistoryList component rendering and interactions.
+ *
+ * ROLE IN PROJECT:
+ *    Verifies the expandable revision history panel behaves correctly:
+ *    lazy-loads data only when expanded, sorts revisions by date descending,
+ *    and fires the correct callback when a row is clicked.
+ *
+ * KEY COMPONENTS:
+ *    - Collapsed/expanded toggle behavior
+ *    - Lazy fetch (data not loaded until expanded)
+ *    - Row rendering: number, date, mode badge, score
+ *    - Empty state and loading state
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query
+ *    - Internal: ./RevisionHistoryList, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- RevisionHistoryList.test.tsx
+ * ============================================================================
+ */
 // RevisionHistoryList.test.tsx
 // Tests for RevisionHistoryList component rendering and interactions
 

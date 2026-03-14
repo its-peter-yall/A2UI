@@ -1,45 +1,34 @@
 /**
  * ============================================================================
  * FILE: ErrorStates.test.tsx
+ * LOCATION: client/src/features/learning/ErrorStates.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Unit tests for learning error and empty state components. Validates
- * ErrorState, NotFoundState, EmptyState, LoadingState, and GeneratingState
- * rendering with appropriate actions and callbacks.
- * 
- * KEY TESTS:
- * - ErrorState: Renders with retry button and home link
- * - NotFoundState: Renders type-specific not found message
- * - EmptyState: Renders action button with callback
- * - LoadingState: Renders default loading message
- * - GeneratingState: Renders "Creating your learning path" message
- * 
+ *    Unit tests for learning error and empty state components. Validates
+ *    ErrorState, NotFoundState, EmptyState, LoadingState, and GeneratingState
+ *    rendering with appropriate actions and callbacks.
+ *
+ * ROLE IN PROJECT:
+ *    Ensures all shared state UI components in the learning feature render
+ *    correctly and fire the right callbacks, preventing regressions in error
+ *    and loading UX across the feature.
+ *
+ * KEY COMPONENTS:
+ *    - ErrorState tests: Renders with retry button and home link
+ *    - NotFoundState tests: Renders type-specific not found message
+ *    - EmptyState tests: Renders action button with callback
+ *    - LoadingState tests: Renders default loading message
+ *    - GeneratingState tests: Renders "Creating your learning path" message
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing
- * - react-router-dom: MemoryRouter for Link testing
- * - client/src/features/learning/ErrorStates: Components
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run ErrorStates tests
- * npm run test -- src/features/learning/ErrorStates.test.tsx
- * ```
- * 
- * TEST SETUP:
- * - Uses MemoryRouter for Link-based states
- * - Tests button clicks with fireEvent
- * - Tests callback invocation with vi.fn()
- * 
- * RELATED FILES:
- * - client/src/features/learning/ErrorStates.tsx
- * 
- * NOTES:
- * - ErrorState: Generic error with retry + home navigation
- * - NotFoundState: Type-specific (node/session)
- * - EmptyState: Customizable action button
- * - LoadingState/GeneratingState: Progress indicators
+ *    - External: vitest, @testing-library/react, react-router-dom
+ *    - Internal: ./ErrorStates
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/ErrorStates.test.tsx
+ *    ```
  * ============================================================================
  */
 

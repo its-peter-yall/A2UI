@@ -1,3 +1,29 @@
+/**
+ * ============================================================================
+ * FILE: useCourseList.ts
+ * LOCATION: client/src/features/learning/useCourseList.ts
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    React Query hook for fetching the paginated list of learning sessions.
+ *
+ * ROLE IN PROJECT:
+ *    Primary data hook for the course dashboard. Wraps getSessionsList with
+ *    configurable filtering and sorting, maps camelCase options to snake_case
+ *    API params, and includes retry logic for backend startup delays.
+ *
+ * KEY COMPONENTS:
+ *    - useCourseList: Hook returning query result with data, isLoading, isError
+ *    - UseCourseListOptions: Interface for status filter, sortBy, limit, offset
+ *
+ * DEPENDENCIES:
+ *    - External: @tanstack/react-query
+ *    - Internal: @/lib/learningApi (getSessionsList)
+ *
+ * USAGE:
+ *    const { data, isLoading, isError } = useCourseList({ status: 'in_progress' });
+ * ============================================================================
+ */
 // useCourseList.ts
 // React Query hook for fetching the list of learning sessions (courses)
 

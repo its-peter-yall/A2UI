@@ -1,3 +1,32 @@
+/**
+ * ============================================================================
+ * FILE: RevisionPage.test.tsx
+ * LOCATION: client/src/features/learning/RevisionPage.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Integration tests for the RevisionPage component.
+ *
+ * ROLE IN PROJECT:
+ *    Covers the full revision page lifecycle: header rendering per mode,
+ *    dual data loading (original session + revision session), navigation,
+ *    revision-specific progress bar calculation, and the completion summary
+ *    modal including its action buttons and cache invalidation.
+ *
+ * KEY COMPONENTS:
+ *    - Header rendering (full_review / quiz_only modes)
+ *    - Data loading and error/missing-ID states
+ *    - Revision progress bar (independent of original session progress)
+ *    - RevisionSummaryModal trigger and interactions
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query, react-router-dom
+ *    - Internal: ./RevisionPage, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- RevisionPage.test.tsx
+ * ============================================================================
+ */
 // RevisionPage.test.tsx
 // Integration tests for RevisionPage component
 

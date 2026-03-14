@@ -1,63 +1,30 @@
 """
-=============================================================================
+============================================================================
 FILE: planner.py
-=============================================================================
-
+LOCATION: server/agents/planner.py
+============================================================================
 PURPOSE:
-Planner Agent that decomposes user learning queries into structured,
-sequenced learning paths using the KLI (Knowledge-Learning-Instruction)
-framework. Generates a CourseOutline with 5-7 TopicNodes that form
-a coherent curriculum for retrieval-based learning. This is the first
-agent in the content generation pipeline.
-
+    Planner Agent that decomposes user learning queries into
+    structured, sequenced learning paths using the KLI framework.
+ROLE IN PROJECT:
+    First agent in the content generation pipeline.
+    - Generates CourseOutline consumed by Generator and Quizzer
+    - Applies KLI framework for pedagogically-sound curriculum design
 KEY COMPONENTS:
-- PLANNER_SYSTEM_PROMPT: Detailed prompt defining curriculum design methodology
-- PlannerAgent: Agent class for generating learning path outlines
-- plan(): Main method to generate CourseOutline from a user query
-- planner_agent: Singleton instance for application-wide use
-
+    - PlannerAgent: Agent class for generating learning path outlines
+    - plan(): Main method to generate CourseOutline from a user query
+    - validate_complexity_distribution(): Validates topic complexity spread
+    - planner_agent: Singleton instance for application-wide use
 DEPENDENCIES:
-- server.agents.base.BaseAgent: Parent class providing generate() method
-- server.schemas.learning.CourseOutline: Response model with course_title and topics
-- KLI Framework: Pedagogical model for knowledge decomposition
-
-USAGE PATTERN:
-```python
-from server.agents.planner import planner_agent
-
-# Generate a learning path for a topic
-outline = await planner_agent.plan("Newtonian Laws")
-print(outline.course_title)  # "Understanding Newton's Laws of Motion"
-print(len(outline.topics))   # 6
-
-# Access individual topics
-first_topic = outline.topics[0]
-print(first_topic.title)  # "Forces and Motion Fundamentals"
-```
-
-ERROR HANDLING:
-- Exception: Re-raised if generation fails after all retry attempts
-- ValidationError: Handled internally with retry logic (inherited from BaseAgent)
-- Logging: Errors logged with context for debugging
-
-PERFORMANCE NOTES:
-- Uses Gemini Pro model for higher reasoning capability in curriculum design
-- Generates 5-7 topics; this range balances depth vs. learner overwhelm
-- Topic prerequisites enforced: topic N only references topics 0 to N-1
-- summary_for_context field is critical for downstream agent coherence
-
-RELATED FILES:
-- server/agents/base.py: BaseAgent providing inheritance and generate()
-- server/schemas/learning.py: CourseOutline, TopicNode models
-- server/agents/generator.py: Consumes Planner output for content generation
-- server/agents/quizzer.py: Consumes Planner output for quiz generation
-
-NOTES:
-- Topics MUST be ordered with sequential indices starting from 0
-- Each topic's summary_for_context is injected into Generator and Quizzer prompts
-- Key terms (2-4 per topic) ensure consistent terminology across content
-- Topic count is bounded (5-7) to maintain learnable chunk sizes
-=============================================================================
+    - External: None
+    - Internal: server.agents.base, server.schemas.learning
+USAGE:
+    ```python
+    from server.agents.planner import planner_agent
+    outline = await planner_agent.plan('Newtonian Laws')
+    print(outline.course_title)
+    ```
+============================================================================
 """
 
 from __future__ import annotations

@@ -1,74 +1,41 @@
 """
-=============================================================================
+============================================================================
 FILE: learning_persistence.py
-=============================================================================
-
+LOCATION: server/database/learning_persistence.py
+============================================================================
 PURPOSE:
-SQLite persistence layer for the adaptive learning system. Manages all
-data storage for learning sessions, concept nodes (sequential educational
-content), quizzes, and mastery tracking. Provides CRUD operations with
-enforced state transitions to maintain learning flow integrity.
-
+    SQLite persistence layer for the adaptive learning system. Manages
+    storage for learning sessions, concept nodes, quizzes, and mastery
+    tracking with enforced state transitions.
+ROLE IN PROJECT:
+    Core data layer for the learning feature, consumed by CourseOrchestrator
+    and learning router.
+    - Enforces sequential node progression through a state machine
+    - Provides quiz attempt tracking for mastery evaluation
 KEY COMPONENTS:
-- LearningManager: Main class handling all database operations
-  - Manages learning_sessions, concept_nodes, quiz_data, quiz_attempts tables
-  - Enforces sequential node progression through state machine
-  - Provides quiz attempt tracking for mastery evaluation
-
+    - LearningManager: Main class handling all database operations
+    - learning_manager: Module-level singleton instance
 DEPENDENCIES:
-- sqlite3: Native SQLite driver for database operations
-- server.database.persistence.DB_PATH: Shared database location
-- server.schemas.learning.NodeStatus, QuizCard: Pydantic schemas for validation
+    - External: sqlite3, uuid, json, pydantic
+    - Internal: server.database.persistence.DB_PATH,
+                server.schemas.learning
+USAGE:
+    ```python
+    from server.database.learning_persistence import learning_manager
 
-USAGE PATTERN:
-```python
-from server.database.learning_persistence import learning_manager
-
-# Create a learning session
-session = learning_manager.create_learning_session(
-    query="Learn Python basics",
-    course_title="Python Fundamentals"
-)
-
-# Add concept nodes
-node = learning_manager.create_concept_node(
-    session_id=session["id"],
-    sequence_index=0,
-    title="Variables and Data Types",
-    content_markdown="# Variables\nPython uses dynamic typing...",
-    status=NodeStatus.VIEWING_EXPLANATION
-)
-
-# Update node status (enforces valid transitions)
-learning_manager.update_node_status(node["id"], NodeStatus.IN_QUIZ)
-
-# Record quiz attempt
-attempt = learning_manager.create_quiz_attempt(node_id, "A")
-```
-
-ERROR HANDLING:
-- sqlite3.Error: Raised on database errors (connection, query, constraint violations)
-- ValueError: Raised on invalid state transitions or missing entities
-- Foreign key constraint violations cascade deletes automatically
-
-PERFORMANCE NOTES:
-- Indexed on user_id, session_id, node_id, and sequence_index for fast queries
-- Connection created per-operation (no pooling - suitable for single-server deployment)
-- Quiz payloads stored as JSON strings; parsed on access rather than stored as JSON type
-- State transition validation uses in-memory set lookup (O(1))
-
-RELATED FILES:
-- server/database/persistence.py: Provides DB_PATH configuration
-- server/schemas/learning.py: NodeStatus enum and QuizCard schema definitions
-- server/routers/learning.py: REST API endpoints consuming this persistence layer
-
-NOTES:
-- First node (sequence_index=0) starts as VIEWING_EXPLANATION; subsequent nodes as LOCKED
-- Valid state transitions: LOCKED→VIEWING_EXPLANATION→IN_QUIZ→SHOWING_FEEDBACK→COMPLETED
-- Quiz attempts track mastery - 100% score = mastered (node becomes COMPLETED)
-- CASCADE deletes remove child nodes/sessions when parent is deleted
-- Migration support: _ensure_concept_node_columns adds missing columns for schema evolution
-=============================================================================
+    session = learning_manager.create_learning_session(
+        query="Learn Python basics",
+        course_title="Python Fundamentals"
+    )
+    node = learning_manager.create_concept_node(
+        session_id=session["id"],
+        sequence_index=0,
+        title="Variables and Data Types",
+        content_markdown="# Variables\n...",
+        status=NodeStatus.VIEWING_EXPLANATION
+    )
+    ```
+============================================================================
 """
 
 from __future__ import annotations

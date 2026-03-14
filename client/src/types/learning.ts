@@ -1,77 +1,44 @@
 /**
  * ============================================================================
  * FILE: learning.ts
+ * LOCATION: client/src/types/learning.ts
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Defines all TypeScript type interfaces and type aliases for the adaptive
- * learning feature. These types mirror the backend Pydantic schemas, ensuring
- * type safety across the API boundary. They power React Query cache typing,
- * component props, and maintain request/response payload alignment with the
- * API contracts.
- * 
+ *    Defines all TypeScript type interfaces and type aliases for the adaptive
+ *    learning feature, mirroring backend Pydantic schemas for type safety
+ *    across the API boundary.
+ *
+ * ROLE IN PROJECT:
+ *    Shared type contract between the learning feature's React components and
+ *    the FastAPI backend. Powers React Query cache typing, component props,
+ *    and request/response payload alignment with the learning API endpoints.
+ *
  * KEY COMPONENTS:
- * - NodeStatus: Union type for node lifecycle states (LOCKED, VIEWING_EXPLANATION, etc.)
- * - QuizDifficulty: Quiz complexity levels (easy, medium, hard)
- * - QuizOption: Individual answer option with correctness and explanation
- * - QuizCard: Complete quiz question with all options and difficulty
- * - ConceptNode: Core learning unit with content, status, and optional quiz
- * - ConceptNodeWithVisibility: Node extended with content/quiz visibility flags
- * - LearningSession: Session metadata without node data
- * - LearningSessionWithNodes: Complete session including all concept nodes
- * - QuizAttempt: Single quiz submission with scoring and feedback
- * - QuizAttemptHistory: Aggregated quiz history for a node
- * - GenerateCourseRequest: Request payload for course generation
- * - QuizSubmitRequest/Response: Quiz answer submission types
- * - TransitionRequest: Status change request payload
- * 
+ *    - NodeStatus: Union type for node lifecycle states (LOCKED, VIEWING_EXPLANATION, etc.)
+ *    - ConceptNode: Core learning unit with content, status, and optional quiz
+ *    - LearningSessionWithNodes: Complete session including all concept nodes
+ *    - QuizSubmitRequest/Response: Quiz answer submission types
+ *    - RevisionSessionResponse: Revision session state and progress
+ *
  * DEPENDENCIES:
- * - No external dependencies - pure TypeScript type definitions
- * - Mirrors server/schemas/learning.py Pydantic models
- * 
- * USAGE PATTERN:
- * ```tsx
- * import type { 
- *   LearningSessionWithNodes, 
- *   ConceptNode, 
- *   NodeStatus,
- *   QuizSubmitResponse 
- * } from '@/types/learning';
- * 
- * // Typing a React Query result
- * const { data } = useQuery<LearningSessionWithNodes>({
- *   queryKey: ['learningSession', sessionId],
- *   queryFn: () => getLearningSession(sessionId)
- * });
- * 
- * // Status transition handling
- * const handleQuizComplete = (result: QuizSubmitResponse) => {
- *   if (result.node_status === 'COMPLETED') {
- *     // Mark node as done
- *   }
- * };
- * ```
- * 
- * ERROR HANDLING:
- * - TypeScript enforces exact string literals for NodeStatus - invalid values cause compile errors
- * - API responses are validated against these types at runtime by Pydantic
- * - Mismatched types indicate contract drift between frontend and backend
- * 
- * PERFORMANCE NOTES:
- * - All types are erased at runtime - zero runtime overhead
- * - Use 'type' keyword over 'interface' for union types for better inference
- * - Keep types in sync with backend to avoid runtime type coercion issues
- * 
- * RELATED FILES:
- * - server/schemas/learning.py: Backend Pydantic schemas (source of truth)
- * - server/routers/learning.py: API endpoints returning these types
- * - client/src/lib/learningApi.ts: API functions consuming these types
- * 
- * NOTES:
- * - NodeStatus values MUST match backend enum exactly for transitions to work
- * - content_visible and quiz_visible flags control UI rendering in LearningPage
- * - is_mastered flag indicates 80%+ score achieved (passing threshold)
- * - retry_available is false after passing or max attempts reached
+ *    - External: None - pure TypeScript type definitions
+ *    - Internal: Mirrors server/schemas/learning.py Pydantic models
+ *
+ * USAGE:
+ *    ```tsx
+ *    import type {
+ *      LearningSessionWithNodes,
+ *      ConceptNode,
+ *      NodeStatus,
+ *      QuizSubmitResponse
+ *    } from '@/types/learning';
+ *
+ *    const { data } = useQuery<LearningSessionWithNodes>({
+ *      queryKey: ['learningSession', sessionId],
+ *      queryFn: () => getLearningSession(sessionId)
+ *    });
+ *    ```
  * ============================================================================
  */
 

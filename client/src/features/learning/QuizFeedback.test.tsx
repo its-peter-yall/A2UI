@@ -1,57 +1,32 @@
 /**
  * ============================================================================
  * FILE: QuizFeedback.test.tsx
+ * LOCATION: client/src/features/learning/QuizFeedback.test.tsx
  * ============================================================================
  *
  * PURPOSE:
- * Unit tests for QuizFeedback component. Validates feedback display after
- * quiz submission including correct/incorrect messaging, mastery badges,
- * retry/continue buttons, option explanations, and QuizSet support with
- * multi-quiz navigation and progress display.
+ *    Unit tests for QuizFeedback component. Validates feedback display after
+ *    quiz submission including correct/incorrect messaging, mastery badges,
+ *    retry/continue buttons, option explanations, and QuizSet support.
  *
- * KEY TESTS:
- * - Shows "Correct!" with "Mastered!" badge for correct answers
- * - Shows "Incorrect" without badge for wrong answers
- * - Shows "Try Again" button when not mastered
- * - Shows "Continue" button when mastered
- * - Displays all option explanations when user answers correctly
- * - Displays selected incorrect option explanation when wrong
- * - Hides correct answer explanation when answer is incorrect
- * - QuizSet: Shows progress indicator (Quiz X of Y)
- * - QuizSet: Shows "Next Quiz" button when correct and more quizzes exist
- * - QuizSet: Displays correct quiz based on currentQuizIndex
- * - QuizSet: Shows display labels after shuffle
- * - QuizSet: Handles last quiz in set correctly
+ * ROLE IN PROJECT:
+ *    Test coverage for the QuizFeedback component, ensuring correct rendering
+ *    for both single QuizCard and multi-quiz QuizSet scenarios, including
+ *    navigation, progress indicators, and display label preservation.
+ *
+ * KEY COMPONENTS:
+ *    - Single Quiz tests: correct/incorrect states, buttons, explanations
+ *    - QuizSet tests: progress indicator, next/retry/continue buttons,
+ *      quiz index navigation, display label preservation
  *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing
- * - client/src/features/learning/QuizFeedback: Component under test
- * - client/src/types/learning: QuizCard, QuizSet, QuizSubmitResponse types
+ *    - External: vitest, @testing-library/react
+ *    - Internal: ./QuizFeedback, @/types/learning (QuizCard, QuizSet, QuizSubmitResponse)
  *
- * USAGE PATTERN:
- * ```bash
- * # Run QuizFeedback tests
- * npm run test -- src/features/learning/QuizFeedback.test.tsx --run
- * ```
- *
- * TEST SETUP:
- * - Creates mock QuizCard with 4 options
- * - Creates mock QuizSet with multiple quizzes
- * - Creates mock QuizSubmitResponse for correct and incorrect cases
- * - Tests button click handlers with fireEvent
- *
- * RELATED FILES:
- * - client/src/features/learning/QuizFeedback.tsx
- * - client/src/types/learning.ts
- *
- * NOTES:
- * - Mastery requires 100% score (correct first try)
- * - Explanations shown for ALL options (learning value)
- * - onRetry callback for retry flow
- * - onContinue callback for progression
- * - onNextQuiz callback for QuizSet navigation
- * - display_label preserved even when options are shuffled
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/QuizFeedback.test.tsx --run
+ *    ```
  * ============================================================================
  */
 

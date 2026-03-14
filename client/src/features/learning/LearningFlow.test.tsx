@@ -1,51 +1,36 @@
 /**
  * ============================================================================
  * FILE: LearningFlow.test.tsx
+ * LOCATION: client/src/features/learning/LearningFlow.test.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Integration tests for the complete learning flow. Tests learning feature
- * navigation, progress bar behavior, completion celebration, and component
- * integration between LearningHome, LearningPage, ProgressBar, and TopicInput.
- * 
- * KEY TESTS:
- * - LearningHome: Renders topic input, "How It Works" steps, feature cards
- * - TopicInput: Submit handling, suggestion clicks, disabled state
- * - ProgressBar: Completion count, step indicators, aria-current, accessibility
- * - LearningPage: Session loading, completion celebration, modal dismissal
- * - Accessibility: Form structure, heading hierarchy, navigation labels
- * 
+ *    Integration tests for the complete learning flow. Tests navigation,
+ *    progress bar behaviour, completion celebration, and component integration
+ *    between LearningHome, LearningPage, ProgressBar, and TopicInput.
+ *
+ * ROLE IN PROJECT:
+ *    End-to-end integration test suite for the learning feature. Validates
+ *    that all major user journeys (topic entry, progress tracking, course
+ *    completion) work correctly across component boundaries.
+ *
+ * KEY COMPONENTS:
+ *    - LearningHome tests: Topic input, "How It Works" steps, feature cards
+ *    - TopicInput tests: Submit handling, suggestion clicks, disabled state
+ *    - ProgressBar tests: Completion count, step indicators, accessibility
+ *    - LearningPage tests: Session loading, completion celebration, modal
+ *    - Accessibility tests: Form structure, heading hierarchy, nav labels
+ *
  * DEPENDENCIES:
- * - vitest: Testing framework
- * - @testing-library/react: Component testing utilities
- * - @tanstack/react-query: Query client for React Query provider
- * - react-router-dom: MemoryRouter for navigation testing
- * 
- * USAGE PATTERN:
- * ```bash
- * # Run learning flow tests
- * npm run test -- src/features/learning/LearningFlow.test.tsx
- * 
- * # Run with coverage
- * npm run test -- --coverage src/features/learning/LearningFlow.test.tsx
- * ```
- * 
- * TEST SETUP:
- * - Mocks @/lib/learningApi with vi.fn()
- * - Mocks react-router-dom useNavigate
- * - Uses QueryClient with retry: false for test stability
- * - Creates mock ConceptNode and LearningSessionWithNodes
- * 
- * RELATED FILES:
- * - client/src/features/learning/LearningHome.tsx
- * - client/src/features/learning/LearningPage.tsx
- * - client/src/features/learning/ProgressBar.tsx
- * - client/src/features/learning/TopicInput.tsx
- * 
- * NOTES:
- * - Uses waitFor for async assertions
- * - Tests both positive flows and error states
- * - Accessibility tests verify ARIA attributes
+ *    - External: vitest, @testing-library/react, @tanstack/react-query,
+ *                react-router-dom
+ *    - Internal: ./LearningHome, ./LearningPage, ./ProgressBar, ./TopicInput,
+ *                @/types/learning, @/lib/learningApi (mocked)
+ *
+ * USAGE:
+ *    ```bash
+ *    npm run test -- src/features/learning/LearningFlow.test.tsx
+ *    ```
  * ============================================================================
  */
 

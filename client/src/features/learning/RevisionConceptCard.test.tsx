@@ -1,3 +1,28 @@
+/**
+ * ============================================================================
+ * FILE: RevisionConceptCard.test.tsx
+ * LOCATION: client/src/features/learning/RevisionConceptCard.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Unit tests for RevisionConceptCard covering both revision modes and all states.
+ *
+ * ROLE IN PROJECT:
+ *    Validates full_review and quiz_only mode rendering, all 4 status badges,
+ *    quiz submission callbacks, accessibility structure, and absence of
+ *    sequential locking behaviour.
+ *
+ * KEY COMPONENTS:
+ *    - RevisionConceptCard tests: mode rendering, status badges, quiz callbacks
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react
+ *    - Internal: ./RevisionConceptCard, @/types/learning, ./MarkdownRenderer (mocked)
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/RevisionConceptCard.test.tsx
+ * ============================================================================
+ */
 // RevisionConceptCard.test.tsx
 // Unit tests for RevisionConceptCard component
 

@@ -1,3 +1,33 @@
+/**
+ * ============================================================================
+ * FILE: RevisionHistoryList.tsx
+ * LOCATION: client/src/features/learning/RevisionHistoryList.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Expandable list of past revision sessions for a learning course.
+ *
+ * ROLE IN PROJECT:
+ *    Embedded inside CourseCard to surface revision history without cluttering
+ *    the main dashboard. Data is lazy-loaded only when the user expands the
+ *    panel, keeping initial page load fast.
+ *
+ * KEY COMPONENTS:
+ *    - RevisionHistoryList: Collapsible container with toggle button
+ *    - RevisionRow: Single row showing number, date, mode badge, and score
+ *    - formatShortDate: Formats ISO timestamps to "Mon DD" display
+ *
+ * DEPENDENCIES:
+ *    - External: react, @tanstack/react-query, framer-motion, lucide-react
+ *    - Internal: @/lib/learningApi (getRevisionsList), @/types/learning, @/lib/utils
+ *
+ * USAGE:
+ *    <RevisionHistoryList
+ *      sessionId={session.id}
+ *      onViewRevision={(revisionId) => navigate(`/learn/${sessionId}/revise/${revisionId}`)}
+ *    />
+ * ============================================================================
+ */
 // RevisionHistoryList.tsx
 // Expandable list of past revision sessions for a learning course
 

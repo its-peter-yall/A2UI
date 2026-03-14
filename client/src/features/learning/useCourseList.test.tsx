@@ -1,3 +1,30 @@
+/**
+ * ============================================================================
+ * FILE: useCourseList.test.tsx
+ * LOCATION: client/src/features/learning/useCourseList.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Tests for the useCourseList React Query hook.
+ *
+ * ROLE IN PROJECT:
+ *    Verifies query key construction, camelCase-to-snake_case filter param
+ *    mapping, stale time behavior, and loading/error states to ensure the
+ *    course dashboard always receives correctly shaped API calls.
+ *
+ * KEY COMPONENTS:
+ *    - Default fetch with no options
+ *    - Filter params mapping (status, sortBy, limit, offset)
+ *    - Loading and error state assertions
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query
+ *    - Internal: ./useCourseList, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- useCourseList.test.tsx
+ * ============================================================================
+ */
 // useCourseList.test.ts
 // Tests for useCourseList React Query hook
 

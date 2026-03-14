@@ -1,3 +1,27 @@
+/**
+ * ============================================================================
+ * FILE: ThemeToggle.tsx
+ * LOCATION: client/src/components/ThemeToggle.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Button component that cycles through light, dark, and system themes.
+ *
+ * ROLE IN PROJECT:
+ *    Provides the UI control for theme switching, placed in the app header.
+ *    Reads current theme from context and updates it on each click.
+ *
+ * KEY COMPONENTS:
+ *    - ThemeToggle: Icon button cycling light → dark → system → light
+ *
+ * DEPENDENCIES:
+ *    - External: lucide-react (Sun, Moon, Monitor icons)
+ *    - Internal: @/hooks/useTheme
+ *
+ * USAGE:
+ *    <ThemeToggle />
+ * ============================================================================
+ */
 import { Moon, Sun, Monitor } from "lucide-react"
 import { useTheme } from "../hooks/useTheme"
 

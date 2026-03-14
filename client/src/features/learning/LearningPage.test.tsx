@@ -1,3 +1,33 @@
+/**
+ * ============================================================================
+ * FILE: LearningPage.test.tsx
+ * LOCATION: client/src/features/learning/LearningPage.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Integration tests for the LearningPage session view component.
+ *
+ * ROLE IN PROJECT:
+ *    Validates navigation controls (Dashboard button, New Topic link), React
+ *    Query cache management (invalidation on unmount, staleTime), error states
+ *    (404 not found, missing sessionId), resume banner display, and the
+ *    beforeunload keepalive PATCH request for last-active node tracking.
+ *
+ * KEY COMPONENTS:
+ *    - Navigation suite: Dashboard button, New Topic link, course title header
+ *    - Cache management suite: Query invalidation on unmount, staleTime config
+ *    - Error states suite: 404 handling, missing sessionId guard
+ *    - Resume banner suite: last_active_node_id banner display
+ *    - beforeunload suite: Keepalive fetch on page unload
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query, react-router-dom, axios
+ *    - Internal: ./LearningPage, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/LearningPage.test.tsx
+ * ============================================================================
+ */
 // LearningPage.test.tsx
 // Integration tests for session switching and navigation guards
 

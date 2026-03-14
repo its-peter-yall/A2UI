@@ -1,3 +1,28 @@
+/**
+ * ============================================================================
+ * FILE: CourseFilter.tsx
+ * LOCATION: client/src/features/learning/CourseFilter.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Filter and sort controls for the course dashboard list.
+ *
+ * ROLE IN PROJECT:
+ *    Renders pill-style status filters (All, In Progress, Completed) and sort
+ *    options (Recent, Progress) above the course grid in LearningHome.
+ *    Active pills use Cyber Yellow styling; accessible via role="tablist".
+ *
+ * KEY COMPONENTS:
+ *    - CourseFilter: Status filter pills and sort selector with aria support
+ *
+ * DEPENDENCIES:
+ *    - External: none
+ *    - Internal: @/lib/utils (cn)
+ *
+ * USAGE:
+ *    <CourseFilter status={status} sortBy={sortBy} onStatusChange={...} onSortChange={...} />
+ * ============================================================================
+ */
 // CourseFilter.tsx
 // Filter and sort controls for the course dashboard
 

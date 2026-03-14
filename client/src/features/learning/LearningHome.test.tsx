@@ -1,3 +1,34 @@
+/**
+ * ============================================================================
+ * FILE: LearningHome.test.tsx
+ * LOCATION: client/src/features/learning/LearningHome.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Integration tests for the LearningHome dashboard component.
+ *
+ * ROLE IN PROJECT:
+ *    Validates conditional rendering (hero-only vs dashboard), course card
+ *    display, filter/sort interactions, pagination, skeleton loading states,
+ *    empty filter state, and navigation callbacks for the /learn route entry
+ *    point. Complements the e2e suite with focused component-level coverage.
+ *
+ * KEY COMPONENTS:
+ *    - Hero-only view suite: Tests empty-state rendering and feature cards
+ *    - Dashboard view suite: Tests course cards, filters, sort, and disclosure
+ *    - Navigation suite: Tests resume/revise/revision-history navigation
+ *    - Filtering suite: Tests filter/sort re-fetch and empty filter state
+ *    - Pagination suite: Tests Load More button and offset pagination
+ *    - Loading state suite: Tests skeleton display during fetch
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query, react-router-dom
+ *    - Internal: ./LearningHome, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/LearningHome.test.tsx
+ * ============================================================================
+ */
 // LearningHome.test.tsx
 // Tests for LearningHome dashboard integration
 

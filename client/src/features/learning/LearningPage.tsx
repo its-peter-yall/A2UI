@@ -1,50 +1,34 @@
 /**
  * ============================================================================
  * FILE: LearningPage.tsx
+ * LOCATION: client/src/features/learning/LearningPage.tsx
  * ============================================================================
- * 
+ *
  * PURPOSE:
- * Main learning page component that displays an interactive learning path for
- * a specific session. Handles session routing via URL parameters, displays real-time
- * progress tracking, and celebrates course completion with an accessible modal.
- * 
+ *    Main learning page component that displays an interactive learning path
+ *    for a specific session. Handles session routing, real-time progress
+ *    tracking, and celebrates course completion with an accessible modal.
+ *
+ * ROLE IN PROJECT:
+ *    Page-level shell for the /learn/:sessionId route. Owns the sticky header,
+ *    progress bar, completion modal, and resume banner. Delegates the actual
+ *    learning interaction to LearningPathContainer.
+ *
  * KEY COMPONENTS:
- * - LearningPage: Main page wrapper with header navigation and completion modal
- * - Completion Modal: Accessible overlay celebrating course mastery with animation
- * - Progress Integration: Syncs with LearningPathContainer via refetch for progress bar
- * 
+ *    - LearningPage: Main page wrapper with header navigation and completion modal
+ *    - Completion Modal: Accessible overlay celebrating course mastery
+ *    - Progress Integration: Syncs with LearningPathContainer via refetch
+ *
  * DEPENDENCIES:
- * - react-router-dom: URL parameter parsing and navigation
- * - @tanstack/react-query: Session data fetching with auto-refresh
- * - framer-motion: Celebration animation (respects prefers-reduced-motion)
- * 
- * USAGE PATTERN:
- * ```tsx
- * // Route: /learn/:sessionId
- * // When sessionId is missing, shows "Start Learning" button to /learn
- * // When all nodes are COMPLETED, shows celebration modal
- * 
- * <LearningPage />
- * ```
- * 
- * ERROR HANDLING:
- * - Missing sessionId: Renders "No session ID provided" with navigation link
- * - Session not found: Redirect handled by LearningPathContainer error states
- * 
- * PERFORMANCE NOTES:
- * - Session refetch interval (2s) ensures progress bar stays in sync
- * - Modal focus management preserves keyboard focus state
- * - Animation disabled for users with prefers-reduced-motion
- * 
- * RELATED FILES:
- * - LearningPathContainer.tsx: Renders the actual learning path carousel
- * - ProgressBar.tsx: Displays completion progress (synced via refetch)
- * - MasteryCelebration.tsx: Animation component for completion
- * 
- * NOTES:
- * - Route: /learn/:sessionId
- * - Best practices: prefers-reduced-motion, non-blocking modal, focus management
- * - Keyboard accessible: Escape key dismisses completion modal
+ *    - External: react, react-router-dom, @tanstack/react-query, axios
+ *    - Internal: @/lib/learningApi, @/lib/utils, @/components/ThemeToggle,
+ *                ./LearningPathContainer
+ *
+ * USAGE:
+ *    ```tsx
+ *    // Route: /learn/:sessionId
+ *    <LearningPage />
+ *    ```
  * ============================================================================
  */
 

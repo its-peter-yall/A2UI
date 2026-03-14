@@ -1,63 +1,40 @@
 /**
  * ============================================================================
  * FILE: LearningHome.tsx
+ * LOCATION: client/src/features/learning/LearningHome.tsx
  * ============================================================================
  *
  * PURPOSE:
- * Entry point for the adaptive learning feature. Displays a welcoming homepage
- * with a topic input form, an optional course dashboard when courses exist,
- * and explains the mastery-based learning approach. Users enter a topic to
- * learn, which triggers course generation and navigates to the learning path.
+ *    Entry point for the adaptive learning feature. Displays a welcoming
+ *    homepage with a topic input form, an optional course dashboard when
+ *    courses exist, and explains the mastery-based learning approach.
+ *
+ * ROLE IN PROJECT:
+ *    Root page of the /learn route. Acts as the hub for starting new courses
+ *    and managing existing ones. Conditionally renders a compact hero + course
+ *    dashboard layout or a full hero-only layout based on course history.
  *
  * KEY COMPONENTS:
- * - LearningHome: Main page wrapper with hero, dashboard, and feature overview
- * - TopicInput: Form component for entering learning topics
- * - CourseFilter: Status and sort filter pills for the dashboard
- * - CourseCard: Individual course card with progress and actions
- * - CourseCardSkeleton: Loading placeholder for course cards
- * - Step Indicator: Visual 4-step process (Read, Quiz, Feedback, Master)
- * - Feature Cards: Three cards explaining core learning principles
+ *    - LearningHome: Main page wrapper with hero, dashboard, and feature overview
+ *    - TopicInput: Form component for entering learning topics
+ *    - CourseFilter: Status and sort filter pills for the dashboard
+ *    - CourseCard: Individual course card with progress and actions
+ *    - CourseCardSkeleton: Loading placeholder for course cards
+ *    - Step Indicator: Visual 4-step process (Read, Quiz, Feedback, Master)
+ *    - Feature Cards: Three cards explaining core learning principles
  *
  * DEPENDENCIES:
- * - react-router-dom: Link and useNavigate for navigation
- * - framer-motion: AnimatePresence and motion for card animations
- * - useCourseList: Hook for fetching course list with filters
- * - TopicInput: Child component for topic entry and course generation
- * - CourseFilter: Filter/sort pill controls
- * - CourseCard: Course summary card
- * - CourseCardSkeleton: Skeleton loading state
- * - @/lib/utils: cn() utility for conditional className composition
+ *    - External: react, react-router-dom, framer-motion, axios, lucide-react,
+ *                @tanstack/react-query
+ *    - Internal: @/lib/learningApi, @/lib/utils, @/types/learning,
+ *                @/components/ThemeToggle, ./TopicInput, ./CourseCard,
+ *                ./CourseFilter, ./CourseCardSkeleton, ./useCourseList
  *
- * USAGE PATTERN:
- * ```tsx
- * // Route: /learn (root of learning feature)
- * // Shows topic input and course dashboard when courses exist
- *
- * <LearningHome />
- * ```
- *
- * ERROR HANDLING:
- * - Errors handled by TopicInput component (generation failures)
- * - Course list errors silently fallback to hero-only view
- *
- * PERFORMANCE NOTES:
- * - Course list uses 30-second stale time for responsive updates
- * - Framer Motion stagger animation on card load (50ms gap)
- * - Accumulated pagination avoids full-list refetch
- *
- * RELATED FILES:
- * - TopicInput.tsx: Topic input form and course generation logic
- * - CourseCard.tsx: Individual course card component
- * - CourseFilter.tsx: Filter and sort controls
- * - CourseCardSkeleton.tsx: Skeleton loading state
- * - useCourseList.ts: React Query hook for course fetching
- * - LearningPage.tsx: Individual session page after topic submission
- *
- * NOTES:
- * - Route: /learn
- * - Conditional layout: hero-only for 0 courses, dashboard for 1+ courses
- * - "How It Works" section collapsed behind disclosure when courses exist
- * - Semantic HTML with proper ARIA labels
+ * USAGE:
+ *    ```tsx
+ *    // Route: /learn
+ *    <LearningHome />
+ *    ```
  * ============================================================================
  */
 

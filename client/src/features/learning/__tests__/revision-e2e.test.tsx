@@ -1,3 +1,31 @@
+/**
+ * ============================================================================
+ * FILE: revision-e2e.test.tsx
+ * LOCATION: client/src/features/learning/__tests__/revision-e2e.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    End-to-end integration tests for revision session user flows.
+ *
+ * ROLE IN PROJECT:
+ *    Validates the full revision experience across LearningHome and RevisionPage,
+ *    covering revision launch, full-review vs quiz-only modes, mark-as-reviewed
+ *    mutations, quiz submission tracking, completion summary display, performance
+ *    comparison, and the revise-again flow. All API endpoints are mocked.
+ *
+ * KEY COMPONENTS:
+ *    - Revision e2e flows: Test suite for all revision interaction paths
+ *    - renderHomeFlow / renderRevisionFlow: Render helpers with router + query context
+ *    - Factory helpers: createDashboardSession, createNode, createRevisionSession, createSummary
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query, react-router-dom
+ *    - Internal: ../LearningHome, ../RevisionPage, @/lib/learningApi, @/types/learning
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/__tests__/revision-e2e.test.tsx
+ * ============================================================================
+ */
 // revision-e2e.test.tsx
 // Integration tests for revision end-to-end user flows.
 //

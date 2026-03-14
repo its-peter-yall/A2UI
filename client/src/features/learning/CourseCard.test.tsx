@@ -1,3 +1,27 @@
+/**
+ * ============================================================================
+ * FILE: CourseCard.test.tsx
+ * LOCATION: client/src/features/learning/CourseCard.test.tsx
+ * ============================================================================
+ *
+ * PURPOSE:
+ *    Unit tests for the CourseCard component covering all states and interactions.
+ *
+ * ROLE IN PROJECT:
+ *    Validates in-progress and completed card states, progress bar rendering,
+ *    action button callbacks, revision history visibility, and accessibility.
+ *
+ * KEY COMPONENTS:
+ *    - CourseCard tests: state rendering, button callbacks, aria attributes
+ *
+ * DEPENDENCIES:
+ *    - External: vitest, @testing-library/react, @tanstack/react-query
+ *    - Internal: ./CourseCard, @/types/learning, @/lib/learningApi
+ *
+ * USAGE:
+ *    npm run test -- src/features/learning/CourseCard.test.tsx
+ * ============================================================================
+ */
 // CourseCard.test.tsx
 // Tests for CourseCard component rendering and interactions
 
