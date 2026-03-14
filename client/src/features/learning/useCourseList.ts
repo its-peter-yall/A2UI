@@ -35,7 +35,21 @@ export function useCourseList(options?: UseCourseListOptions) {
         offset: options?.offset,
       }),
     staleTime: 30_000,
-    refetchInterval: (query) => query.state.status === 'error' ? 2000 : false,
-    retry: false,
+    retry: (failureCount, error) => {
+      // Retry network errors (backend not ready) up to 5 times
+      const isNetworkError = 
+        error instanceof Error && 
+        (error.message.includes('Network Error') || error.message.includes('ECONNREFUSED'));
+      return isNetworkError && failureCount < 5;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 8000), // 1s, 2s, 4s, 8s, 8s
+    refetchInterval: (query) => {
+      // After retries exhausted, poll every 3s for up to 30s total
+      if (query.state.status === 'error' && query.state.fetchFailureCount >= 5) {
+        const errorDuration = Date.now() - (query.state.errorUpdatedAt ?? 0);
+        return errorDuration < 30_000 ? 3000 : false;
+      }
+      return false;
+    },
   });
 }
