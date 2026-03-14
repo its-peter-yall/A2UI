@@ -4,7 +4,7 @@ milestone: v1.2
 milestone_name: Dynamic Quiz Generation
 current_plan: 1 of 1
 status: completed
-stopped_at: "Completed quick task 7: Verify test files compatibility with current implementation"
+stopped_at: "Completed quick task 8: Show skeleton cards during backend startup"
 last_updated: "2026-03-08T17:20:00.000Z"
 last_activity: 2026-03-08
 progress:
@@ -103,6 +103,7 @@ None yet.
 | 5 | Upgrade server virtual environment to Python 3.14.3 | 2026-02-23 | 7e363bf | [5-upgrade-server-venv-to-python-3-14-3-ver](./quick/5-upgrade-server-venv-to-python-3-14-3-ver/) |
 | 6 | Implementation Plan: Dark and Light Mode Toggle | 2026-03-07 | a289b72 | [6-implementation-plan-dark-and-light-mode-](./quick/6-implementation-plan-dark-and-light-mode-/) |
 | 7 | Verify test files compatibility with current implementation | 2026-03-08 | N/A (verification) | [7-verify-test-files-compatibility-with-cur](./quick/7-verify-test-files-compatibility-with-cur/) |
+| 8 | Show skeleton cards during backend startup in LearningHome | 2026-03-08 | 1f3bc99 | [8-add-an-temporary-animation-of-loading-gh](./quick/8-add-an-temporary-animation-of-loading-gh/) |
 
 ### Blockers/Concerns
 
@@ -114,5 +115,5 @@ None yet.
 ## Session Continuity
 
 **Last session:** 2026-03-08
-**Stopped at:** Completed quick task 7: Verify test files compatibility with current implementation
+**Stopped at:** Completed quick task 8: Show skeleton cards during backend startup
 **Resume file:** None
