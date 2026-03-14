@@ -35,5 +35,7 @@ export function useCourseList(options?: UseCourseListOptions) {
         offset: options?.offset,
       }),
     staleTime: 30_000,
+    refetchInterval: (query) => query.state.status === 'error' ? 2000 : false,
+    retry: false,
   });
 }
