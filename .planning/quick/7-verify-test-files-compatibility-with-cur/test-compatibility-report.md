@@ -9,9 +9,9 @@
 
 | Suite | Test Files | Tests | Passed | Failed | Skipped | Status |
 |-------|-----------|-------|--------|--------|---------|--------|
-| Client (Vitest) | 23 | 295 | 295 | 0 | 0 | COMPATIBLE |
-| Server (unittest) | 11 | 310 | 310 | 0 | 1 | COMPATIBLE |
-| **Total** | **34** | **605** | **605** | **0** | **1** | **COMPATIBLE** |
+| Client (Vitest) | 23 | 295 | 295 | 0 | 0 | ✅ COMPATIBLE |
+| Server (unittest) | 11 | 310 | 309 | 0 | 1 | ✅ COMPATIBLE |
+| **Total** | **34** | **605** | **604** | **0** | **1** | **✅ COMPATIBLE** |
 
 **Overall Compatibility Status:** ALL TESTS COMPATIBLE
 

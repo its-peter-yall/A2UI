@@ -4,7 +4,7 @@
 // Renders a course summary card for the dashboard with two visual states:
 // - In-progress: Shows progress bar, "Resume Course" button, last active topic
 // - Completed: Shows green checkmark, "Revise Course" and "Practice Quizzes" buttons
-// Key features include Cyber Yellow progress bar, glassmorphism styling,
+// Key features include Cyber Yellow progress bar (adapts to theme), glassmorphism styling,
 // Framer Motion hover animation, and expandable revision history list.
 
 // @see: client/src/types/learning.ts (LearningSessionSummary)
@@ -106,10 +106,10 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
           className={cn(
             'absolute top-3 right-3 p-2 rounded-lg',
             'bg-background/80 backdrop-blur-sm',
-            'text-muted-foreground hover:text-[#FFD400]',
+            'text-muted-foreground hover:text-[var(--cyber-yellow)]',
             'opacity-0 group-hover:opacity-100',
             'transition-all duration-200',
-            'focus:outline-none focus:ring-2 focus:ring-[#FFD400] focus:ring-offset-2 focus:ring-offset-background'
+            'focus:outline-none focus:ring-2 focus:ring-[var(--cyber-yellow)] focus:ring-offset-2 focus:ring-offset-background'
           )}
           aria-label="Delete course"
           data-testid="delete-course-button"
@@ -125,11 +125,11 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
             'absolute inset-0 z-10 rounded-xl',
             'bg-background/95 backdrop-blur-sm',
             'flex flex-col items-center justify-center gap-4 p-5',
-            'border border-[#FFD400]/30'
+            'border border-[var(--cyber-yellow)]/30'
           )}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-2 text-[#FFD400]">
+          <div className="flex items-center gap-2 text-[var(--cyber-yellow)]">
             <AlertCircle className="h-5 w-5" aria-hidden="true" />
             <span className="font-semibold">Delete Course?</span>
           </div>
@@ -203,7 +203,7 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
           <div
             className={cn(
               'h-full rounded-full transition-all duration-500 ease-out',
-              isCompleted ? 'bg-green-400' : 'bg-[#FFD400]'
+              isCompleted ? 'bg-green-400' : 'bg-[var(--cyber-yellow)]'
             )}
             style={{ width: `${progressPercent}%` }}
             data-testid="progress-bar-fill"

@@ -111,6 +111,9 @@
     --ring: 240 10% 3.9%;
 
     --radius: 0.75rem;
+
+    /* Cyber Yellow - adapts to theme for better contrast */
+    --cyber-yellow: #B38600; /* Darker amber for light mode */
   }
 
   .dark {
@@ -143,6 +146,9 @@
     --ring: 240 4.9% 83.9%;
 
     --radius: 0.75rem;
+
+    /* Cyber Yellow - bright yellow for dark mode */
+    --cyber-yellow: #FFD400;
   }
 }
 
@@ -161,7 +167,7 @@
 
   .dark .prose-invert :is(h1, h2, h3, h4, h5, h6, strong, b, a, code, .prose-bullets, li::marker) {
 
-    color: #FFD300 !important;
+    color: var(--cyber-yellow) !important;
 
   }
 

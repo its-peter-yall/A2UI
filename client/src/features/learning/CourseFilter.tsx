@@ -3,7 +3,7 @@
 
 // Provides pill-style status filter buttons (All, In Progress, Completed)
 // and a sort selector (Recent, Progress) for filtering
-// the course list. Active pill uses Cyber Yellow (#FFD400) styling.
+// the course list. Active pill uses Cyber Yellow styling (adapts to theme).
 // Accessible with role="tablist" and aria-selected on active pills.
 
 // @see: client/src/features/learning/LearningHome.tsx (parent)
@@ -59,7 +59,7 @@ export function CourseFilter({
                 'rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
                 'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
                 isActive
-                  ? 'bg-[#FFD400] text-gray-900 focus:ring-gray-900'
+                  ? 'bg-[var(--cyber-yellow)] text-gray-900 focus:ring-gray-900'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80 focus:ring-primary'
               )}
             >
@@ -89,7 +89,7 @@ export function CourseFilter({
                   'rounded-full px-3 py-1 text-xs font-medium transition-colors',
                   'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
                   isActive
-                    ? 'bg-[#FFD400] text-gray-900 focus:ring-gray-900'
+                    ? 'bg-[var(--cyber-yellow)] text-gray-900 focus:ring-gray-900'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80 focus:ring-primary'
                 )}
               >

@@ -49,7 +49,7 @@
  * - @/components/MessageBubble.tsx: Similar markdown rendering setup
  * 
  * NOTES:
- * - Cyber Yellow (#FFD400) is used for primary accents (headings, links, code)
+ * - Cyber Yellow is used for primary accents (headings, links, code) - adapts to theme
  * - Dark mode support via dark:prose-invert
  * - Tables and task lists supported via remark-gfm
  * - Code inline styling: bg-primary/10, px-1, rounded

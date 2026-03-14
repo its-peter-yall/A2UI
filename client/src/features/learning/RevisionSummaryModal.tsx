@@ -117,7 +117,7 @@ export function RevisionSummaryModal({
           {/* Header */}
           <div className="flex flex-col items-center gap-2 text-center">
             <Trophy
-              className="h-10 w-10 text-[#FFD400]"
+              className="h-10 w-10 text-[var(--cyber-yellow)]"
               aria-hidden="true"
               data-testid="celebration-icon"
             />
