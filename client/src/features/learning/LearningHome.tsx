@@ -103,7 +103,7 @@ export function LearningHome() {
 
   // Fetch unfiltered count to determine if dashboard should be shown
   // (separate from filtered results to handle empty filter states)
-  const { data: allCoursesData, isLoading: isAllCoursesLoading } = useCourseList({
+  const { data: allCoursesData, isLoading: isAllCoursesLoading, isError: isAllCoursesError } = useCourseList({
     status: 'all',
     limit: 1,
     offset: 0,
@@ -215,8 +215,8 @@ export function LearningHome() {
   // Derived state for rendering
   const hasAnyCourses = (allCoursesData?.total_count ?? 0) > 0;
   const hasFilteredCourses = totalCount > 0;
-  const isInitialLoad = (isLoading && offset === 0 && sessions.length === 0) || isAllCoursesLoading;
-  const showDashboard = hasAnyCourses || isAllCoursesLoading;
+  const isInitialLoad = (isLoading && offset === 0 && sessions.length === 0) || isAllCoursesLoading || isAllCoursesError;
+  const showDashboard = hasAnyCourses || isAllCoursesLoading || isAllCoursesError;
   const hasMore = latestResponse?.has_more ?? false;
   const shouldAutoFocusTopicInput = searchParams.get('new') === 'true';
 
