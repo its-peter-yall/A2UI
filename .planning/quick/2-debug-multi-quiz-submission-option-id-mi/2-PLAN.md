@@ -39,10 +39,10 @@ Output: Root cause identified and fixed, with passing validation for multi-quiz 
 </execution_context>
 
 <context>
-@D:/Peter/AURA Twin Proj/AgUI/server/agents/quizzer.py
-@D:/Peter/AURA Twin Proj/AgUI/server/database/learning_persistence.py
-@D:/Peter/AURA Twin Proj/AgUI/server/services/quiz_randomization.py
-@D:/Peter/AURA Twin Proj/AgUI/server/routers/learning.py
+@D:/Peter/AURA Twin Proj/A2UI/server/agents/quizzer.py
+@D:/Peter/AURA Twin Proj/A2UI/server/database/learning_persistence.py
+@D:/Peter/AURA Twin Proj/A2UI/server/services/quiz_randomization.py
+@D:/Peter/AURA Twin Proj/A2UI/server/routers/learning.py
 </context>
 
 <tasks>

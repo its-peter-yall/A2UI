@@ -1,6 +1,6 @@
 # Technology Stack: Dynamic Quiz Generation
 
-**Project:** AgUI v1.2 — Complexity-Aware Dynamic Quiz Generation
+**Project:** A2UI v1.2 — Complexity-Aware Dynamic Quiz Generation
 **Researched:** 2026-02-17
 **Scope:** Stack additions/changes ONLY for multi-quiz chain generation
 

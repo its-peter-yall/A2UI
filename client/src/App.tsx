@@ -6,7 +6,7 @@
  *
  * PURPOSE:
  *    Main application router component that defines client-side navigation
- *    routes for the AgUI learning platform.
+ *    routes for the A2UI learning platform.
  *
  * ROLE IN PROJECT:
  *    Top-level routing shell mounted by main.tsx inside QueryProvider.

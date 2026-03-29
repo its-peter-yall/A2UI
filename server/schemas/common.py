@@ -5,7 +5,7 @@ LOCATION: server/schemas/common.py
 ============================================================================
 PURPOSE:
     Provides reusable Pydantic v2 base classes and mixins for all domain
-    schemas in the AgUI backend. Establishes consistent field patterns
+    schemas in the A2UI backend. Establishes consistent field patterns
     across response models.
 ROLE IN PROJECT:
     Foundation layer for all Pydantic response schemas.

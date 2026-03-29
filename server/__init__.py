@@ -4,7 +4,7 @@ FILE: __init__.py
 LOCATION: server/__init__.py
 ============================================================================
 PURPOSE:
-    Package root for the AgUI backend server. Acts as the namespace package
+    Package root for the A2UI backend server. Acts as the namespace package
     containing FastAPI application, configuration, routers, services, utils,
     and database modules.
 ROLE IN PROJECT:

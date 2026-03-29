@@ -48,7 +48,9 @@ logger = logging.getLogger(__name__)
 
 # Auto-reload configuration
 AUTO_RELOAD = os.getenv("AUTO_RELOAD", "true").lower() in ("true", "1", "yes")
-RELOAD_DELAY = float(os.getenv("RELOAD_DELAY", "1.0"))  # seconds to wait before restarting
+RELOAD_DELAY = float(
+    os.getenv("RELOAD_DELAY", "1.0")
+)  # seconds to wait before restarting
 WATCH_PATHS = ["server"]
 IGNORE_PATTERNS = ["__pycache__", "*.pyc", ".git", "*.log", "*.db"]
 
@@ -59,7 +61,7 @@ async def lifespan(app: FastAPI):
     Lifecycle manager for the FastAPI app.
     Initializes database and Vertex AI connection on startup.
     """
-    logger.info("Starting AgUI Backend...")
+    logger.info("Starting A2UI Backend...")
 
     # Initialize database
     try:
@@ -89,10 +91,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down AgUI Backend...")
+    logger.info("Shutting down A2UI Backend...")
 
 
-app = FastAPI(title="AgUI Backend", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="A2UI Backend", version="1.0.0", lifespan=lifespan)
 
 # Configure CORS
 origins = [
@@ -111,7 +113,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "AgUI Backend is running"}
+    return {"message": "A2UI Backend is running"}
 
 
 @app.get("/health")
@@ -131,30 +133,30 @@ app.include_router(learning_router)
 
 class ReloaderHandler:
     """Simple file change handler that triggers a restart."""
-    
+
     def __init__(self):
         self.last_reload = time.time()
         self.should_reload = False
-    
+
     def on_any_event(self, event):
         """Handle any file system event."""
         if event.is_directory:
             return
-        
+
         # Only reload on Python file changes
-        if not event.src_path.endswith('.py'):
+        if not event.src_path.endswith(".py"):
             return
-        
+
         # Debounce: don't reload too frequently
         current_time = time.time()
         if current_time - self.last_reload < RELOAD_DELAY:
             return
-        
+
         # Ignore patterns
         for pattern in IGNORE_PATTERNS:
             if pattern in event.src_path:
                 return
-        
+
         logger.info(f"Detected change in: {event.src_path}")
         self.should_reload = True
         self.last_reload = current_time
@@ -165,30 +167,30 @@ def start_file_watcher():
     try:
         from watchdog.observers import Observer
         from watchdog.events import FileSystemEventHandler
-        
+
         class EventHandler(FileSystemEventHandler):
             def __init__(self, handler):
                 self.handler = handler
-            
+
             def on_modified(self, event):
                 self.handler.on_any_event(event)
-            
+
             def on_created(self, event):
                 self.handler.on_any_event(event)
-        
+
         handler = ReloaderHandler()
         event_handler = EventHandler(handler)
         observer = Observer()
-        
+
         # Get the project root (parent of server directory)
         project_root = Path(__file__).parent.parent
-        
+
         for watch_path in WATCH_PATHS:
             full_path = project_root / watch_path
             if full_path.exists():
                 observer.schedule(event_handler, str(full_path), recursive=True)
                 logger.info(f"Watching for changes in: {full_path}")
-        
+
         observer.start()
         return observer, handler
     except ImportError:
@@ -199,12 +201,13 @@ def start_file_watcher():
 def run_server():
     """Run the uvicorn server."""
     import uvicorn
+
     uvicorn.run(
         "server.main:app",
         host="0.0.0.0",
         port=8000,
         reload=False,  # We handle reloading ourselves
-        log_level="info"
+        log_level="info",
     )
 
 
@@ -214,61 +217,66 @@ def main():
         logger.info("Auto-reload disabled. Starting server...")
         run_server()
         return
-    
+
     logger.info("Auto-reload enabled. Starting server with file watcher...")
-    
+
     # Start file watcher
     observer, handler = start_file_watcher()
-    
+
     if observer is None:
-        logger.info("File watcher not available. Starting server without auto-reload...")
+        logger.info(
+            "File watcher not available. Starting server without auto-reload..."
+        )
         run_server()
         return
-    
+
     try:
         while True:
             # Start server in a subprocess
             logger.info("Starting server...")
             process = subprocess.Popen(
-                [sys.executable, "-c", 
-                 "from server.main import run_server; run_server()"],
+                [
+                    sys.executable,
+                    "-c",
+                    "from server.main import run_server; run_server()",
+                ],
                 cwd=Path(__file__).parent.parent,
-                env={**os.environ, "AUTO_RELOAD": "false"}  # Disable nested reloading
+                env={**os.environ, "AUTO_RELOAD": "false"},  # Disable nested reloading
             )
-            
+
             # Monitor for file changes
             while process.poll() is None:
                 time.sleep(0.5)
                 if handler and handler.should_reload:
                     logger.info("Code change detected. Restarting server...")
                     handler.should_reload = False
-                    
+
                     # Gracefully terminate the server
                     if sys.platform == "win32":
                         process.terminate()
                     else:
                         process.send_signal(signal.SIGTERM)
-                    
+
                     try:
                         process.wait(timeout=5)
                     except subprocess.TimeoutExpired:
                         logger.warning("Server didn't stop gracefully, forcing...")
                         process.kill()
-                    
+
                     break
-            
+
             # If server exited on its own (not due to reload), exit the loop
             if process.poll() is not None and not (handler and handler.should_reload):
                 exit_code = process.returncode
                 logger.info(f"Server exited with code {exit_code}")
                 break
-            
+
             # Wait a bit before restarting
             time.sleep(0.5)
-    
+
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Shutting down...")
-        if 'process' in locals() and process.poll() is None:
+        if "process" in locals() and process.poll() is None:
             process.terminate()
             try:
                 process.wait(timeout=5)

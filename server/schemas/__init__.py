@@ -4,7 +4,7 @@ FILE: __init__.py
 LOCATION: server/schemas/__init__.py
 ============================================================================
 PURPOSE:
-    Public API surface for the AgUI schema models module. Exports commonly
+    Public API surface for the A2UI schema models module. Exports commonly
     used schemas and mixins for consumption by routers, services, and
     external modules.
 ROLE IN PROJECT:

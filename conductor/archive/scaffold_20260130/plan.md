@@ -1,7 +1,7 @@
 # Plan: Project Scaffolding & Configuration
 
 ## Phase 1: Client Initialization (Atomic) [checkpoint: d235d85]
-- [x] Task: Run `npm create vite@latest client -- --template react-ts` in `AgUI/` (4c53d3c)
+- [x] Task: Run `npm create vite@latest client -- --template react-ts` in `A2UI/` (4c53d3c)
 - [x] Task: Install core dependencies: `npm install -D tailwindcss postcss autoprefixer` and `npm install lucide-react @tanstack/react-query react-router-dom clsx tailwind-merge` (1d7089b)
 - [x] Task: Initialize Tailwind: Run `npx tailwindcss init -p` (0351e5e)
 - [x] Task: Configure `vite.config.ts` to set up `@` alias for path resolution (bbe55d4)
@@ -15,7 +15,7 @@
 - [x] Task: Conductor - User Manual Verification 'Client Styling & Assets' (Protocol in workflow.md) (898ac32)
 
 ## Phase 3: Server Initialization (Atomic) [checkpoint: f5c693c]
-- [x] Task: Create `AgUI/server` directory and `requirements.txt` with `fastapi`, `uvicorn`, `google-cloud-aiplatform`, `python-dotenv`, `pydantic` (060ead9)
+- [x] Task: Create `A2UI/server` directory and `requirements.txt` with `fastapi`, `uvicorn`, `google-cloud-aiplatform`, `python-dotenv`, `pydantic` (060ead9)
 - [x] Task: Create and initialize Python virtual environment `.venv` in `server/` (060ead9)
 - [x] Task: Create `server/main.py` with basic FastAPI app instance and CORS middleware (5f3d07b)
 - [x] Task: Create `server/config.py` for environment variable loading (`GOOGLE_APPLICATION_CREDENTIALS`, `PROJECT_ID`) (5d66755)

@@ -2,7 +2,7 @@
 
 ## Vision Statement
 
-Extend AgUI's retrieval-based learning system with **persistent course management**
+Extend A2UI's retrieval-based learning system with **persistent course management**
 and **revision capabilities**, transforming it from a single-session learning tool into
 a full **personal learning dashboard** where users can track, pause, resume, and
 revisit their learning journeys over time.

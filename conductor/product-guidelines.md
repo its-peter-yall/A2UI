@@ -1,7 +1,7 @@
 # Product Guidelines
 
 ## 1. Visual Identity & Aesthetic
-- **Inherited Design:** `AgUI` strictly follows the design language of `AURA-CHAT`.
+- **Inherited Design:** `A2UI` strictly follows the design language of `AURA-CHAT`.
 - **Primary Colors:**
     - **Cyber Yellow (`#FFD400`):** Used for primary actions, accents, and brand elements.
     - **Dark Backgrounds:** Deep grays and blacks for the main UI to reduce eye strain during long research sessions.

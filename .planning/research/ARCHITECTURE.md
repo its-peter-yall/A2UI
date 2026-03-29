@@ -379,5 +379,5 @@ Generating 5 quizzes in a single LLM call takes ~2-4x longer than generating 1. 
 - `.planning/codebase/features/dynamic-quiz-generation.md` — Feature specification (HIGH confidence)
 
 ---
-*Architecture research for: Dynamic Quiz Generation in AgUI Adaptive Learning*
+*Architecture research for: Dynamic Quiz Generation in A2UI Adaptive Learning*
 *Researched: 2026-02-17*

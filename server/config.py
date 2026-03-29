@@ -4,7 +4,7 @@ FILE: config.py
 LOCATION: server/config.py
 ============================================================================
 PURPOSE:
-    Centralized environment configuration management for the AgUI backend.
+    Centralized environment configuration management for the A2UI backend.
     Loads settings from .env and provides a Settings class with validated
     Google Cloud and application configuration values.
 ROLE IN PROJECT:

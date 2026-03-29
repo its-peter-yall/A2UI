@@ -1,4 +1,4 @@
-# AgUI Agent Guide
+# A2UI Agent Guide
 
 This file orients agentic coding assistants working in this repo.
 Follow the commands and style rules below; match local patterns when editing.
@@ -58,7 +58,7 @@ Testing: `unittest` (stdlib)
 
 ## Build, Lint, and Test
 
-### Client (AgUI/client)
+### Client (A2UI/client)
 ```bash
 cd client
 npm install          # Install deps
@@ -71,7 +71,7 @@ npm run test -- -t "QueryProvider"     # Test name filter
 npm run test -- --coverage             # Coverage report (requires @vitest/coverage-v8)
 ```
 
-### Server (AgUI/server)
+### Server (A2UI/server)
 ```bash
 cd server
 python -m venv .venv

@@ -1,10 +1,10 @@
 # Spec: Project Scaffolding & Configuration
 
 ## Overview
-Initialize the `AgUI` standalone chat application structure, mirroring the technical foundation of `AURA-CHAT` but optimized for a lightweight, RAG-less experience.
+Initialize the `A2UI` standalone chat application structure, mirroring the technical foundation of `AURA-CHAT` but optimized for a lightweight, RAG-less experience.
 
 ## Objectives
-- Create a clean `AgUI/` directory with `client/` (React) and `server/` (FastAPI).
+- Create a clean `A2UI/` directory with `client/` (React) and `server/` (FastAPI).
 - Configure the frontend with Vite, Tailwind CSS, and shared UI patterns from `AURA-CHAT`.
 - Initialize the backend with Vertex AI SDK configuration and basic health check.
 

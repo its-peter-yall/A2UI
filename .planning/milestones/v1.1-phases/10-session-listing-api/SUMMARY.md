@@ -28,7 +28,7 @@
   Result: **196 tests passed, 1 skipped**
 
 ## Deviations
-- Plan verification commands were executed from repo root (`AgUI`) so Python
+- Plan verification commands were executed from repo root (`A2UI`) so Python
   module imports (`server.*`) resolve correctly in this environment.
 
 ## Blockers / Questions

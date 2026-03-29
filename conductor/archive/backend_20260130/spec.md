@@ -1,7 +1,7 @@
 # Spec: Backend Session Management & Chat API
 
 ## Overview
-Implement the core business logic for `AgUI`: session persistence, message history management, and the direct integration with Google Vertex AI for chat responses.
+Implement the core business logic for `A2UI`: session persistence, message history management, and the direct integration with Google Vertex AI for chat responses.
 
 ## Objectives
 - Create a lightweight persistence layer (using local JSON or SQLite) to store Sessions and Messages.

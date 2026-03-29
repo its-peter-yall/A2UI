@@ -31,7 +31,7 @@ must_haves:
 ---
 
 <objective>
-Implement a dark/light mode toggle for the AgUI project, allowing users to switch between a light theme, a dark theme, and a system-default theme. The preference will be persisted in localStorage.
+Implement a dark/light mode toggle for the A2UI project, allowing users to switch between a light theme, a dark theme, and a system-default theme. The preference will be persisted in localStorage.
 
 Purpose: Provide a comfortable viewing experience for users in different lighting conditions while ensuring the Cyber Yellow accent remains accessible.
 Output: Working theme toggle across the application with persistent preference and correct system theme synchronization.

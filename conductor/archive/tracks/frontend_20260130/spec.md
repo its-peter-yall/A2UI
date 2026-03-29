@@ -1,10 +1,10 @@
 # Spec: Frontend UI Port & Cleanup
 
 ## Overview
-Reconstruct the `AURA-CHAT` user interface within `AgUI`, preserving the visual fidelity and session management UX while stripping out all RAG/Graph components.
+Reconstruct the `AURA-CHAT` user interface within `A2UI`, preserving the visual fidelity and session management UX while stripping out all RAG/Graph components.
 
 ## Objectives
-- Implement a typed API client to communicate with the `AgUI` backend.
+- Implement a typed API client to communicate with the `A2UI` backend.
 - Port `MessageBubble` and `SessionSidebar` components, removing citation/module references.
 - Implement the `ChatPage` as the main application view.
 - Ensure the UI is fully functional (send messages, switch sessions, "thinking" visualization).

@@ -220,7 +220,7 @@ export function LearningHome() {
               'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1'
             )}
           >
-            AgUI
+            A2UI
           </Link>
           <nav className="flex items-center gap-4" aria-label="Main navigation">
             <Link

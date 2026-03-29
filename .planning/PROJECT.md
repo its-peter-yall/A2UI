@@ -1,8 +1,8 @@
-# AgUI
+# A2UI
 
 ## What This Is
 
-AgUI is an AI-powered adaptive learning platform that transforms complex topics into structured, sequential learning paths with mastery-based progression. Users submit a topic, receive AI-generated courses with explanations and quizzes, and must pass assessments to unlock subsequent content. The platform supports course persistence, progress dashboards, and revision sessions.
+A2UI is an AI-powered adaptive learning platform that transforms complex topics into structured, sequential learning paths with mastery-based progression. Users submit a topic, receive AI-generated courses with explanations and quizzes, and must pass assessments to unlock subsequent content. The platform supports course persistence, progress dashboards, and revision sessions.
 
 ## Core Value
 

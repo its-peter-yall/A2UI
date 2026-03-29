@@ -4,7 +4,7 @@
  * ============================================================================
  * 
  * PURPOSE:
- * Vite build configuration for the AgUI React application. Defines the React
+ * Vite build configuration for the A2UI React application. Defines the React
  * plugin, Tailwind CSS integration, path aliases for cleaner imports, and
  * Vitest configuration for unit testing with jsdom environment. This is the
  * central configuration file for both development builds and test execution.

@@ -73,7 +73,7 @@ Implemented the foundational retrieval-based learning system with AI-generated c
 **Brief**: `.planning/BRIEF-v1.1.md`  
 
 **Summary**:  
-Extended AgUI into a personal learning dashboard with course persistence, progress tracking, resume functionality, and revision capabilities including quiz re-attendance.
+Extended A2UI into a personal learning dashboard with course persistence, progress tracking, resume functionality, and revision capabilities including quiz re-attendance.
 
 ### Phases (7 total)
 

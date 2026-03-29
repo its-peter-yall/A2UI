@@ -10,7 +10,7 @@ PURPOSE:
     server package imports instead of relative path insertion.
 ROLE IN PROJECT:
     Alternate entry point for shuffle validation when running from the
-    AgUI project root rather than the server/ directory.
+    A2UI project root rather than the server/ directory.
     - Validates CSPRNG shuffle balance over 100 iterations
     - Confirms deterministic seed-based replay consistency
 KEY COMPONENTS:
@@ -21,7 +21,7 @@ DEPENDENCIES:
     - External: uuid
     - Internal: server.schemas.learning, server.services.quiz_randomization
 USAGE:
-    python server/test_shuffle_manual.py  (run from AgUI/ root directory)
+    python server/test_shuffle_manual.py  (run from A2UI/ root directory)
 ============================================================================
 """
 

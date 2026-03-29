@@ -2,13 +2,13 @@
 
 ## Vision Statement
 
-Transform AgUI from a basic chat application into an **Agent-Generated User Interface (AgUI)** that implements **retrieval-based learning** - a pedagogical approach where active recall (testing) strengthens learning more effectively than passive review.
+Transform A2UI from a basic chat application into an **Agent-Generated User Interface (A2UI)** that implements **retrieval-based learning** - a pedagogical approach where active recall (testing) strengthens learning more effectively than passive review.
 
 The system decomposes complex user queries (e.g., "Newtonian Laws") into structured, sequential learning paths with gated progression, where users must pass quizzes to unlock subsequent content.
 
 ## Core Problem
 
-Current AgUI is a passive chat interface. Users consume information without active engagement. Research shows retrieval practice strengthens neural pathways more effectively than passive review. We need to operationalize this principle through AI-driven adaptive learning.
+Current A2UI is a passive chat interface. Users consume information without active engagement. Research shows retrieval practice strengthens neural pathways more effectively than passive review. We need to operationalize this principle through AI-driven adaptive learning.
 
 ## Solution Architecture
 

@@ -340,7 +340,7 @@ ConceptCard header — render complexity badge
 ## Sources
 
 ### Primary (HIGH confidence)
-- Codebase investigation: All source files read directly from `d:/Peter/AURA Twin Proj/AgUI/`
+- Codebase investigation: All source files read directly from `d:/Peter/AURA Twin Proj/A2UI/`
 - `server/routers/learning.py` lines 851-862: Server auto-advances quiz_set current_index
 - `server/database/learning_persistence.py` line 2122: `update_quiz_set_progress` method
 - `client/src/features/learning/ConceptCard.tsx` lines 272-276: Existing "Quiz X of Y" code

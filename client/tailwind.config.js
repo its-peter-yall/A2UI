@@ -4,7 +4,7 @@
  * ============================================================================
  * 
  * PURPOSE:
- * Configures Tailwind CSS for the AgUI client application. Defines content
+ * Configures Tailwind CSS for the A2UI client application. Defines content
  * scanning paths and enables the typography plugin for prose/styled content.
  * 
  * KEY COMPONENTS:

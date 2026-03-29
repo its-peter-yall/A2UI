@@ -1,13 +1,13 @@
 # Project Research Summary
 
-**Project:** AgUI v1.2 — Complexity-Aware Dynamic Quiz Generation
+**Project:** A2UI v1.2 — Complexity-Aware Dynamic Quiz Generation
 **Domain:** Adaptive Learning — Multi-Quiz Assessment with Difficulty Gradients
 **Researched:** 2026-02-17
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This is a **feature extension milestone**, not a greenfield build. The existing AgUI adaptive learning system already has the foundational infrastructure for multi-quiz assessment — `QuizSet` schemas, multi-quiz mastery logic, quiz progression tracking, and frontend rendering — all built speculatively in v1.0/v1.1 but never activated with real multi-quiz data. The v1.2 milestone's job is to wire up the Planner (complexity classification + quiz_count assignment), modify the Quizzer (batch generation with difficulty gradients), and update the Orchestrator (pass quiz_count, store QuizSet). **No new dependencies are needed.** The entire stack (Pydantic v2, Instructor, Gemini Flash, SQLite, React 19) already supports every required capability.
+This is a **feature extension milestone**, not a greenfield build. The existing A2UI adaptive learning system already has the foundational infrastructure for multi-quiz assessment — `QuizSet` schemas, multi-quiz mastery logic, quiz progression tracking, and frontend rendering — all built speculatively in v1.0/v1.1 but never activated with real multi-quiz data. The v1.2 milestone's job is to wire up the Planner (complexity classification + quiz_count assignment), modify the Quizzer (batch generation with difficulty gradients), and update the Orchestrator (pass quiz_count, store QuizSet). **No new dependencies are needed.** The entire stack (Pydantic v2, Instructor, Gemini Flash, SQLite, React 19) already supports every required capability.
 
 The recommended approach is a **4-file backend modification** (TopicNode schema, Planner prompt, Quizzer agent, Orchestrator wiring) followed by frontend verification. The architecture change is minimal: the Quizzer's return type shifts from `QuizCard` to `QuizSet`, and the Orchestrator reads `topic.quiz_count` to parameterize generation. All changes are backward-compatible through optional fields with defaults. The pedagogical model is well-established — Bloom's taxonomy progression (Recall → Application → Synthesis) maps directly to the difficulty gradient, and mastery learning (all quizzes must pass) is already implemented.
 

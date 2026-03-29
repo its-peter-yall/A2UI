@@ -1,8 +1,8 @@
-# AgUI - Agentic UI
+# A2UI - Agentic UI
 
 A modern, session-based chat interface for direct interaction with Google's Gemini AI models via Vertex AI.
 
-AgUI (Agentic UI) is a lightweight, standalone "Pure Chat" application designed for researchers and students who need a reliable, distraction-free interface for AI interaction. It serves as a reference implementation for Vertex AI integration using React and FastAPI.
+A2UI (Agentic UI) is a lightweight, standalone "Pure Chat" application designed for researchers and students who need a reliable, distraction-free interface for AI interaction. It serves as a reference implementation for Vertex AI integration using React and FastAPI.
 ## Features
 
 - **Session Management** - Create, list, rename, pin, and delete chat sessions
@@ -39,7 +39,7 @@ AgUI (Agentic UI) is a lightweight, standalone "Pure Chat" application designed 
 ## Project Structure
 
 ```
-AgUI/
+A2UI/
 ├── client/                      # Frontend (React + TypeScript)
 │   ├── src/
 │   │   ├── main.tsx            # Entry point
@@ -83,7 +83,7 @@ AgUI/
 
 ```bash
 git clone <repository-url>
-cd AgUI
+cd A2UI
 ```
 
 ### 2. Backend Setup
@@ -372,7 +372,7 @@ Error: Could not automatically determine credentials
 
 **3. Database Locked Error**
 
-**Solution**: Ensure only one instance of the backend is running. The SQLite database file is located at `server/data/agui.db`.
+**Solution**: Ensure only one instance of the backend is running. The SQLite database file is located at `server/data/a2ui.db`.
 
 **4. Port Already in Use**
 

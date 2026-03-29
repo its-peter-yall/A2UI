@@ -5,7 +5,7 @@
  * ============================================================================
  *
  * PURPOSE:
- *    React application entry point that bootstraps the entire AgUI application.
+ *    React application entry point that bootstraps the entire A2UI application.
  *
  * ROLE IN PROJECT:
  *    Initializes the React DOM tree, applies StrictMode, and wraps the root

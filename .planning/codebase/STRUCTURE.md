@@ -5,7 +5,7 @@
 ## Directory Layout
 
 ```
-AgUI/
+A2UI/
 ├── client/                    # React 19 + TypeScript frontend
 │   ├── src/
 │   │   ├── features/          # Feature-based module organization
