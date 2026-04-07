@@ -1,40 +1,62 @@
-# A2UI - Agentic UI
+# A2UI - Agent-Generated User Interface
 
-A modern, session-based chat interface for direct interaction with Google's Gemini AI models via Vertex AI.
+A modern adaptive learning platform that transforms user-submitted topics into structured, AI-generated courses with mastery-based progression. Built with React 19, FastAPI, and Google Vertex AI.
 
-A2UI (Agentic UI) is a lightweight, standalone "Pure Chat" application designed for researchers and students who need a reliable, distraction-free interface for AI interaction. It serves as a reference implementation for Vertex AI integration using React and FastAPI.
-## Features
+## What This Is
 
-- **Session Management** - Create, list, rename, pin, and delete chat sessions
-- **Persistent Chat History** - All messages stored in SQLite database
-- **Markdown Rendering** - Full markdown support with syntax highlighting
-- **Thinking Mode Visualization** - Display model's reasoning process when available
-- **Responsive Design** - Mobile-friendly with collapsible sidebar
-- **Dark Theme** - Optimized for long sessions with "Cyber Yellow" accent
+A2UI implements **retrieval-based learning** - a pedagogical approach where active recall through testing strengthens learning more effectively than passive review. Users submit a topic, receive AI-generated sequential learning paths with explanations and quizzes, and must pass assessments to unlock subsequent content.
+
+## Core Features
+
+### Adaptive Learning System
+- **Multi-Agent AI Pipeline**: Planner, Generator, and Quizzer agents orchestrated via Scatter-Gather pattern
+- **Sequential Learning Paths**: Topics decomposed into ordered concept nodes with narrative coherence
+- **Mastery-Based Progression**: Server-enforced state machine (LOCKED → VIEWING_EXPLANATION → IN_QUIZ → COMPLETED)
+- **Dynamic Quiz Generation**: 1-5 quizzes per topic based on complexity with difficulty gradients (Recall → Application → Synthesis)
+- **Course Persistence**: SQLite-backed storage with progress tracking and session resumption
+- **Revision Sessions**: Full review and quiz-only modes with performance comparison
+
+### User Experience
+- **Framer Motion Animations**: Gamified unlock experiences and smooth transitions
+- **Dark Theme**: Optimized for long study sessions with Cyber Yellow accents
+- **Responsive Design**: Mobile-friendly with collapsible navigation
+- **Real-time Generation**: Skeleton loaders provide <15s perceived latency
+
+### Chat Foundation
+- **Session Management**: Create, list, rename, pin, and delete chat sessions
+- **Persistent History**: All messages stored in SQLite database
+- **Markdown Rendering**: Full markdown support with syntax highlighting
+- **Thinking Mode**: Display model's reasoning process when available
 
 ## Tech Stack
 
 ### Frontend
 | Technology | Purpose |
 |------------|---------|
-| React 19 | UI framework |
-| TypeScript 5.9 | Type safety |
+| React 19 | UI framework with latest features |
+| TypeScript 5.9 | Type safety with strict mode |
 | Vite 7 | Build tool & dev server |
-| Tailwind CSS 4 | Styling |
-| TanStack Query 5 | Server state management |
-| Axios | HTTP client |
+| Tailwind CSS 4.x | Utility-first styling |
+| TanStack Query 5 | Server state management & caching |
+| Framer Motion | Animation library |
 | React Markdown | Markdown rendering |
-| Lucide React | Icons |
-| Vitest | Testing |
 
 ### Backend
 | Technology | Purpose |
 |------------|---------|
-| FastAPI | Web framework |
-| Uvicorn | ASGI server |
-| Pydantic v2 | Data validation |
+| FastAPI | Web framework with automatic docs |
+| Python 3.10+ | Server language |
+| Pydantic v2 | Data validation & serialization |
 | SQLite | Data persistence |
-| Vertex AI SDK | Google AI integration |
+| Google Vertex AI | Gemini models for AI generation |
+| Instructor | Structured LLM output validation |
+| Tenacity | Retry logic with exponential backoff |
+
+### AI/ML Architecture
+- **Planner Agent** (Gemini 1.5 Pro): Decomposes topics into structured course outlines
+- **Generator Agent** (Gemini 1.5 Flash): Creates educational content using 5E model
+- **Quizzer Agent** (Gemini 1.5 Flash): Generates assessments with plausible distractors
+- **Scatter-Gather Pattern**: Parallel generation with partial failure handling
 
 ## Project Structure
 
@@ -45,7 +67,9 @@ A2UI/
 │   │   ├── main.tsx            # Entry point
 │   │   ├── App.tsx             # Root component
 │   │   ├── components/         # Reusable UI components
-│   │   ├── features/chat/      # Chat feature module
+│   │   ├── features/
+│   │   │   ├── chat/          # Chat feature module
+│   │   │   └── learning/      # Learning system components
 │   │   ├── hooks/              # Custom React hooks
 │   │   ├── lib/                # Utilities and API client
 │   │   ├── providers/          # Context providers
@@ -55,39 +79,42 @@ A2UI/
 ├── server/                      # Backend (FastAPI + Python)
 │   ├── main.py                 # FastAPI app entry point
 │   ├── config.py               # Environment configuration
-│   ├── routers/                # API route handlers
+│   ├── routers/
+│   │   └── learning.py        # Learning API routes
 │   ├── schemas/                # Pydantic models
+│   ├── services/               # Business logic
+│   │   └── course_orchestrator.py
+│   ├── agents/                 # AI agent implementations
+│   │   ├── base.py
+│   │   ├── planner.py
+│   │   ├── generator.py
+│   │   └── quizzer.py
 │   ├── database/               # SQLite persistence layer
-│   ├── utils/                  # Vertex AI client
-│   └── tests/                  # Unit tests
+│   └── utils/                  # Vertex AI client wrappers
 │
-├── conductor/                   # Project documentation
-│   ├── product.md              # Product definition
-│   ├── tech-stack.md           # Technology decisions
-│   └── code_styleguides/       # Code style guides
-│
-├── AGENTS.md                    # AI agent instructions
+├── conductor/                   # Product documentation
+├── .planning/                   # Development planning
+│   ├── codebase/              # Architecture docs
+│   ├── phases/                # Implementation phases
+│   └── ROADMAP.md            # Feature roadmap
 └── run.bat                      # Windows startup script
 ```
 
-## Prerequisites
+## Installation
 
+### Prerequisites
 - **Node.js 18+** (for frontend)
 - **Python 3.10+** (for backend)
 - **Google Cloud Project** with Vertex AI API enabled
 - **Service Account** with Vertex AI User permissions
 
-## Installation
-
 ### 1. Clone the Repository
-
 ```bash
 git clone <repository-url>
 cd A2UI
 ```
 
 ### 2. Backend Setup
-
 ```bash
 cd server
 
@@ -105,7 +132,6 @@ pip install -r requirements.txt
 ```
 
 ### 3. Frontend Setup
-
 ```bash
 cd client
 
@@ -178,58 +204,26 @@ npm run dev
 | API Documentation | http://localhost:8000/docs |
 | Health Check | http://localhost:8000/health |
 
-## API Reference
+## Application Routes
 
-### Health & Status
+### Frontend Routes
+- `/` or `/chat` - Main chat interface
+- `/learn` - Learning dashboard with course list
+- `/learn/:sessionId` - Active learning session
+- `/learn/:sessionId/revise/:revisionId` - Revision session
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/` | Root endpoint - confirms API is running |
-| `GET` | `/health` | Health check with Vertex AI status |
-
-### Sessions
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/sessions` | Create a new session |
-| `GET` | `/sessions` | List all sessions (`limit`, `offset` supported) |
-| `GET` | `/sessions/{id}` | Get session with message history |
-| `PATCH` | `/sessions/{id}` | Update session title/pin status |
-| `DELETE` | `/sessions/{id}` | Delete session and all messages |
-| `GET` | `/sessions/{id}/messages` | Get session messages |
-
-### Chat
+### API Endpoints (Learning System)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/chat` | Send message and get AI response |
-
-#### Chat Request
-
-```json
-{
-  "session_id": "string (optional - creates new if omitted)",
-  "message": "string (required)",
-  "model": "string (default: gemini-2.0-flash-001)"
-}
-```
-
-#### Chat Response
-
-```json
-{
-  "session_id": "string",
-  "message": {
-    "id": "string",
-    "session_id": "string",
-    "role": "model",
-    "content": "string",
-    "thinking_content": "string | null",
-    "timestamp": "ISO 8601 string"
-  },
-  "thinking_content": "string | null"
-}
-```
+| `POST` | `/learning/generate` | Create new course from topic |
+| `GET` | `/learning/sessions` | List learning sessions |
+| `GET` | `/learning/sessions/{id}` | Get session with nodes |
+| `GET` | `/learning/sessions/{id}/progress` | Get progress summary |
+| `GET` | `/learning/nodes/{id}` | Get concept node |
+| `POST` | `/learning/nodes/{id}/submit-quiz` | Submit quiz answer |
+| `POST` | `/learning/nodes/{id}/retry-quiz` | Retry failed quiz |
+| `POST` | `/learning/nodes/{id}/regenerate` | Regenerate failed content |
 
 ## Development
 
@@ -257,71 +251,12 @@ python -m uvicorn server.main:app --reload --port 8000
 python -m unittest
 
 # Run specific test module
-python -m unittest server.tests.test_chat
-
-# Run specific test case
-python -m unittest server.tests.test_chat.ChatSessionTests.test_valid_chat_request
+python -m unittest server.tests.test_learning
 ```
-
-### Code Style
-
-This project follows strict code style guidelines:
-
-- **TypeScript**: Strict mode enabled, no `any` types
-- **Python**: PEP 8 compliant, type hints required for public APIs
-- **CSS**: Tailwind CSS with custom design tokens
-
-See `conductor/code_styleguides/` for detailed guidelines.
-
-## Data Models
-
-### Session
-
-```typescript
-interface Session {
-  id: string;              // UUID
-  title: string;           // 1-200 characters
-  is_pinned: boolean;
-  created_at: string;      // ISO 8601
-  updated_at: string;      // ISO 8601
-  message_count: number;
-}
-```
-
-### Message
-
-```typescript
-interface Message {
-  id: string;              // UUID
-  session_id: string;      // UUID
-  role: 'user' | 'model';
-  content: string;
-  thinking_content: string | null;
-  timestamp: string;       // ISO 8601
-}
-```
-
-## Design System
-
-### Colors
-
-| Name | Value | Usage |
-|------|-------|-------|
-| Primary (Cyber Yellow) | `#FFD400` | Accent, buttons, highlights |
-| Background | `hsl(240, 10%, 3.9%)` | Main background |
-| Foreground | `hsl(0, 0%, 98%)` | Text |
-
-### Typography
-
-| Type | Font |
-|------|------|
-| Primary | Inter |
-| Code | JetBrains Mono |
 
 ## Testing
 
 ### Frontend Testing
-
 Tests use Vitest and React Testing Library:
 
 ```bash
@@ -334,11 +269,10 @@ npm run test
 npm run test -- src/lib/api.test.ts
 
 # Run tests matching pattern
-npm run test -- -t "QueryProvider"
+npm run test -- -t "LearningPage"
 ```
 
 ### Backend Testing
-
 Tests use Python's unittest framework:
 
 ```bash
@@ -348,67 +282,48 @@ cd server
 python -m unittest
 
 # Run specific module
-python -m unittest server.tests.test_sessions
+python -m unittest server.tests.test_orchestrator
 
 # Run specific test
-python -m unittest server.tests.test_sessions.SessionTests.test_create_session
+python -m unittest server.tests.test_learning.TestLearningSessions.test_create_session
 ```
 
-## Troubleshooting
+## Design System
 
-### Common Issues
+### Colors
+| Name | Value | Usage |
+|------|-------|-------|
+| Primary (Cyber Yellow) | `#FFD400` | Accent, buttons, highlights |
+| Background | `hsl(240, 10%, 3.9%)` | Main background |
+| Foreground | `hsl(0, 0%, 98%)` | Text |
 
-**1. Vertex AI Authentication Error**
-
-```
-Error: Could not automatically determine credentials
-```
-
-**Solution**: Ensure `GOOGLE_APPLICATION_CREDENTIALS` points to a valid service account JSON file with Vertex AI permissions.
-
-**2. CORS Errors**
-
-**Solution**: The backend is configured to allow `http://localhost:5173`. If using a different port, update `server/main.py`.
-
-**3. Database Locked Error**
-
-**Solution**: Ensure only one instance of the backend is running. The SQLite database file is located at `server/data/a2ui.db`.
-
-**4. Port Already in Use**
-
-```bash
-# Find process using port (Windows)
-netstat -ano | findstr :8000
-
-# Find process using port (macOS/Linux)
-lsof -i :8000
-```
+### Typography
+| Type | Font |
+|------|------|
+| Primary | Inter |
+| Code | JetBrains Mono |
 
 ## Limitations
 
 - **No Authentication** - Currently uses a placeholder user
-- **No RAG** - Designed for direct AI interaction without document retrieval
+- **No RAG** - Designed for AI-generated content without document retrieval
 - **Local Database** - SQLite for simplicity; not suitable for multi-user deployment
-- **Vertex AI Required** - Requires Google Cloud credentials for AI responses
-
-## Documentation
-
-Additional documentation is available in the `conductor/` directory:
-
-| File | Description |
-|------|-------------|
-| `product.md` | Product definition and vision |
-| `product-guidelines.md` | UX/UI standards |
-| `tech-stack.md` | Technology decisions |
-| `workflow.md` | Development workflow |
-| `code_styleguides/` | Language-specific style guides |
+- **Vertex AI Required** - Requires Google Cloud credentials for AI features
 
 ## Contributing
 
-1. Follow the code style guidelines in `conductor/code_styleguides/`
-2. Write tests for new functionality
+1. Follow the code style guidelines in `.planning/codebase/CONVENTIONS.md`
+2. Write tests for new functionality (target >80% coverage)
 3. Run linting and tests before committing
-4. Use conventional commit messages
+4. Update relevant documentation
+
+## Documentation
+
+Additional documentation available in:
+- `.planning/codebase/ARCHITECTURE.md` - Technical architecture
+- `.planning/PROJECT.md` - Project scope and requirements
+- `.planning/ROADMAP.md` - Feature roadmap and milestones
+- `conductor/product-guidelines.md` - UX/UI standards
 
 ## License
 
@@ -416,4 +331,4 @@ Additional documentation is available in the `conductor/` directory:
 
 ---
 
-Built with React, FastAPI, and Vertex AI
+Built with React, FastAPI, Vertex AI, and multi-agent orchestration

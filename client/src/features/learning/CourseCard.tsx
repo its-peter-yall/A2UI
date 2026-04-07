@@ -133,7 +133,7 @@ export function CourseCard({ session, onResume, onRevise, onViewRevision, onDele
           className={cn(
             'absolute top-3 right-3 p-2 rounded-lg',
             'bg-background/80 backdrop-blur-sm',
-            'text-muted-foreground hover:text-[var(--cyber-yellow)]',
+            'text-muted-foreground hover:text-red-500',
             'opacity-0 group-hover:opacity-100',
             'transition-all duration-200',
             'focus:outline-none focus:ring-2 focus:ring-[var(--cyber-yellow)] focus:ring-offset-2 focus:ring-offset-background'
