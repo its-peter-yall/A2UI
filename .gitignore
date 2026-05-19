@@ -67,3 +67,8 @@ coverage/
 *.pem
 .eslintcache
 .stylelintcache
+
+# Local workspace artifacts
+.kilo/
+A2UI.mp4
+server/data/a2ui.db
