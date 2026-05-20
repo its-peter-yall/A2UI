@@ -60,7 +60,7 @@
 **Utility Layer (Server):**
 - Purpose: External service integrations and shared utilities
 - Location: `server/utils/`
-- Contains: `InstructorClient` (Vertex AI wrapper), `VertexClient` (SDK init)
+- Contains: `InstructorClient` (OpenRouter wrapper)
 - Depends on: Google Cloud SDK, Instructor library
 - Used by: Agent layer, Main application
 
@@ -130,7 +130,7 @@
   - Revision session tracking
 
 **InstructorClient:**
-- Purpose: Structured output generation with Vertex AI Gemini models
+- Purpose: Structured output generation with OpenRouter models
 - Location: `server/utils/instructor_client.py`
 - Pattern: Singleton with role-based configuration
 - Responsibilities:
@@ -147,7 +147,7 @@
   - FastAPI app initialization with CORS
   - Lifespan context manager for startup/shutdown
   - Database initialization (`learning_manager.init_learning_tables()`)
-  - Vertex AI SDK initialization
+  - OpenRouter client initialization
   - InstructorClient initialization
   - Router registration (`app.include_router(learning_router)`)
 

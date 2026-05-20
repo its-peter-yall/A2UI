@@ -1,6 +1,6 @@
 # A2UI - Agent-Generated User Interface
 
-A modern adaptive learning platform that transforms user-submitted topics into structured, AI-generated courses with mastery-based progression. Built with React 19, FastAPI, and Google Vertex AI.
+A modern adaptive learning platform that transforms user-submitted topics into structured, AI-generated courses with mastery-based progression. Built with React 19, FastAPI, and OpenRouter for universal LLM access.
 
 ## What This Is
 
@@ -48,15 +48,17 @@ A2UI implements **retrieval-based learning** - a pedagogical approach where acti
 | Python 3.10+ | Server language |
 | Pydantic v2 | Data validation & serialization |
 | SQLite | Data persistence |
-| Google Vertex AI | Gemini models for AI generation |
+| OpenRouter | Universal LLM gateway (300+ models) |
 | Instructor | Structured LLM output validation |
+| OpenAI SDK | OpenRouter-compatible HTTP client |
 | Tenacity | Retry logic with exponential backoff |
 
 ### AI/ML Architecture
-- **Planner Agent** (Gemini 1.5 Pro): Decomposes topics into structured course outlines
-- **Generator Agent** (Gemini 1.5 Flash): Creates educational content using 5E model
-- **Quizzer Agent** (Gemini 1.5 Flash): Generates assessments with plausible distractors
+- **Planner Agent** (Gemini 2.5 Pro via OpenRouter): Decomposes topics into structured course outlines
+- **Generator Agent** (Gemini 2.5 Flash via OpenRouter): Creates educational content using 5E model
+- **Quizzer Agent** (Gemini 2.5 Flash via OpenRouter): Generates assessments with plausible distractors
 - **Scatter-Gather Pattern**: Parallel generation with partial failure handling
+- **Model Flexibility**: Swap to Claude, GPT-4o, DeepSeek, or 300+ other models via OpenRouter
 
 ## Project Structure
 
@@ -90,7 +92,7 @@ A2UI/
 │   │   ├── generator.py
 │   │   └── quizzer.py
 │   ├── database/               # SQLite persistence layer
-│   └── utils/                  # Vertex AI client wrappers
+│   └── utils/                  # OpenRouter client wrappers
 │
 ├── conductor/                   # Product documentation
 ├── .planning/                   # Development planning
@@ -105,8 +107,7 @@ A2UI/
 ### Prerequisites
 - **Node.js 18+** (for frontend)
 - **Python 3.10+** (for backend)
-- **Google Cloud Project** with Vertex AI API enabled
-- **Service Account** with Vertex AI User permissions
+- **OpenRouter API key** (free tier available at https://openrouter.ai)
 
 ### 1. Clone the Repository
 ```bash
@@ -139,23 +140,14 @@ cd client
 npm install
 ```
 
-### 4. Environment Configuration
+### 4. OpenRouter Setup
 
-#### Backend Environment
+1. Create a free account at [openrouter.ai](https://openrouter.ai)
+2. Generate an API key from your dashboard
+3. When you first launch the app, paste your key into the **Settings** panel in the UI
+4. Pick a model (defaults to Gemini 2.5 Flash -- no billing required for free-tier models)
 
-Create `server/.env` (or copy from `server/.env.example`):
-
-```env
-# Google Cloud Configuration
-PROJECT_ID=your-gcp-project-id
-LOCATION=us-central1
-
-# Service Account Credentials
-GOOGLE_APPLICATION_CREDENTIALS=./path-to-service-account-key.json
-
-# Optional: Model Configuration
-DEFAULT_MODEL=gemini-2.5-flash
-```
+No backend `.env` configuration is needed. The server receives your key per-request via the `X-OpenRouter-Key` header.
 
 #### Frontend Environment (Optional)
 
@@ -308,7 +300,7 @@ python -m unittest server.tests.test_learning.TestLearningSessions.test_create_s
 - **No Authentication** - Currently uses a placeholder user
 - **No RAG** - Designed for AI-generated content without document retrieval
 - **Local Database** - SQLite for simplicity; not suitable for multi-user deployment
-- **Vertex AI Required** - Requires Google Cloud credentials for AI features
+- **OpenRouter Key Required** - Users must supply their own API key via the UI settings panel
 
 ## Contributing
 
@@ -331,4 +323,4 @@ Additional documentation available in:
 
 ---
 
-Built with React, FastAPI, Vertex AI, and multi-agent orchestration
+Built with React, FastAPI, OpenRouter, and multi-agent orchestration

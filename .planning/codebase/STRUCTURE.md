@@ -110,8 +110,7 @@ A2UI/
 - Purpose: External service integrations and shared utilities
 - Contains: Client wrappers for AI services
 - Key files:
-  - `instructor_client.py` - Instructor library wrapper for Vertex AI
-  - `vertex_client.py` - Google Vertex AI SDK initialization
+  - `instructor_client.py` - Instructor library wrapper for OpenRouter
 
 **server/tests/:**
 - Purpose: Unit and integration tests

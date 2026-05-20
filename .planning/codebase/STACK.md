@@ -55,7 +55,7 @@
 - **Remark GFM** 4.0.1 - GitHub Flavored Markdown support
 
 **AI/ML Backend:**
-- **Google Cloud AI Platform** (`google-cloud-aiplatform`) - Vertex AI SDK
+- **OpenAI Python SDK** (`openai`) - OpenRouter-compatible HTTP client
 - **Instructor** - Structured LLM output validation with Pydantic
 - **Pydantic** v2 - Data validation and settings management
 
@@ -93,7 +93,7 @@
 **Critical:**
 - `react@^19.2.0` - Core UI framework
 - `fastapi` - Backend API framework
-- `google-cloud-aiplatform` - Google Vertex AI integration for LLM features
+- `openai` - OpenRouter-compatible HTTP client for LLM features
 - `instructor` - Structured output from LLMs with Pydantic validation
 - `@tanstack/react-query` - Server state synchronization
 - `pydantic` - Data validation (both client types and server schemas)
@@ -116,7 +116,7 @@
 - `client/vitest.setup.ts` - Test environment setup with Jest DOM matchers
 
 **Server Configuration:**
-- `server/config.py` - Environment-based settings (PROJECT_ID, LOCATION, credentials)
+- `server/config.py` - Environment-based settings (OPENROUTER_BASE_URL, timeout)
 - `server/.env` - Environment variables (not committed)
 - `server/.env.example` - Template for required environment variables
 - `server/requirements.txt` - Python dependencies
@@ -125,9 +125,8 @@
 - `VITE_API_URL` - Backend API base URL (defaults to `http://localhost:8000`)
 
 **Environment Variables (Server):**
-- `PROJECT_ID` - Google Cloud project ID
-- `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account JSON key
-- `LOCATION` - Vertex AI region (default: `us-central1`)
+- `OPENROUTER_BASE_URL` - OpenRouter API endpoint (default: `https://openrouter.ai/api/v1`)
+- `OPENROUTER_TIMEOUT_SECONDS` - Request timeout (default: `60.0`)
 - `VERTEX_CONFIG` - Alternative way to set credentials path
 
 ## Platform Requirements
@@ -135,14 +134,14 @@
 **Development:**
 - Node.js (for client build tools)
 - Python 3.10+ with virtual environment support
-- Google Cloud SDK (for Vertex AI access)
+- OpenRouter account with API key (user-provided per request)
 - Service account key file for Google Cloud authentication
 
 **Production:**
 - ASGI-compatible server (Uvicorn recommended)
 - Static file server for built client assets
-- Google Cloud project with Vertex AI API enabled
-- Service account with appropriate Vertex AI permissions
+- OpenRouter account (free tier available at https://openrouter.ai)
+- API key entered via the frontend Settings panel (no server-side config needed)
 
 **Ports:**
 - Client dev server: `5173` (Vite default)

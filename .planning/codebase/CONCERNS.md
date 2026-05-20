@@ -134,9 +134,9 @@
 - Safe modification: Add explicit format_version column validation; avoid exception-based flow control
 - Test coverage: Tests exist but edge cases (corrupted JSON) may not be covered
 
-**Vertex AI Initialization Chain:**
-- Files: `server/main.py` (lines 75-111), `server/utils/vertex_client.py`, `server/utils/instructor_client.py`
-- Why fragile: Strict initialization order required (Vertex AI → InstructorClient); failures cascade
+**OpenRouter Client Initialization:**
+- Files: `server/main.py`, `server/utils/instructor_client.py`
+- Why fragile: InstructorClient depends on OpenRouter base URL config; failures cascade to all agents
 - Safe modification: Add health checks; graceful degradation mode
 - Test coverage: Error paths tested but integration failure scenarios limited
 
@@ -159,7 +159,7 @@
 - Scaling path: Implement cache size limits; LRU eviction
 
 **AI Rate Limits:**
-- Current capacity: Dependent on Vertex AI quotas
+- Current capacity: Dependent on OpenRouter rate limits and user API key credits
 - Limit: Google Cloud project quotas (typically 60-300 requests/minute)
 - Scaling path: Implement request queueing; add rate limiting middleware
 
@@ -183,9 +183,9 @@
 - Files: `client/package.json` (line 47)
 - Migration plan: Monitor plugin compatibility; consider Tailwind 3.x if issues
 
-**google-cloud-aiplatform:**
-- Risk: Google Cloud SDK updates can introduce breaking changes
-- Impact: Vertex AI initialization and model calling
+**openai:**
+- Risk: OpenAI SDK updates can introduce breaking changes
+- Impact: OpenRouter API calls and structured output generation
 - Migration plan: Pin to tested version; test upgrades in staging
 
 ## Missing Critical Features

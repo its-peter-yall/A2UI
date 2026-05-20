@@ -15,7 +15,7 @@
 ## Backend (Server)
 - **Framework:** FastAPI (Python 3.10+)
 - **Server:** Uvicorn
-- **AI Integration:** Google Vertex AI Python SDK (`google-cloud-aiplatform`)
+- **AI Integration:** OpenRouter via OpenAI Python SDK (`openai`)
 - **Data Validation:** Pydantic v2
 - **CORS:** FastAPI CORSMiddleware
 

@@ -4,24 +4,25 @@
 
 ## APIs & External Services
 
-**Google Cloud Vertex AI:**
-- **Purpose:** LLM inference for the adaptive learning system
-- **SDK:** `google-cloud-aiplatform` Python library
+**OpenRouter (LLM Gateway):**
+- **Purpose:** Universal LLM inference for the adaptive learning system
+- **SDK:** `openai` Python library (OpenRouter is OpenAI-compatible)
 - **Models Used:**
-  - `gemini-2.5-pro` - High-capability model for planning tasks
-  - `gemini-2.5-flash` - Fast model for generation and quiz tasks
-- **Client Implementation:** `server/utils/vertex_client.py`
-  - `init_vertex()` - SDK initialization
-  - `get_vertex_status()` - Connection health check
-- **Structured Output:** `server/utils/instructor_client.py`
-  - Uses `instructor` library with Vertex AI provider
-  - Pydantic-validated responses via `instructor.Mode.GENAI_TOOLS`
+  - `google/gemini-2.5-pro` - High-capability model for planning tasks
+  - `google/gemini-2.5-flash` - Fast model for generation and quiz tasks
+  - 300+ additional models available (Claude, GPT-4o, DeepSeek, etc.)
+- **Client Implementation:** `server/utils/instructor_client.py`
+  - `AsyncOpenAI` client pointing to OpenRouter base URL
+  - Per-request API key injected via `X-OpenRouter-Key` header
   - Role-based model selection (planner, generator, quizzer)
-- **Auth:** Service account JSON key via `GOOGLE_APPLICATION_CREDENTIALS`
-- **Required Config:**
-  - `PROJECT_ID` - Google Cloud project identifier
-  - `LOCATION` - Vertex AI region (default: `us-central1`)
-  - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account key
+- **Structured Output:** `server/utils/instructor_client.py`
+  - Uses `instructor` library with OpenAI provider
+  - Pydantic-validated responses via `instructor.Mode.TOOLS`
+  - Retry logic via `tenacity` (exponential backoff)
+- **Auth:** User-provided API key per request (no server-side key storage)
+- **Config (optional):**
+  - `OPENROUTER_BASE_URL` - API endpoint (default: `https://openrouter.ai/api/v1`)
+  - `OPENROUTER_TIMEOUT_SECONDS` - Request timeout (default: `60.0`)
 
 **REST API (Internal):**
 - **Client:** Axios-based API client in `client/src/lib/learningApi.ts`
@@ -88,12 +89,12 @@
 
 **Health Checks:**
 - **Endpoint:** `GET /health`
-- **Response:** `{"status": "ok", "services": {"vertex_ai": "connected|disconnected"}}`
+- **Response:** `{"status": "ok", "services": {"openrouter": "configured|not_configured"}}`
 - **Implementation:** `server/main.py` health endpoint
 
 **Logs:**
 - **Server Console:** Application startup/shutdown logging
-- **Initialization Logs:** Database, Vertex AI, Instructor client status
+- **Initialization Logs:** Database, Instructor client status
 - **Request Logs:** Not explicitly configured (FastAPI default)
 
 ## CI/CD & Deployment
@@ -119,9 +120,9 @@
 
 **Server (`server/.env`):**
 ```bash
-PROJECT_ID=your-gcp-project-id
-GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
-LOCATION=us-central1
+# Optional - defaults shown
+# OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+# OPENROUTER_TIMEOUT_SECONDS=60
 ```
 
 **Client (`client/.env` - optional):**
@@ -163,7 +164,7 @@ VITE_API_URL=http://localhost:8000
 - Content-Type: `application/json`
 - Timeout: 30s (standard), 300s (generation operations)
 
-**Backend → Vertex AI:**
+**Backend → OpenRouter:**
 - Protocol: gRPC (via Google Cloud SDK)
 - Authentication: Service account OAuth2
 - Region: Configurable (default: us-central1)

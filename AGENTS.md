@@ -11,7 +11,7 @@ Follow the commands and style rules below; match local patterns when editing.
 |----------|---------|
 | `.planning/codebase/ARCHITECTURE.md` | Vision, purpose, target audience, core capabilities, technical architecture |
 | `conductor/product-guidelines.md` | Visual identity (Cyber Yellow #FFD400), UX principles, component standards |
-| `.planning/codebase/STACK.md` | Technology choices: React 19, FastAPI, Vertex AI, SQLite, Tailwind 4.x |
+| `.planning/codebase/STACK.md` | Technology choices: React 19, FastAPI, OpenRouter, SQLite, Tailwind 4.x |
 | `.planning/codebase/TESTING.md` | TDD workflow, quality gates, testing patterns, definition of done |
 | `.planning/codebase/CONVENTIONS.md` | Coding conventions for TypeScript, Python, and HTML/CSS |
 | `.planning/codebase/STRUCTURE.md` | Directory layout and where to add new code |
@@ -51,7 +51,7 @@ Testing: `vitest`, `@vitest/coverage-v8`, `@testing-library/react`, `jsdom`
 
 ### Server
 Web Framework: `fastapi`, `uvicorn`, `python-multipart`
-AI/ML: `google-cloud-aiplatform`, `instructor`, `pydantic`
+AI/ML: `openai`, `instructor`, `pydantic`
 Database: `sqlalchemy`, `alembic`
 Utilities: `tenacity` (retry logic)
 Testing: `unittest` (stdlib)
@@ -86,7 +86,7 @@ python -m unittest server.tests.test_chat.ChatSessionTests.test_invalid_session_
 ### Env Configuration
 - Backend: `.env` values (see `server/.env.example`)
 - Client: `VITE_API_URL` (defaults to `http://localhost:8000`)
-- Vertex AI: `PROJECT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`, `LOCATION`
+- OpenRouter: API key entered via frontend Settings panel (no server-side env needed)
 
 ## TypeScript Config Notes
 - Strict mode: `strict: true` in `client/tsconfig.app.json`
@@ -194,8 +194,7 @@ from server.database.persistence import session_manager
 
 ### Utils (`server/utils/`)
 - Shared utility modules
-- `vertex_client.py`: Google Vertex AI client wrapper
-- `instructor_client.py`: Instructor library integration for structured outputs
+- `instructor_client.py`: Instructor library integration for OpenRouter structured outputs
 
 ### Database (`server/database/`)
 - Persistence layer
