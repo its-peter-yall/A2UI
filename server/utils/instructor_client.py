@@ -30,6 +30,7 @@ USAGE:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Optional, Type, TypeVar
 
@@ -103,7 +104,9 @@ class InstructorClient:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_not_exception_type((ValueError, TypeError)),
+        retry=retry_if_not_exception_type(
+            (ValueError, TypeError, asyncio.CancelledError)
+        ),
         reraise=True,
     )
     async def create_structured(
@@ -160,11 +163,14 @@ class InstructorClient:
         max_tokens = config.get("max_tokens", 2048)
 
         # Construct OpenAI client wrapped with Instructor
+        # max_retries=0: disable SDK retries — tenacity handles retries,
+        # and SDK retries would ignore CancelledError from task cancellation
         base_client = AsyncOpenAI(
             base_url=settings.OPENROUTER_BASE_URL,
             api_key=api_key,
             default_headers=attribution_headers or {},
             timeout=settings.OPENROUTER_TIMEOUT_SECONDS,
+            max_retries=0,
         )
 
         client = instructor.from_openai(

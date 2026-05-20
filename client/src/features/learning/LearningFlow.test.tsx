@@ -70,6 +70,14 @@ vi.mock('@/lib/learningApi', () => ({
   }),
 }));
 
+// Mock OpenRouter settings so hasApiKey is true in tests
+vi.mock('@/lib/openrouterSettings', () => ({
+  getOpenRouterSettings: vi.fn(() => ({
+    apiKey: 'test-key',
+    model: 'google/gemini-2.5-flash',
+  })),
+}));
+
 // Mock react-router-dom navigation
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {

@@ -40,6 +40,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { generateCourse } from '@/lib/learningApi';
 import { getOpenRouterSettings } from '@/lib/openrouterSettings';
+import type { GenerateCourseRequest } from '@/types/learning';
 
 interface TopicInputProps {
   className?: string;
