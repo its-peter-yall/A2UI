@@ -69,7 +69,7 @@ describe('OpenRouterSettingsPanel', () => {
       modelTitle: '',
     });
     vi.mocked(settingsModule.maskApiKey).mockImplementation(
-      (key: string) => (key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '')
+      (key: string | null | undefined) => (key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '')
     );
     localStorage.clear();
   });

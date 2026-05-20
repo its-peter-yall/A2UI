@@ -45,6 +45,7 @@ from server.agents.generator import (
     generator_agent,
 )
 from server.schemas.learning import TopicNode
+from server.schemas.llm import LLMContext
 
 
 def _make_mock_topic(index: int = 0) -> TopicNode:
@@ -268,6 +269,7 @@ class TestGeneratorAgentGenerate(unittest.TestCase):
                 topic=topic,
                 prev_summary="Previous topic summary",
                 next_summary="Next topic summary",
+                llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -317,6 +319,7 @@ class TestGeneratorAgentGenerate(unittest.TestCase):
             agent.generate_explanation(
                 topic=topic,
                 prev_summary=prev_summary,
+                llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -351,6 +354,7 @@ class TestGeneratorAgentGenerate(unittest.TestCase):
             agent.generate_explanation(
                 topic=topic,
                 next_summary=next_summary,
+                llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -383,6 +387,7 @@ class TestGeneratorAgentGenerate(unittest.TestCase):
                 topic=topic,
                 prev_summary=None,  # First topic
                 next_summary="Next topic info",
+                llm_context=LLMContext(api_key="test-key"),
             )
         )
 

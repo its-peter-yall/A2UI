@@ -61,6 +61,7 @@ from server.schemas.learning import (
     convert_llm_to_quiz_card,
     convert_llm_to_quiz_set,
 )
+from server.schemas.llm import LLMContext
 from server.utils.instructor_client import MODEL_CONFIGS
 
 
@@ -417,6 +418,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
             agent.generate_quiz(
                 topic=topic,
                 content=content,
+                llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -471,6 +473,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
             agent.generate_quiz(
                 topic=topic,
                 content="Content about the topic",
+                llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -503,6 +506,7 @@ class TestQuizzerAgentGenerate(unittest.TestCase):
             agent.generate_quiz(
                 topic=topic,
                 content="Content about the topic",
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -551,6 +555,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Content for single quiz delegation",
                 quiz_count=1,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -580,6 +585,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Batch quiz content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -614,6 +620,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Count verification content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -639,6 +646,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Over-count enforcement content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -670,7 +678,8 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                     topic=topic,
                     content="Under-count enforcement content",
                     quiz_count=3,
-                )
+                llm_context=LLMContext(api_key="test-key"),
+            )
             )
 
     @patch(
@@ -701,6 +710,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Internal inversion content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -745,7 +755,8 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                     topic=topic,
                     content="Wrong distribution content",
                     quiz_count=4,
-                )
+                llm_context=LLMContext(api_key="test-key"),
+            )
             )
 
     @patch(
@@ -768,6 +779,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Difficulty verification content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -833,6 +845,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Option ID generation content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -906,6 +919,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Unique ID content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 
@@ -936,6 +950,7 @@ class TestQuizzerAgentGenerateQuizSet(unittest.TestCase):
                 topic=topic,
                 content="Topic info content",
                 quiz_count=3,
+            llm_context=LLMContext(api_key="test-key"),
             )
         )
 

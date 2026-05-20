@@ -23,6 +23,8 @@ USAGE:
 """
 
 from typing import Optional
+
+from fastapi import HTTPException, Header, status
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -69,4 +71,34 @@ class ModelResponse(BaseModel):
     context_length: Optional[int] = Field(
         None,
         description="Context window length in tokens",
+    )
+
+
+async def get_llm_context(
+    x_openrouter_key: Optional[str] = Header(
+        None, alias="X-OpenRouter-Key"
+    ),
+    x_openrouter_model: Optional[str] = Header(
+        None, alias="X-OpenRouter-Model"
+    ),
+    http_referer: Optional[str] = Header(None, alias="HTTP-Referer"),
+    x_openrouter_title: Optional[str] = Header(
+        None, alias="X-OpenRouter-Title"
+    ),
+) -> LLMContext:
+    """
+    FastAPI dependency to extract OpenRouter context from request headers.
+
+    Returns 401 when X-OpenRouter-Key is missing or blank.
+    """
+    if not x_openrouter_key or not x_openrouter_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-OpenRouter-Key header is missing.",
+        )
+    return LLMContext(
+        api_key=x_openrouter_key,
+        model=x_openrouter_model,
+        http_referer=http_referer,
+        app_title=x_openrouter_title,
     )

@@ -116,14 +116,6 @@ class BaseAgent(ABC):
             Exception: On generation failures after retries
         """
         # Validate that we have llm_context and a key
-        import sys
-        if ("unittest" in sys.modules) and (
-            not llm_context or not llm_context.api_key
-        ):
-            from server.schemas.llm import LLMContext
-
-            llm_context = LLMContext(api_key="mock-key-for-testing")
-
         if not llm_context or not llm_context.api_key:
             raise ValueError("OpenRouter API key is required in llm_context.")
 

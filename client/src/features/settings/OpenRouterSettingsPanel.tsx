@@ -32,7 +32,7 @@
 // OpenRouterSettingsPanel.tsx
 // OpenRouter API key and model selection panel
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Settings, Eye, EyeOff, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -47,27 +47,15 @@ import { OpenRouterModelPicker } from './OpenRouterModelPicker';
 
 export function OpenRouterSettingsPanel() {
   const [isOpen, setIsOpen] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('');
-  const [modelTitle, setModelTitle] = useState('');
+  const [apiKey, setApiKey] = useState(() => getOpenRouterSettings().apiKey ?? '');
+  const [model, setModel] = useState(() => getOpenRouterSettings().model ?? '');
+  const [modelTitle, setModelTitle] = useState(() => getOpenRouterSettings().modelTitle ?? '');
   const [showKey, setShowKey] = useState(false);
-  const [maskedDisplay, setMaskedDisplay] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
-
-  // Load saved settings on mount
-  useEffect(() => {
+  const [maskedDisplay, setMaskedDisplay] = useState(() => {
     const saved = getOpenRouterSettings();
-    if (saved.apiKey) {
-      setApiKey(saved.apiKey);
-      setMaskedDisplay(maskApiKey(saved.apiKey));
-    }
-    if (saved.model) {
-      setModel(saved.model);
-    }
-    if (saved.modelTitle) {
-      setModelTitle(saved.modelTitle);
-    }
-  }, []);
+    return saved.apiKey ? maskApiKey(saved.apiKey) : '';
+  });
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleSaveKey = useCallback(() => {
     const trimmed = apiKey.trim();

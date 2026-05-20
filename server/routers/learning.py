@@ -33,7 +33,7 @@ USAGE:
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status, Header, Depends
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
@@ -54,7 +54,7 @@ from server.schemas.learning import (
     SessionProgress,
     SessionListResponse,
 )
-from server.schemas.llm import LLMContext
+from server.schemas.llm import LLMContext, get_llm_context
 from server.services.course_orchestrator import course_orchestrator
 from server.services.quiz_randomization import (
     get_or_create_shuffle_order,
@@ -65,30 +65,6 @@ from server.services.quiz_randomization import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/learning", tags=["learning"])
-
-
-async def get_llm_context(
-    x_openrouter_key: Optional[str] = Header(None, alias="X-OpenRouter-Key"),
-    x_openrouter_model: Optional[str] = Header(
-        None, alias="X-OpenRouter-Model"
-    ),
-    http_referer: Optional[str] = Header(None, alias="HTTP-Referer"),
-    x_openrouter_title: Optional[str] = Header(
-        None, alias="X-OpenRouter-Title"
-    ),
-) -> LLMContext:
-    """Dependency injection helper to retrieve OpenRouter context."""
-    if not x_openrouter_key or not x_openrouter_key.strip():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-OpenRouter-Key header is missing.",
-        )
-    return LLMContext(
-        api_key=x_openrouter_key,
-        model=x_openrouter_model,
-        http_referer=http_referer,
-        app_title=x_openrouter_title,
-    )
 
 
 CONTENT_VISIBLE_STATES = {

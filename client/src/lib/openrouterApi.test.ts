@@ -31,7 +31,8 @@ const MOCK_MODELS = [
 ];
 
 describe('getOpenRouterModels', () => {
-  let getSpy: ReturnType<typeof vi.spyOn>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let getSpy: any;
 
   beforeEach(() => {
     getSpy = vi.spyOn(axios, 'get');
@@ -47,7 +48,7 @@ describe('getOpenRouterModels', () => {
     const result = await getOpenRouterModels('sk-or-test-key');
 
     expect(getSpy).toHaveBeenCalledTimes(1);
-    const [url, config] = getSpy.mock.calls[0];
+    const [url, config] = getSpy.mock.calls[0] as [string, { headers: Record<string, string> }];
     expect(url).toContain('/llm/models');
     expect(config?.headers?.['X-OpenRouter-Key']).toBe('sk-or-test-key');
     expect(config?.headers?.['X-OpenRouter-Title']).toBe('A2UI');
