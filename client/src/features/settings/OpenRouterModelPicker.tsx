@@ -139,12 +139,12 @@ export function OpenRouterModelPicker({
       <AnimatePresence>
         {isOpen && !disabled && apiKey && (
           <motion.div
-            initial={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
+            exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.15 }}
             className={cn(
-              'absolute z-50 mt-1 w-full rounded-lg overflow-hidden',
+              'absolute z-50 bottom-full mb-1 w-full rounded-lg overflow-hidden',
               'bg-gray-900/95 border border-white/10 backdrop-blur-md shadow-xl'
             )}
             role="listbox"
