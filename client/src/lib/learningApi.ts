@@ -35,6 +35,7 @@
 // API functions for retrieval-based learning features
 
 import axios from 'axios';
+import { getOpenRouterSettings } from './openrouterSettings';
 import type {
   ConceptNode,
   ConceptNodeWithVisibility,
@@ -66,6 +67,20 @@ const api = axios.create({
   timeout: 30000, // 30s timeout
 });
 
+// Request interceptor: attach OpenRouter headers when settings exist
+api.interceptors.request.use((config) => {
+  const settings = getOpenRouterSettings();
+  if (settings.apiKey) {
+    config.headers['X-OpenRouter-Key'] = settings.apiKey;
+    if (settings.model) {
+      config.headers['X-OpenRouter-Model'] = settings.model;
+    }
+    config.headers['HTTP-Referer'] = window.location.origin;
+    config.headers['X-OpenRouter-Title'] = 'A2UI';
+  }
+  return config;
+});
+
 // Response interceptor for consistent error handling
 api.interceptors.response.use(
   (response) => response,
@@ -82,6 +97,20 @@ const learningApi = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 300000, // 5 minutes for course generation
+});
+
+// Request interceptor: attach OpenRouter headers when settings exist
+learningApi.interceptors.request.use((config) => {
+  const settings = getOpenRouterSettings();
+  if (settings.apiKey) {
+    config.headers['X-OpenRouter-Key'] = settings.apiKey;
+    if (settings.model) {
+      config.headers['X-OpenRouter-Model'] = settings.model;
+    }
+    config.headers['HTTP-Referer'] = window.location.origin;
+    config.headers['X-OpenRouter-Title'] = 'A2UI';
+  }
+  return config;
 });
 
 // Response interceptor for learning API
