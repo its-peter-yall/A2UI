@@ -1149,7 +1149,7 @@ class TestQuizzerConfig(unittest.TestCase):
 
     def test_quizzer_max_output_tokens_sufficient_for_multi_quiz(self) -> None:
         """Quizzer token limit should be high enough for QuizSet payloads."""
-        self.assertGreaterEqual(MODEL_CONFIGS["quizzer"]["max_output_tokens"], 4096)
+        self.assertGreaterEqual(MODEL_CONFIGS["quizzer"]["max_tokens"], 4096)
 
     def test_quizzer_temperature_unchanged(self) -> None:
         """Quizzer temperature remains tuned for deterministic JSON output."""
@@ -1157,7 +1157,11 @@ class TestQuizzerConfig(unittest.TestCase):
 
     def test_quizzer_model_unchanged(self) -> None:
         """Quizzer model remains Gemini Flash for fast generation."""
-        self.assertEqual(MODEL_CONFIGS["quizzer"]["model"], "gemini-2.5-flash")
+        self.assertEqual(
+            MODEL_CONFIGS["quizzer"]["model"],
+            "google/gemini-2.5-flash",
+        )
+
 
 
 class TestQuizCardValidation(unittest.TestCase):

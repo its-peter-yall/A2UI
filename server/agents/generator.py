@@ -37,6 +37,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from server.agents.base import BaseAgent
 from server.schemas.learning import TopicNode
+from server.schemas.llm import LLMContext
+
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +192,7 @@ class GeneratorAgent(BaseAgent):
         topic: TopicNode,
         prev_summary: Optional[str] = None,
         next_summary: Optional[str] = None,
+        llm_context: Optional[LLMContext] = None,
     ) -> GeneratedContent:
         """
         Generate educational content for a topic with context injection.
@@ -202,24 +205,18 @@ class GeneratorAgent(BaseAgent):
             topic: The TopicNode to generate content for
             prev_summary: Summary of the previous topic (None if first topic)
             next_summary: Summary of the next topic (None if last topic)
+            llm_context: Optional OpenRouter context
 
         Returns:
             GeneratedContent containing content_markdown and key_takeaways
 
         Raises:
             Exception: If generation fails after retries
-
-        Example:
-            >>> content = await generator_agent.generate_explanation(
-            ...     topic=TopicNode(index=1, title="Newton's Second Law", ...),
-            ...     prev_summary="Inertia and the First Law of Motion",
-            ...     next_summary="Action-Reaction pairs in the Third Law"
-            ... )
-            >>> print(content.content_markdown[:50])
-            "## Newton's Second Law: F=ma..."
         """
         # Build the user message with context injection
-        user_message = self._build_user_message(topic, prev_summary, next_summary)
+        user_message = self._build_user_message(
+            topic, prev_summary, next_summary
+        )
 
         logger.info(
             f"GeneratorAgent generating content for topic {topic.index}: "
@@ -229,12 +226,14 @@ class GeneratorAgent(BaseAgent):
         content = await self.generate(
             response_model=GeneratedContent,
             user_message=user_message,
+            llm_context=llm_context,
         )
 
         logger.info(
             f"GeneratorAgent created content for '{topic.title}' "
             f"with {len(content.key_takeaways)} takeaways"
         )
+
 
         return content
 

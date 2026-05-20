@@ -34,6 +34,8 @@ from typing import Optional
 
 from server.agents.base import BaseAgent
 from server.schemas.learning import CourseOutline
+from server.schemas.llm import LLMContext
+
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +193,7 @@ class PlannerAgent(BaseAgent):
         self,
         query: str,
         context: Optional[dict] = None,
+        llm_context: Optional[LLMContext] = None,
     ) -> CourseOutline:
         """
         Generate a structured learning path (CourseOutline) for a user query.
@@ -201,22 +204,17 @@ class PlannerAgent(BaseAgent):
         Args:
             query: The user's learning query (e.g., "Newtonian Laws")
             context: Optional additional context for prompt augmentation
+            llm_context: Optional OpenRouter context
 
         Returns:
             CourseOutline containing course_title and ordered topics
 
         Raises:
             Exception: If generation fails after retries
-
-        Example:
-            >>> outline = await planner_agent.plan("Quantum Computing Basics")
-            >>> print(outline.course_title)
-            "Introduction to Quantum Computing"
-            >>> print(len(outline.topics))
-            6
         """
         user_message = (
-            f"Create a structured learning path for the following topic:\n\n{query}"
+            "Create a structured learning path for the following topic:\n\n"
+            f"{query}"
         )
 
         logger.info(f"PlannerAgent generating curriculum for: {query}")
@@ -225,6 +223,7 @@ class PlannerAgent(BaseAgent):
             response_model=CourseOutline,
             user_message=user_message,
             context=context,
+            llm_context=llm_context,
         )
 
         logger.info(
@@ -233,6 +232,7 @@ class PlannerAgent(BaseAgent):
         )
 
         return outline
+
 
 
 def validate_complexity_distribution(

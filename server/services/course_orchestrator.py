@@ -47,6 +47,7 @@ from server.schemas.learning import (
     QuizSet,
     TopicNode,
 )
+from server.schemas.llm import LLMContext
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ class CourseOrchestrator:
         self,
         query: str,
         user_id: Optional[str] = None,
+        llm_context: Optional[LLMContext] = None,
     ) -> Dict[str, Any]:
         """
         Generate a complete course using the Scatter-Gather pattern.
@@ -95,6 +97,7 @@ class CourseOrchestrator:
         Args:
             query: The user's learning query
             user_id: Optional user identifier
+            llm_context: Optional OpenRouter context
 
         Returns:
             Dict containing session info and generated nodes
@@ -103,7 +106,9 @@ class CourseOrchestrator:
 
         # 1. SERIAL: Planner generates course outline
         planner_start = time.perf_counter()
-        outline: CourseOutline = await planner_agent.plan(query)
+        outline: CourseOutline = await planner_agent.plan(
+            query, llm_context=llm_context
+        )
         planner_time_ms = (time.perf_counter() - planner_start) * 1000
 
         distribution_result = validate_complexity_distribution(outline)
@@ -168,9 +173,11 @@ class CourseOrchestrator:
                     next_summary=next_summary,
                     session_id=session_id,
                     sequence_index=i,
+                    llm_context=llm_context,
                 )
             )
             tasks.append(task)
+
 
         # 4. SCATTER: Execute all tasks in parallel
         # 5. GATHER: Collect results with exception handling
@@ -240,6 +247,7 @@ class CourseOrchestrator:
         next_summary: str,
         session_id: str,
         sequence_index: int,
+        llm_context: Optional[LLMContext] = None,
     ) -> Dict[str, Any]:
         """
         Generate a single concept unit (explanation + quiz) for a topic.
@@ -256,6 +264,7 @@ class CourseOrchestrator:
             next_summary: Summary of the next topic for context injection
             session_id: The learning session ID
             sequence_index: The sequence index for this node
+            llm_context: Optional OpenRouter context
 
         Returns:
             Dict containing node data on success, or SkeletonCard on failure
@@ -270,6 +279,7 @@ class CourseOrchestrator:
                 topic=topic,
                 prev_summary=prev_summary if prev_summary != "Start" else None,
                 next_summary=next_summary if next_summary != "End" else None,
+                llm_context=llm_context,
             )
 
             # Generate quiz for the content
@@ -277,6 +287,7 @@ class CourseOrchestrator:
                 topic=topic,
                 content=content.content_markdown,
                 quiz_count=topic.quiz_count,
+                llm_context=llm_context,
             )
 
             logger.debug(
@@ -479,6 +490,7 @@ class CourseOrchestrator:
     async def regenerate_node(
         self,
         node_id: str,
+        llm_context: Optional[LLMContext] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Re-run generation for a single failed node.
@@ -489,6 +501,7 @@ class CourseOrchestrator:
 
         Args:
             node_id: The ID of the node to regenerate
+            llm_context: Optional OpenRouter context
 
         Returns:
             Updated node dict on success, None if node not found
@@ -568,6 +581,7 @@ class CourseOrchestrator:
                 topic=topic,
                 prev_summary=prev_summary if prev_summary != "Start" else None,
                 next_summary=next_summary if next_summary != "End" else None,
+                llm_context=llm_context,
             )
 
             # Regenerate quiz
@@ -575,7 +589,9 @@ class CourseOrchestrator:
                 topic=topic,
                 content=content.content_markdown,
                 quiz_count=quiz_count,
+                llm_context=llm_context,
             )
+
 
             logger.debug(
                 "Regenerated quiz set with %s quizzes for node '%s' (quiz_count=%s)",

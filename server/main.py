@@ -30,10 +30,8 @@ USAGE:
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from server.utils.vertex_client import init_vertex, get_vertex_status
-from server.utils.instructor_client import instructor_client
 from server.database.learning_persistence import learning_manager
-from server.routers import learning_router
+from server.routers import learning_router, llm_router
 import logging
 import sys
 import os
@@ -59,7 +57,7 @@ IGNORE_PATTERNS = ["__pycache__", "*.pyc", ".git", "*.log", "*.db"]
 async def lifespan(app: FastAPI):
     """
     Lifecycle manager for the FastAPI app.
-    Initializes database and Vertex AI connection on startup.
+    Initializes database on startup.
     """
     logger.info("Starting A2UI Backend...")
 
@@ -69,25 +67,6 @@ async def lifespan(app: FastAPI):
         logger.info("Learning tables initialized successfully.")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
-
-    # Initialize Vertex AI
-    try:
-        if init_vertex():
-            logger.info("Vertex AI successfully initialized.")
-            # Initialize InstructorClient after Vertex AI is ready
-            try:
-                if instructor_client.init():
-                    logger.info("InstructorClient initialized successfully.")
-                else:
-                    logger.warning(
-                        "InstructorClient initialization skipped (missing config)."
-                    )
-            except Exception as e:
-                logger.error(f"InstructorClient initialization failed: {e}")
-        else:
-            logger.warning("Vertex AI initialization skipped (missing config).")
-    except Exception as e:
-        logger.error(f"Vertex AI initialization failed: {e}")
 
     yield
 
@@ -118,17 +97,19 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint exposing Vertex AI connection status."""
+    """Health check endpoint exposing OpenRouter status."""
     return {
         "status": "ok",
         "services": {
-            "vertex_ai": "connected" if get_vertex_status() else "disconnected"
+            "openrouter": "enabled"
         },
     }
 
 
 # Include routers
 app.include_router(learning_router)
+app.include_router(llm_router)
+
 
 
 class ReloaderHandler:

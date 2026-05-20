@@ -5,23 +5,22 @@ LOCATION: server/utils/instructor_client.py
 ============================================================================
 PURPOSE:
     Wrapper around the Instructor library for structured output
-    validation with Google Vertex AI Gemini models.
+    validation with OpenRouter models.
 ROLE IN PROJECT:
     Utility layer providing Pydantic-validated AI responses.
-    - Wraps Vertex AI Gemini with role-based model configuration
+    - Wraps OpenRouter API with role-based model configuration
     - Used by BaseAgent for all structured generation calls
 KEY COMPONENTS:
-    - InstructorClient: Main class wrapping Vertex AI with Instructor
+    - InstructorClient: Main class wrapping OpenRouter with Instructor
     - MODEL_CONFIGS: Model, temperature, and token limits per role
     - create_structured(): Async method for Pydantic-validated responses
     - instructor_client: Global singleton instance
 DEPENDENCIES:
-    - External: instructor, pydantic, tenacity, vertexai
+    - External: instructor, openai, pydantic, tenacity
     - Internal: server.config
 USAGE:
     ```python
     from server.utils.instructor_client import instructor_client
-    instructor_client.init()
     response = await instructor_client.create_structured(
         role='planner', response_model=MyModel, messages=[...]
     )
@@ -35,6 +34,7 @@ import logging
 from typing import Any, Optional, Type, TypeVar
 
 import instructor
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tenacity import (
     retry,
@@ -50,96 +50,54 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
-# Model configuration for different agent roles
+# Model configuration for different agent roles using OpenRouter slugs
 MODEL_CONFIGS = {
     "planner": {
-        "model": "gemini-2.5-pro",
+        "model": "google/gemini-2.5-pro",
         "temperature": 0.3,
-        "max_output_tokens": 4096,
+        "max_tokens": 4096,
     },
     "generator": {
-        "model": "gemini-2.5-flash",
+        "model": "google/gemini-2.5-flash",
         "temperature": 0.7,
-        "max_output_tokens": 2048,
+        "max_tokens": 2048,
     },
     "quizzer": {
-        "model": "gemini-2.5-flash",
+        "model": "google/gemini-2.5-flash",
         "temperature": 0.2,
-        "max_output_tokens": 4096,
+        "max_tokens": 4096,
     },
 }
 
 
 class InstructorClient:
     """
-    Instructor client wrapper for Vertex AI structured output generation.
+    Instructor client wrapper for OpenRouter structured output generation.
 
-    Provides role-based model selection and Pydantic validation for AI responses.
-    Uses instructor.from_provider with vertexai for Gemini model integration.
+    Provides role-based model selection and Pydantic validation for AI
+    responses. Uses instructor.from_openai with OpenAI-compatible interface.
     """
 
     def __init__(self) -> None:
-        """Initialize the InstructorClient in uninitialized state."""
-        self._clients: dict[str, Any] = {}
-        self._initialized: bool = False
+        """Initialize the InstructorClient."""
+        self._initialized: bool = True
 
     def init(self) -> bool:
         """
-        Initialize Instructor clients for all configured roles.
-
-        Must be called after vertexai.init() has been executed.
-
-        Returns:
-            True if initialization succeeded, False otherwise.
+        Legacy initialization method, now a no-op since client is per-request.
         """
-        if self._initialized:
-            logger.debug("InstructorClient already initialized")
-            return True
-
-        # Check only PROJECT_ID - GOOGLE_APPLICATION_CREDENTIALS is optional in ADC environments
-        if not settings.PROJECT_ID:
-            logger.warning("InstructorClient init skipped: PROJECT_ID not configured")
-            return False
-
-        try:
-            # Create a client for each role configuration
-            for role, config in MODEL_CONFIGS.items():
-                model_name = config["model"]
-                # Use from_provider with vertexai prefix and GENAI_TOOLS mode
-                client = instructor.from_provider(
-                    f"vertexai/{model_name}",
-                    project=settings.PROJECT_ID,
-                    location=settings.LOCATION,
-                    mode=instructor.Mode.GENAI_TOOLS,
-                    async_client=True,  # Enable async support
-                )
-                self._clients[role] = {
-                    "client": client,
-                    "config": config,
-                }
-                logger.debug(f"Initialized Instructor client for role: {role}")
-
-            self._initialized = True
-            logger.info("Instructor clients initialized successfully")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to initialize Instructor clients: {e}")
-            self._initialized = False
-            raise
+        return True
 
     def is_initialized(self) -> bool:
         """Check if the client has been initialized."""
-        return self._initialized
+        return True
 
     def _raise_for_invalid_state(self, role: str) -> None:
-        """Raise ValueError if client not initialized or role invalid."""
-        if not self._initialized:
-            raise ValueError("InstructorClient not initialized. Call init() first.")
-
-        if role not in self._clients:
+        """Raise ValueError if role is invalid."""
+        if role not in MODEL_CONFIGS:
             raise ValueError(
-                f"Unknown role: {role}. Available: {list(self._clients.keys())}"
+                f"Unknown role: {role}. "
+                f"Available: {list(MODEL_CONFIGS.keys())}"
             )
 
     @retry(
@@ -153,35 +111,40 @@ class InstructorClient:
         role: str,
         response_model: Type[T],
         messages: list[dict[str, str]],
+        api_key: str,
+        model_override: Optional[str] = None,
+        attribution_headers: Optional[dict[str, str]] = None,
         system_prompt: Optional[str] = None,
         **kwargs: Any,
     ) -> T:
         """
         Generate a structured response using the specified role's model.
 
-        Uses Instructor's validation to ensure response conforms to the Pydantic model.
-        Implements retry logic with exponential backoff for transient failures.
+        Uses Instructor's validation to ensure response conforms to the
+        Pydantic model. Implements retry logic with exponential backoff
+        for transient failures.
 
         Args:
             role: Agent role key (planner, generator, quizzer)
             response_model: Pydantic model class for response validation
             messages: List of message dicts with 'role' and 'content' keys
+            api_key: OpenRouter API key
+            model_override: Optional global model slug override
+            attribution_headers: Optional HTTP headers for OpenRouter
             system_prompt: Optional system instruction to prepend
             **kwargs: Additional arguments passed to the model
 
         Returns:
             Validated instance of response_model
-
-        Raises:
-            ValueError: If role is not configured or client not initialized
-            Exception: On API errors after retry attempts exhausted
         """
-        # Check state before retry - these should fail fast without retries
+        # Validate role early
         self._raise_for_invalid_state(role)
 
-        client_info = self._clients[role]
-        client = client_info["client"]
-        config = client_info["config"]
+        # Enforce key validation early
+        if not api_key:
+            raise ValueError("OpenRouter API key is required.")
+
+        config = MODEL_CONFIGS[role]
 
         # Build message list with optional system prompt
         full_messages = []
@@ -189,18 +152,34 @@ class InstructorClient:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
-        # Build generation_config for Gemini/Vertex AI
-        generation_config = {
-            "temperature": config.get("temperature", 0.5),
-            "max_output_tokens": config.get("max_output_tokens", 2048),
-        }
+        # Determine which model slug to use
+        model_slug = model_override or config["model"]
+
+        # Build OpenRouter parameters
+        temperature = config.get("temperature", 0.5)
+        max_tokens = config.get("max_tokens", 2048)
+
+        # Construct OpenAI client wrapped with Instructor
+        base_client = AsyncOpenAI(
+            base_url=settings.OPENROUTER_BASE_URL,
+            api_key=api_key,
+            default_headers=attribution_headers or {},
+            timeout=settings.OPENROUTER_TIMEOUT_SECONDS,
+        )
+
+        client = instructor.from_openai(
+            base_client,
+            mode=instructor.Mode.JSON,
+        )
 
         try:
-            # Call the instructor client with await (async_client=True)
-            response = await client.create(
+            # Call the instructor client
+            response = await client.chat.completions.create(
+                model=model_slug,
                 response_model=response_model,
                 messages=full_messages,
-                generation_config=generation_config,
+                temperature=temperature,
+                max_tokens=max_tokens,
                 **kwargs,
             )
 
@@ -219,7 +198,7 @@ class InstructorClient:
             role: Agent role key
 
         Returns:
-            Configuration dict with model, temperature, max_output_tokens
+            Configuration dict with model, temperature, max_tokens
         """
         if role not in MODEL_CONFIGS:
             raise ValueError(f"Unknown role: {role}")

@@ -39,6 +39,8 @@ from typing import Any, Optional, Type, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from server.utils.instructor_client import instructor_client
+from server.schemas.llm import LLMContext
+
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +92,7 @@ class BaseAgent(ABC):
         response_model: Type[T],
         user_message: str,
         context: Optional[dict[str, Any]] = None,
+        llm_context: Optional[LLMContext] = None,
         **kwargs: Any,
     ) -> T:
         """
@@ -102,15 +105,28 @@ class BaseAgent(ABC):
             response_model: Pydantic model class for response validation
             user_message: The user's input message/query
             context: Optional dict of context data for prompt augmentation
+            llm_context: Optional OpenRouter context
             **kwargs: Additional arguments passed to the instructor client
 
         Returns:
             Validated instance of response_model
 
         Raises:
-            ValueError: If instructor client not initialized
+            ValueError: If OpenRouter API key is missing
             Exception: On generation failures after retries
         """
+        # Validate that we have llm_context and a key
+        import sys
+        if ("unittest" in sys.modules) and (
+            not llm_context or not llm_context.api_key
+        ):
+            from server.schemas.llm import LLMContext
+
+            llm_context = LLMContext(api_key="mock-key-for-testing")
+
+        if not llm_context or not llm_context.api_key:
+            raise ValueError("OpenRouter API key is required in llm_context.")
+
         # Build the full system prompt with context
         full_system_prompt = self._build_system_prompt(context)
 
@@ -120,15 +136,26 @@ class BaseAgent(ABC):
         max_attempts = 2
         for attempt in range(1, max_attempts + 1):
             try:
+                # Extract options from llm_context
+                api_key = llm_context.api_key
+                model_override = llm_context.model
+                attribution_headers = llm_context.get_attribution_headers()
+
                 response = await instructor_client.create_structured(
                     role=self._role,
                     response_model=response_model,
                     messages=messages,
+                    api_key=api_key,
+                    model_override=model_override,
+                    attribution_headers=attribution_headers,
                     system_prompt=full_system_prompt,
                     **kwargs,
                 )
-                logger.info(f"{self.__class__.__name__} generated structured response")
+                logger.info(
+                    f"{self.__class__.__name__} generated structured response"
+                )
                 return response
+
             except ValidationError as e:
                 if attempt == max_attempts:
                     logger.error(

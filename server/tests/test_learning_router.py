@@ -330,7 +330,14 @@ class TestLearningRouterShuffleSeedEvents(unittest.TestCase):
 def _create_client() -> TestClient:
     app = FastAPI()
     app.include_router(learning_router)
+    from server.routers.learning import get_llm_context
+    from server.schemas.llm import LLMContext
+
+    app.dependency_overrides[get_llm_context] = lambda: LLMContext(
+        api_key="mock-key-for-tests"
+    )
     return TestClient(app)
+
 
 
 class TestLearningRouterGenerateCourse(unittest.TestCase):

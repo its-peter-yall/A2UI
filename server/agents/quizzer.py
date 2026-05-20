@@ -45,6 +45,8 @@ from server.schemas.learning import (
     convert_llm_to_quiz_card,
     convert_llm_to_quiz_set,
 )
+from server.schemas.llm import LLMContext
+
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +347,7 @@ class QuizzerAgent(BaseAgent):
         topic: TopicNode,
         content: str,
         context: Optional[dict] = None,
+        llm_context: Optional[LLMContext] = None,
     ) -> QuizCard:
         """
         Generate a diagnostic quiz question for a topic and its content.
@@ -357,27 +360,13 @@ class QuizzerAgent(BaseAgent):
             topic: TopicNode containing title, summary, and key terms
             content: Generated markdown content for the topic
             context: Optional additional context for prompt augmentation
+            llm_context: Optional OpenRouter context
 
         Returns:
             QuizCard with question, options, difficulty, and explanations
 
         Raises:
             Exception: If generation fails after retries
-
-        Example:
-            >>> quiz = await quizzer_agent.generate_quiz(
-            ...     topic=TopicNode(
-            ...         index=0,
-            ...         title="Newton's First Law",
-            ...         summary_for_context="Explains inertia...",
-            ...         key_terms=["inertia", "equilibrium"]
-            ...     ),
-            ...     content="# Newton's First Law\\n\\nInertia is..."
-            ... )
-            >>> print(quiz.question_text)
-            "What is the key principle of Newton's First Law?"
-            >>> print(len(quiz.options))
-            4
         """
         # Build the user message with topic details and content
         user_message = self._build_user_message(topic, content)
@@ -386,13 +375,15 @@ class QuizzerAgent(BaseAgent):
         full_context = self._build_topic_context(topic, context)
 
         logger.info(
-            f"QuizzerAgent generating quiz for topic: '{topic.title}' (index {topic.index})"
+            f"QuizzerAgent generating quiz for topic: '{topic.title}' "
+            f"(index {topic.index})"
         )
 
         quiz = await self.generate(
             response_model=LLMQuizCard,
             user_message=user_message,
             context=full_context,
+            llm_context=llm_context,
         )
 
         # Convert LLM output to storage schema with backend-generated UUIDs
@@ -411,6 +402,7 @@ class QuizzerAgent(BaseAgent):
         content: str,
         quiz_count: int,
         context: Optional[dict] = None,
+        llm_context: Optional[LLMContext] = None,
     ) -> QuizSet:
         """Generate a complete QuizSet in one call with difficulty gradient."""
         if quiz_count <= 1:
@@ -418,16 +410,20 @@ class QuizzerAgent(BaseAgent):
                 topic=topic,
                 content=content,
                 context=context,
+                llm_context=llm_context,
             )
             return QuizSet(quizzes=[single_quiz], current_index=0)
 
-        user_message = self._build_batch_user_message(topic, content, quiz_count)
+        user_message = self._build_batch_user_message(
+            topic, content, quiz_count
+        )
         full_context = self._build_topic_context(topic, context)
 
         quiz_set = await self.generate(
             response_model=LLMQuizSet,
             user_message=user_message,
             context=full_context,
+            llm_context=llm_context,
         )
 
         # Convert LLM output to storage schema with backend-generated UUIDs
@@ -447,6 +443,7 @@ class QuizzerAgent(BaseAgent):
         )
 
         return quiz_set
+
 
     def _build_user_message(self, topic: TopicNode, content: str) -> str:
         """

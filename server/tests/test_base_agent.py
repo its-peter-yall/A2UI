@@ -40,6 +40,7 @@ from unittest.mock import AsyncMock, patch
 from pydantic import BaseModel, ValidationError
 
 from server.agents.base import BaseAgent
+from server.schemas.llm import LLMContext
 
 
 class _DummyModel(BaseModel):
@@ -75,7 +76,13 @@ class TestBaseAgentRetry(unittest.TestCase):
         mock_create.side_effect = [validation_error, _DummyModel(name="ok")]
 
         agent = _DummyAgent(role="dummy")
-        result = asyncio.run(agent.generate(_DummyModel, user_message="Hello"))
+        result = asyncio.run(
+            agent.generate(
+                _DummyModel,
+                user_message="Hello",
+                llm_context=LLMContext(api_key="mock-key"),
+            )
+        )
 
         self.assertEqual(result.name, "ok")
         self.assertEqual(mock_create.call_count, 2)

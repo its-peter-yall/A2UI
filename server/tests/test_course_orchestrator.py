@@ -189,7 +189,7 @@ class TestCourseOrchestratorGenerateCourse(unittest.IsolatedAsyncioTestCase):
 
             result = await orchestrator.generate_course("Test query", user_id="user-1")
 
-        mock_plan.assert_awaited_once_with("Test query")
+        mock_plan.assert_awaited_once_with("Test query", llm_context=None)
         mock_create_session.assert_called_once_with(
             query="Test query",
             course_title=outline.course_title,
@@ -260,11 +260,13 @@ class TestCourseOrchestratorGenerateConceptUnit(unittest.IsolatedAsyncioTestCase
             topic=topic,
             prev_summary=None,
             next_summary=None,
+            llm_context=None,
         )
         mock_quiz.assert_awaited_once_with(
             topic=topic,
             content="content",
             quiz_count=topic.quiz_count,
+            llm_context=None,
         )
         mock_create.assert_called_once()
         self.assertEqual(result["node"], node_payload)
@@ -675,6 +677,7 @@ class TestCourseOrchestratorQuizSetWiring(unittest.IsolatedAsyncioTestCase):
             topic=topic,
             content="content",
             quiz_count=3,
+            llm_context=None,
         )
         create_kwargs = mock_create.call_args.kwargs
         self.assertEqual(create_kwargs["quiz_set"], quiz_set)
@@ -1128,7 +1131,7 @@ class TestCourseOrchestratorValidation(unittest.IsolatedAsyncioTestCase):
         ):
             await orchestrator.generate_course("Test query", user_id="user-1")
 
-        mock_plan.assert_awaited_once_with("Test query")
+        mock_plan.assert_awaited_once_with("Test query", llm_context=None)
         mock_validate.assert_called_once_with(outline)
 
     async def test_regenerate_node_returns_none_when_missing(self) -> None:

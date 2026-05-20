@@ -33,7 +33,7 @@ USAGE:
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Header, Depends
 from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
@@ -54,6 +54,7 @@ from server.schemas.learning import (
     SessionProgress,
     SessionListResponse,
 )
+from server.schemas.llm import LLMContext
 from server.services.course_orchestrator import course_orchestrator
 from server.services.quiz_randomization import (
     get_or_create_shuffle_order,
@@ -64,6 +65,31 @@ from server.services.quiz_randomization import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/learning", tags=["learning"])
+
+
+async def get_llm_context(
+    x_openrouter_key: Optional[str] = Header(None, alias="X-OpenRouter-Key"),
+    x_openrouter_model: Optional[str] = Header(
+        None, alias="X-OpenRouter-Model"
+    ),
+    http_referer: Optional[str] = Header(None, alias="HTTP-Referer"),
+    x_openrouter_title: Optional[str] = Header(
+        None, alias="X-OpenRouter-Title"
+    ),
+) -> LLMContext:
+    """Dependency injection helper to retrieve OpenRouter context."""
+    if not x_openrouter_key or not x_openrouter_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="X-OpenRouter-Key header is missing.",
+        )
+    return LLMContext(
+        api_key=x_openrouter_key,
+        model=x_openrouter_model,
+        http_referer=http_referer,
+        app_title=x_openrouter_title,
+    )
+
 
 CONTENT_VISIBLE_STATES = {
     NodeStatus.VIEWING_EXPLANATION,
@@ -255,12 +281,14 @@ def _ensure_quiz_shuffle_seed(node_id: str) -> Optional[str]:
 )
 async def generate_course(
     request: GenerateCourseRequest,
+    llm_context: LLMContext = Depends(get_llm_context),
 ) -> LearningSessionWithNodes:
     """Generate a learning course using the Planner-Worker pattern."""
     try:
         result = await course_orchestrator.generate_course(
             query=request.query,
             user_id=request.user_id,
+            llm_context=llm_context,
         )
         session = result.get("session", {})
         nodes_data = result.get("nodes", [])
@@ -947,10 +975,16 @@ def previous_quiz(node_id: str) -> ConceptNodeResponse:
     summary="Regenerate node",
     description="Regenerate content for a failed/error node.",
 )
-async def regenerate_node_endpoint(node_id: str) -> ConceptNodeResponse:
+async def regenerate_node_endpoint(
+    node_id: str,
+    llm_context: LLMContext = Depends(get_llm_context),
+) -> ConceptNodeResponse:
     """Regenerate content for a failed node using the orchestrator."""
     try:
-        result = await course_orchestrator.regenerate_node(node_id=node_id)
+        result = await course_orchestrator.regenerate_node(
+            node_id=node_id,
+            llm_context=llm_context,
+        )
 
         if result is None:
             raise HTTPException(

@@ -37,6 +37,7 @@ from server.agents.planner import (
     validate_complexity_distribution,
 )
 from server.schemas.learning import CourseOutline, TopicNode
+from server.schemas.llm import LLMContext
 
 
 def _make_mock_outline() -> CourseOutline:
@@ -147,7 +148,9 @@ class TestPlannerAgentPlan(unittest.TestCase):
         mock_create.return_value = mock_outline
 
         agent = PlannerAgent()
-        result = asyncio.run(agent.plan("Test query"))
+        result = asyncio.run(
+            agent.plan("Test query", llm_context=LLMContext(api_key="mock"))
+        )
 
         # Verify instructor_client.create_structured was called
         mock_create.assert_called_once()
@@ -186,7 +189,13 @@ class TestPlannerAgentPlan(unittest.TestCase):
 
         agent = PlannerAgent()
         context = {"prior_knowledge": "physics basics"}
-        asyncio.run(agent.plan("Newtonian Laws", context=context))
+        asyncio.run(
+            agent.plan(
+                "Newtonian Laws",
+                context=context,
+                llm_context=LLMContext(api_key="mock"),
+            )
+        )
 
         # Verify system prompt includes context
         call_kwargs = mock_create.call_args.kwargs
