@@ -50,6 +50,7 @@ import { cn } from '@/lib/utils';
 import type { SessionListResponse } from '@/types/learning';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { TopicInput } from './TopicInput';
+import { OpenRouterSettingsPanel } from '../settings/OpenRouterSettingsPanel';
 import { CourseCard } from './CourseCard';
 import { CourseFilter } from './CourseFilter';
 import type { FilterStatus, SortField } from './CourseFilter';
@@ -263,6 +264,9 @@ export function LearningHome() {
           className={showDashboard ? 'mb-8' : 'mb-12'}
           autoFocus={shouldAutoFocusTopicInput}
         />
+
+        {/* OpenRouter settings (API key + model picker) */}
+        <OpenRouterSettingsPanel />
 
         {/* Course Dashboard (shown when courses exist) */}
         {showDashboard && (
