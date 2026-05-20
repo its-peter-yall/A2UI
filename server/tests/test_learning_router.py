@@ -843,3 +843,34 @@ class TestLearningRouterLastActive(unittest.TestCase):
         fake_manager.update_last_active_node.assert_called_once_with(
             "session-1", "specific-node-id"
         )
+
+
+class TestLearningRouterAuth(unittest.TestCase):
+    """Tests for learning router authentication requirements."""
+
+    def test_generate_course_returns_401_without_key(self) -> None:
+        """POST /learning/generate without X-OpenRouter-Key returns 401."""
+        app = FastAPI()
+        app.include_router(learning_router)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.post(
+            "/learning/generate",
+            json={"query": "test topic"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        detail = response.json().get("detail", "")
+        self.assertIn("X-OpenRouter-Key", detail)
+
+    def test_regenerate_returns_401_without_key(self) -> None:
+        """POST /learning/nodes/{id}/regenerate without X-OpenRouter-Key returns 401."""
+        app = FastAPI()
+        app.include_router(learning_router)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.post(
+            "/learning/nodes/node-1/regenerate",
+        )
+
+        self.assertEqual(response.status_code, 401)

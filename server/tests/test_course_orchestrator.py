@@ -54,9 +54,20 @@ from server.schemas.learning import (
     QuizSet,
     TopicNode,
 )
+from server.schemas.llm import LLMContext
 from server.services.course_orchestrator import CourseOrchestrator
 
 orchestrator_module = importlib.import_module("server.services.course_orchestrator")
+
+
+def _make_test_llm_context() -> LLMContext:
+    """Create a test LLMContext with non-secret test values."""
+    return LLMContext(
+        api_key="test-openrouter-key",
+        model=None,
+        http_referer=None,
+        app_title=None,
+    )
 
 
 class _StatusValue:
@@ -126,6 +137,7 @@ class TestCourseOrchestratorGenerateCourse(unittest.IsolatedAsyncioTestCase):
 
     async def test_generate_course_scatter_gather_success(self) -> None:
         orchestrator = CourseOrchestrator()
+        llm_ctx = _make_test_llm_context()
         outline = _make_outline(5)
         session_payload = {
             "id": "session-1",
@@ -187,15 +199,21 @@ class TestCourseOrchestratorGenerateCourse(unittest.IsolatedAsyncioTestCase):
             mock_plan.return_value = outline
             mock_generate.side_effect = concept_results
 
-            result = await orchestrator.generate_course("Test query", user_id="user-1")
+            result = await orchestrator.generate_course(
+                "Test query", user_id="user-1", llm_context=llm_ctx
+            )
 
-        mock_plan.assert_awaited_once_with("Test query", llm_context=None)
+        mock_plan.assert_awaited_once_with("Test query", llm_context=llm_ctx)
         mock_create_session.assert_called_once_with(
             query="Test query",
             course_title=outline.course_title,
             user_id="user-1",
         )
         self.assertEqual(mock_generate.await_count, 5)
+
+        # Verify llm_context is plumbed to each concept unit
+        for call in mock_generate.await_args_list:
+            self.assertEqual(call.kwargs["llm_context"], llm_ctx)
 
         first_call = mock_generate.await_args_list[0].kwargs
         self.assertEqual(first_call["prev_summary"], "Start")
@@ -219,6 +237,7 @@ class TestCourseOrchestratorGenerateConceptUnit(unittest.IsolatedAsyncioTestCase
 
     async def test_generate_concept_unit_success(self) -> None:
         orchestrator = CourseOrchestrator()
+        llm_ctx = _make_test_llm_context()
         topic = _make_topics(1)[0]
         content = SimpleNamespace(content_markdown="content")
         quiz_set = Mock(quizzes=[Mock()])
@@ -254,19 +273,20 @@ class TestCourseOrchestratorGenerateConceptUnit(unittest.IsolatedAsyncioTestCase
                 next_summary="End",
                 session_id="session-1",
                 sequence_index=0,
+                llm_context=llm_ctx,
             )
 
         mock_generate.assert_awaited_once_with(
             topic=topic,
             prev_summary=None,
             next_summary=None,
-            llm_context=None,
+            llm_context=llm_ctx,
         )
         mock_quiz.assert_awaited_once_with(
             topic=topic,
             content="content",
             quiz_count=topic.quiz_count,
-            llm_context=None,
+            llm_context=llm_ctx,
         )
         mock_create.assert_called_once()
         self.assertEqual(result["node"], node_payload)
@@ -1079,6 +1099,7 @@ class TestCourseOrchestratorValidation(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         orchestrator = CourseOrchestrator()
+        llm_ctx = _make_test_llm_context()
         outline = _make_outline(5)
         session_payload = {
             "id": "session-1",
@@ -1129,9 +1150,11 @@ class TestCourseOrchestratorValidation(unittest.IsolatedAsyncioTestCase):
                 side_effect=concept_results,
             ),
         ):
-            await orchestrator.generate_course("Test query", user_id="user-1")
+            await orchestrator.generate_course(
+                "Test query", user_id="user-1", llm_context=llm_ctx
+            )
 
-        mock_plan.assert_awaited_once_with("Test query", llm_context=None)
+        mock_plan.assert_awaited_once_with("Test query", llm_context=llm_ctx)
         mock_validate.assert_called_once_with(outline)
 
     async def test_regenerate_node_returns_none_when_missing(self) -> None:

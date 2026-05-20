@@ -5,12 +5,13 @@ LOCATION: server/tests/test_orchestrator_integration.py
 ============================================================================
 PURPOSE:
     Integration tests for CourseOrchestrator with live dependencies.
-    Provides end-to-end course generation test against real Vertex AI
-    and database.
+    Provides end-to-end course generation test against real OpenRouter
+    API and database.
 ROLE IN PROJECT:
     Manual verification gate for production readiness of the orchestration
-    pipeline with live agent credentials.
+    pipeline with live OpenRouter credentials.
     - Skipped by default; enabled via RUN_INTEGRATION_TESTS=1
+    - Requires OPENROUTER_API_KEY environment variable
     - Consumes real API quota; use sparingly
 KEY COMPONENTS:
     - TestCourseOrchestratorIntegration: End-to-end generation test
@@ -19,7 +20,7 @@ DEPENDENCIES:
     - Internal: server.services.course_orchestrator
 USAGE:
     ```bash
-    RUN_INTEGRATION_TESTS=1 python -m unittest \
+    RUN_INTEGRATION_TESTS=1 OPENROUTER_API_KEY=sk-... python -m unittest \
         server.tests.test_orchestrator_integration
     ```
 ============================================================================
@@ -32,9 +33,10 @@ USAGE:
 # - Provides manual integration test instructions for orchestrator wiring.
 # - Uses skipUnless to protect external dependency execution.
 # - Serves as a template when RUN_INTEGRATION_TESTS is enabled.
+# - Requires OPENROUTER_API_KEY for LLM access.
 
 # @see: server/services/course_orchestrator.py - Orchestrator implementation
-# @note: Requires live agent credentials and database access
+# @note: Requires live OpenRouter credentials and database access
 
 import os
 import unittest
@@ -53,7 +55,7 @@ class TestCourseOrchestratorIntegration(unittest.IsolatedAsyncioTestCase):
         """Run an end-to-end course generation against live services."""
         # NOTE:
         # - Set RUN_INTEGRATION_TESTS=1
-        # - Ensure LLM credentials are configured
+        # - Ensure OPENROUTER_API_KEY is configured
         # - Ensure database is reachable
         result = await course_orchestrator.generate_course(
             "Explain Newtonian mechanics with 3 topics",
