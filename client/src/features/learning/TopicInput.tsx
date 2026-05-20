@@ -33,7 +33,7 @@
  * ============================================================================
  */
 
-import { useState, useId } from 'react';
+import { useState, useId, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -65,14 +65,31 @@ export function TopicInput({
   const [query, setQuery] = useState('');
   const inputId = useId();
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const generateMutation = useMutation({
-    mutationFn: generateCourse,
+    mutationFn: (data: GenerateCourseRequest) => {
+      const controller = new AbortController();
+      abortRef.current = controller;
+      return generateCourse(data, controller.signal);
+    },
     onSuccess: (session) => {
       queryClient.invalidateQueries({ queryKey: ['courses'] });
       // Navigate on success - best practice from TanStack Query
       navigate(`/learn/${session.id}`);
     },
+    onSettled: () => {
+      abortRef.current = null;
+    },
   });
+
+  const handleStop = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    generateMutation.reset();
+  };
 
   const hasApiKey = Boolean(getOpenRouterSettings().apiKey);
 
@@ -120,19 +137,22 @@ export function TopicInput({
           )}
         />
         <button
-          type="submit"
-          disabled={!query.trim() || isLoading || !hasApiKey}
-          aria-label={isLoading ? 'Generating course' : 'Start learning'}
+          type={isLoading ? 'button' : 'submit'}
+          onClick={isLoading ? handleStop : undefined}
+          disabled={(!query.trim() && !isLoading) || !hasApiKey}
+          aria-label={isLoading ? 'Stop generating' : 'Start learning'}
           className={cn(
             'absolute right-2 top-1/2 -translate-y-1/2',
             'px-4 py-1.5 rounded-md text-sm font-medium',
-            'bg-primary text-primary-foreground',
-            'hover:bg-primary/90 transition-colors',
+            isLoading
+              ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive'
+              : 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary',
+            'transition-colors duration-200',
             'disabled:opacity-50 disabled:cursor-not-allowed',
-            'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2'
+            'focus:outline-none focus:ring-2 focus:ring-offset-2'
           )}
         >
-          {isLoading ? 'Generating...' : 'Learn'}
+          {isLoading ? 'Stop' : 'Learn'}
         </button>
       </form>
 

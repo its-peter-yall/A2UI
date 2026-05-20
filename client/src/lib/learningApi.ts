@@ -125,11 +125,13 @@ learningApi.interceptors.response.use(
 // --- Learning Session ---
 
 export const generateCourse = async (
-  data: GenerateCourseRequest
+  data: GenerateCourseRequest,
+  signal?: AbortSignal
 ): Promise<LearningSessionWithNodes> => {
   const response = await learningApi.post<LearningSessionWithNodes>(
     '/learning/generate',
-    data
+    data,
+    { signal }
   );
   return response.data;
 };
@@ -220,10 +222,13 @@ export const getQuizAttempts = async (
 // --- Regenerate ---
 
 export const regenerateNode = async (
-  nodeId: string
+  nodeId: string,
+  signal?: AbortSignal
 ): Promise<ConceptNode> => {
   const response = await api.post<ConceptNode>(
-    `/learning/nodes/${nodeId}/regenerate`
+    `/learning/nodes/${nodeId}/regenerate`,
+    null,
+    { signal }
   );
   return response.data;
 };

@@ -30,10 +30,11 @@ USAGE:
 ============================================================================
 """
 
+import asyncio
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status, Depends
+from fastapi import APIRouter, HTTPException, Query, status, Depends, Request
 from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
@@ -256,22 +257,46 @@ def _ensure_quiz_shuffle_seed(node_id: str) -> Optional[str]:
     description="Generate a structured learning course from a topic query.",
 )
 async def generate_course(
-    request: GenerateCourseRequest,
+    request_body: GenerateCourseRequest,
+    request: Request,
     llm_context: LLMContext = Depends(get_llm_context),
 ) -> LearningSessionWithNodes:
     """Generate a learning course using the Planner-Worker pattern."""
     try:
-        result = await course_orchestrator.generate_course(
-            query=request.query,
-            user_id=request.user_id,
-            llm_context=llm_context,
+        gen_task = asyncio.create_task(
+            course_orchestrator.generate_course(
+                query=request_body.query,
+                user_id=request_body.user_id,
+                llm_context=llm_context,
+            )
         )
+
+        while not gen_task.done():
+            # Check for client disconnect every 0.5 seconds
+            done, pending = await asyncio.wait({gen_task}, timeout=0.5)
+            if gen_task.done():
+                break
+            if await request.is_disconnected():
+                logger.info("Client disconnected. Cancelling course generation task...")
+                gen_task.cancel()
+                try:
+                    await gen_task
+                except asyncio.CancelledError:
+                    pass
+                raise HTTPException(
+                    status_code=499,
+                    detail="Generation cancelled",
+                )
+
+        result = gen_task.result()
         session = result.get("session", {})
         nodes_data = result.get("nodes", [])
         nodes = [
             ConceptNodeResponse(**_apply_node_visibility(node)) for node in nodes_data
         ]
         return LearningSessionWithNodes(**session, nodes=nodes)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating course: {e}")
         raise HTTPException(
@@ -953,14 +978,36 @@ def previous_quiz(node_id: str) -> ConceptNodeResponse:
 )
 async def regenerate_node_endpoint(
     node_id: str,
+    request: Request,
     llm_context: LLMContext = Depends(get_llm_context),
 ) -> ConceptNodeResponse:
     """Regenerate content for a failed node using the orchestrator."""
     try:
-        result = await course_orchestrator.regenerate_node(
-            node_id=node_id,
-            llm_context=llm_context,
+        gen_task = asyncio.create_task(
+            course_orchestrator.regenerate_node(
+                node_id=node_id,
+                llm_context=llm_context,
+            )
         )
+
+        while not gen_task.done():
+            # Check for client disconnect every 0.5 seconds
+            done, pending = await asyncio.wait({gen_task}, timeout=0.5)
+            if gen_task.done():
+                break
+            if await request.is_disconnected():
+                logger.info(f"Client disconnected. Cancelling node regeneration task for node {node_id}...")
+                gen_task.cancel()
+                try:
+                    await gen_task
+                except asyncio.CancelledError:
+                    pass
+                raise HTTPException(
+                    status_code=499,
+                    detail="Regeneration cancelled",
+                )
+
+        result = gen_task.result()
 
         if result is None:
             raise HTTPException(

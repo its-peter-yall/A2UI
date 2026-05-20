@@ -259,6 +259,55 @@ describe('TopicInput', () => {
       });
     });
   });
+
+  it('displays Stop button when loading and aborts the request when clicked', async () => {
+    let mockSignal: AbortSignal | undefined;
+    const mockAbort = vi.fn();
+    (api.generateCourse as ReturnType<typeof vi.fn>).mockImplementation((data, signal) => {
+      mockSignal = signal;
+      if (signal) {
+        signal.addEventListener('abort', mockAbort);
+      }
+      return new Promise(() => {}); // never resolves to simulate loading
+    });
+
+    const queryClient = new QueryClient();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <TopicInput />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    const input = screen.getByPlaceholderText(/what do you want to learn/i);
+    fireEvent.change(input, { target: { value: 'React hooks' } });
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    // Wait for button to change to "Stop"
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /stop generating/i })).toBeInTheDocument();
+      expect(screen.getByText('Stop')).toBeInTheDocument();
+    });
+
+    // The input should be disabled
+    expect(input).toBeDisabled();
+
+    // Click "Stop"
+    fireEvent.click(screen.getByRole('button', { name: /stop generating/i }));
+
+    // The request should be aborted
+    expect(mockAbort).toHaveBeenCalled();
+
+    // The UI should revert back to "Learn"
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /start learning/i })).toBeInTheDocument();
+      expect(screen.getByText('Learn')).toBeInTheDocument();
+    });
+
+    // The input should be re-enabled
+    expect(input).not.toBeDisabled();
+  });
 });
 
 describe('ProgressBar', () => {

@@ -182,7 +182,16 @@ class CourseOrchestrator:
         # 4. SCATTER: Execute all tasks in parallel
         # 5. GATHER: Collect results with exception handling
         parallel_start = time.perf_counter()
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        except asyncio.CancelledError:
+            logger.info(f"Course generation task cancelled for session {session_id}. Cancelling topics...")
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            logger.info(f"Cleaning up partial session {session_id} from database...")
+            learning_manager.delete_learning_session(session_id)
+            raise
         parallel_time_ms = (time.perf_counter() - parallel_start) * 1000
 
         # 6. Process results and handle partial failures
