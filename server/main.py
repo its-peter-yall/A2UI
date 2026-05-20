@@ -9,16 +9,16 @@ PURPOSE:
     all API route routers.
 ROLE IN PROJECT:
     Top-level server entry point that wires together all backend components.
-    - Bootstraps database, Vertex AI, and Instructor on startup
+    - Bootstraps database and OpenRouter integration on startup
     - Mounts all API routers and exposes health check endpoints
 KEY COMPONENTS:
     - app: FastAPI application instance with title and version metadata
     - lifespan(): Async context manager handling startup/shutdown lifecycle
     - root(): Root endpoint returning server status
-    - health(): Detailed health check exposing Vertex AI connection status
+    - health(): Detailed health check exposing OpenRouter status
 DEPENDENCIES:
     - External: fastapi, uvicorn, watchdog
-    - Internal: server.utils.vertex_client, server.utils.instructor_client,
+    - Internal: server.utils.instructor_client,
               server.database.learning_persistence, server.routers
 USAGE:
     ```bash
