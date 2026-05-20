@@ -39,6 +39,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { generateCourse } from '@/lib/learningApi';
+import { getOpenRouterSettings } from '@/lib/openrouterSettings';
 
 interface TopicInputProps {
   className?: string;
@@ -73,9 +74,11 @@ export function TopicInput({
     },
   });
 
+  const hasApiKey = Boolean(getOpenRouterSettings().apiKey);
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (query.trim() && !generateMutation.isPending) {
+    if (query.trim() && !generateMutation.isPending && hasApiKey) {
       generateMutation.mutate({
         query: query.trim(),
         user_id: userId,
@@ -103,7 +106,7 @@ export function TopicInput({
           onChange={(e) => setQuery(e.target.value)}
           autoFocus={autoFocus}
           placeholder={placeholder}
-          disabled={isLoading}
+          disabled={isLoading || !hasApiKey}
           aria-describedby={error ? `${inputId}-error` : undefined}
           aria-invalid={error ? 'true' : undefined}
           className={cn(
@@ -118,7 +121,7 @@ export function TopicInput({
         />
         <button
           type="submit"
-          disabled={!query.trim() || isLoading}
+          disabled={!query.trim() || isLoading || !hasApiKey}
           aria-label={isLoading ? 'Generating course' : 'Start learning'}
           className={cn(
             'absolute right-2 top-1/2 -translate-y-1/2',
@@ -156,6 +159,17 @@ export function TopicInput({
         </p>
       )}
 
+      {/* No API key warning */}
+      {!hasApiKey && (
+        <p
+          className="mt-3 text-sm text-amber-600 dark:text-amber-400 text-center"
+          role="alert"
+        >
+          Enter your OpenRouter API key in the settings below to start
+          learning.
+        </p>
+      )}
+
       {/* Suggestions */}
       <div className="mt-4 flex flex-wrap gap-2 justify-center">
         <span className="text-sm text-muted-foreground">Try:</span>
@@ -164,7 +178,7 @@ export function TopicInput({
             key={suggestion}
             type="button"
             onClick={() => handleSuggestionClick(suggestion)}
-            disabled={isLoading}
+            disabled={isLoading || !hasApiKey}
             className={cn(
               'px-3 py-1 text-sm rounded-full',
               'bg-muted hover:bg-muted/80 text-muted-foreground',
