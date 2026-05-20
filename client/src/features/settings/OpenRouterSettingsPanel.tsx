@@ -40,7 +40,6 @@ import {
   getOpenRouterSettings,
   setOpenRouterSettings,
   clearOpenRouterSettings,
-  maskApiKey,
 } from '@/lib/openrouterSettings';
 import { cn } from '@/lib/utils';
 import { OpenRouterModelPicker } from './OpenRouterModelPicker';
@@ -51,10 +50,7 @@ export function OpenRouterSettingsPanel() {
   const [model, setModel] = useState(() => getOpenRouterSettings().model ?? '');
   const [modelTitle, setModelTitle] = useState(() => getOpenRouterSettings().modelTitle ?? '');
   const [showKey, setShowKey] = useState(false);
-  const [maskedDisplay, setMaskedDisplay] = useState(() => {
-    const saved = getOpenRouterSettings();
-    return saved.apiKey ? maskApiKey(saved.apiKey) : '';
-  });
+  const [keySaved, setKeySaved] = useState(() => Boolean(getOpenRouterSettings().apiKey));
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleSaveKey = useCallback(() => {
@@ -69,7 +65,7 @@ export function OpenRouterSettingsPanel() {
     }
     setValidationError(null);
     setOpenRouterSettings({ apiKey: trimmed });
-    setMaskedDisplay(maskApiKey(trimmed));
+    setKeySaved(true);
     setShowKey(false);
   }, [apiKey]);
 
@@ -78,7 +74,7 @@ export function OpenRouterSettingsPanel() {
     setApiKey('');
     setModel('');
     setModelTitle('');
-    setMaskedDisplay('');
+    setKeySaved(false);
     setShowKey(false);
     setValidationError(null);
   }, []);
@@ -209,10 +205,11 @@ export function OpenRouterSettingsPanel() {
                   </p>
                 )}
 
-                {/* Masked key display */}
-                {isConfigured && !showKey && maskedDisplay && (
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    Key: {maskedDisplay}
+                {/* Key saved confirmation */}
+                {keySaved && !showKey && (
+                  <p className="mt-1.5 text-xs text-green-400 flex items-center gap-1">
+                    <Check className="h-3 w-3" />
+                    Key saved
                   </p>
                 )}
               </div>
