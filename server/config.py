@@ -40,6 +40,13 @@ class Settings:
     OPENROUTER_TIMEOUT_SECONDS = float(
         os.getenv("OPENROUTER_TIMEOUT_SECONDS", "60.0")
     )
+    GENERALCOMPUTE_BASE_URL = os.getenv(
+        "GENERALCOMPUTE_BASE_URL",
+        "https://api.generalcompute.com/v1",
+    )
+    GENERALCOMPUTE_TIMEOUT_SECONDS = float(
+        os.getenv("GENERALCOMPUTE_TIMEOUT_SECONDS", "60.0")
+    )
 
 
 settings = Settings()
