@@ -159,27 +159,50 @@ describe('LearningHome', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockNavigate.mockClear();
+
+    // Set mock API key in localStorage
+    localStorage.setItem(
+      'ai_provider_settings',
+      JSON.stringify({
+        activeProvider: 'openrouter',
+        providers: {
+          openrouter: {
+            apiKey: 'sk-or-test-key-1234567890',
+            model: 'google/gemini-2.5-flash',
+            modelTitle: 'Gemini 2.5 Flash',
+          },
+          generalcompute: {
+            apiKey: '',
+            model: '',
+            modelTitle: '',
+          },
+        },
+      })
+    );
+
+    // Provide a smart default mock that resolves to emptyResponse but handles dynamic overrides
+    vi.mocked(learningApi.getSessionsList).mockImplementation(async (options) => {
+      if (options?.limit === 1) {
+        return {
+          sessions: [],
+          total_count: 0,
+          has_more: false,
+        };
+      }
+      return emptyResponse;
+    });
   });
 
   describe('Hero-only view (no courses)', () => {
-    beforeEach(() => {
-      (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
-        emptyResponse
-      );
-    });
 
     it('shows full hero when 0 courses', async () => {
       renderWithProviders(<LearningHome />);
 
       await waitFor(() => {
-        expect(screen.getByRole('heading', { level: 1, name: /learn anything/i }))
-          .toBeInTheDocument();
+        expect(
+          screen.getByText(/enter a topic and master it through guided explanations/i)
+        ).toBeInTheDocument();
       });
-
-      // Full hero has descriptive text
-      expect(
-        screen.getByText(/enter a topic and master it through guided explanations/i)
-      ).toBeInTheDocument();
     });
 
     it('shows "How it works" section as heading when no courses', async () => {
@@ -196,19 +219,17 @@ describe('LearningHome', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Sequential Learning')).toBeInTheDocument();
+        expect(screen.getByText('Retrieval Practice')).toBeInTheDocument();
+        expect(screen.getByText('Mastery Required')).toBeInTheDocument();
       });
-      expect(screen.getByText('Retrieval Practice')).toBeInTheDocument();
-      expect(screen.getByText('Mastery Required')).toBeInTheDocument();
     });
 
     it('does not show "Your Courses" section', async () => {
       renderWithProviders(<LearningHome />);
 
       await waitFor(() => {
-        expect(screen.getByText('Learn Anything')).toBeInTheDocument();
+        expect(screen.queryByText('Your Courses')).not.toBeInTheDocument();
       });
-
-      expect(screen.queryByText('Your Courses')).not.toBeInTheDocument();
     });
 
     it('shows topic input', async () => {
@@ -234,9 +255,16 @@ describe('LearningHome', () => {
 
   describe('Dashboard view (with courses)', () => {
     beforeEach(() => {
-      (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
-        multiCourseResponse
-      );
+      vi.mocked(learningApi.getSessionsList).mockImplementation(async (options) => {
+        if (options?.limit === 1) {
+          return {
+            sessions: multiCourseResponse.sessions.slice(0, 1),
+            total_count: multiCourseResponse.total_count,
+            has_more: false,
+          };
+        }
+        return multiCourseResponse;
+      });
     });
 
     it('shows compact hero and "Your Courses" section when courses exist', async () => {
@@ -331,9 +359,16 @@ describe('LearningHome', () => {
 
   describe('Navigation', () => {
     beforeEach(() => {
-      (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue(
-        singleCourseResponse
-      );
+      vi.mocked(learningApi.getSessionsList).mockImplementation(async (options) => {
+        if (options?.limit === 1) {
+          return {
+            sessions: singleCourseResponse.sessions.slice(0, 1),
+            total_count: singleCourseResponse.total_count,
+            has_more: false,
+          };
+        }
+        return singleCourseResponse;
+      });
       (learningApi.createRevisionSession as ReturnType<typeof vi.fn>).mockResolvedValue({
         id: 'revision-1',
         mode: 'full_review',
@@ -445,19 +480,29 @@ describe('LearningHome', () => {
 
   describe('Filtering', () => {
     it('clicking filter pill triggers re-fetch', async () => {
-      (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(multiCourseResponse) // Initial load
-        .mockResolvedValueOnce({
-          sessions: [
-            createMockSession({
-              id: 'session-1',
-              course_title: 'React Hooks',
-              status: 'in_progress',
-            }),
-          ],
-          total_count: 1,
-          has_more: false,
-        }); // After filter
+      vi.mocked(learningApi.getSessionsList).mockImplementation(async (options) => {
+        if (options?.limit === 1) {
+          return {
+            sessions: [createMockSession()],
+            total_count: 2,
+            has_more: false,
+          };
+        }
+        if (options?.status === 'in_progress') {
+          return {
+            sessions: [
+              createMockSession({
+                id: 'session-1',
+                course_title: 'React Hooks',
+                status: 'in_progress',
+              }),
+            ],
+            total_count: 1,
+            has_more: false,
+          };
+        }
+        return multiCourseResponse;
+      });
 
       renderWithProviders(<LearningHome />);
 
@@ -496,13 +541,23 @@ describe('LearningHome', () => {
     });
 
     it('shows empty filter state when filter matches nothing', async () => {
-      (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(multiCourseResponse) // Initial load shows dashboard
-        .mockResolvedValueOnce({
-          sessions: [],
-          total_count: 1, // Still have courses overall, just none match filter
-          has_more: false,
-        });
+      vi.mocked(learningApi.getSessionsList).mockImplementation(async (options) => {
+        if (options?.limit === 1) {
+          return {
+            sessions: [createMockSession()],
+            total_count: 1,
+            has_more: false,
+          };
+        }
+        if (options?.status === 'completed') {
+          return {
+            sessions: [],
+            total_count: 0,
+            has_more: false,
+          };
+        }
+        return multiCourseResponse;
+      });
 
       renderWithProviders(<LearningHome />);
 
@@ -547,9 +602,19 @@ describe('LearningHome', () => {
     });
 
     it('"Load More" fetches next page with offset pagination', async () => {
-      (learningApi.getSessionsList as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce(paginatedResponse)
-        .mockResolvedValueOnce(page2Response);
+      vi.mocked(learningApi.getSessionsList).mockImplementation(async (options) => {
+        if (options?.limit === 1) {
+          return {
+            sessions: [createMockSession()],
+            total_count: 2,
+            has_more: false,
+          };
+        }
+        if (options?.offset === 4) {
+          return page2Response;
+        }
+        return paginatedResponse;
+      });
 
       renderWithProviders(<LearningHome />);
 

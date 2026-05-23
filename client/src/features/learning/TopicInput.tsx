@@ -39,7 +39,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { generateCourse } from '@/lib/learningApi';
-import { getOpenRouterSettings } from '@/lib/openrouterSettings';
+import { getProviderSettings } from '@/lib/providerSettings';
 import type { GenerateCourseRequest } from '@/types/learning';
 
 interface TopicInputProps {
@@ -92,7 +92,8 @@ export function TopicInput({
     generateMutation.reset();
   };
 
-  const hasApiKey = Boolean(getOpenRouterSettings().apiKey);
+  const settings = getProviderSettings();
+  const hasApiKey = Boolean(settings.providers[settings.activeProvider].apiKey);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -186,7 +187,7 @@ export function TopicInput({
           className="mt-3 text-sm text-amber-600 dark:text-amber-400 text-center"
           role="alert"
         >
-          Enter your OpenRouter API key in the settings below to start
+          Enter your API key in the settings below to start
           learning.
         </p>
       )}

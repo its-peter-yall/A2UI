@@ -70,11 +70,18 @@ vi.mock('@/lib/learningApi', () => ({
   }),
 }));
 
-// Mock OpenRouter settings so hasApiKey is true in tests
-vi.mock('@/lib/openrouterSettings', () => ({
-  getOpenRouterSettings: vi.fn(() => ({
-    apiKey: 'test-key',
-    model: 'google/gemini-2.5-flash',
+// Mock provider settings so hasApiKey is true in tests
+vi.mock('@/lib/providerSettings', () => ({
+  getProviderSettings: vi.fn(() => ({
+    activeProvider: 'openrouter',
+    providers: {
+      openrouter: {
+        apiKey: 'test-key',
+        model: 'google/gemini-2.5-flash',
+        modelTitle: 'Gemini 2.5 Flash',
+      },
+      generalcompute: { apiKey: '', model: '', modelTitle: '' },
+    },
   })),
 }));
 
@@ -166,19 +173,23 @@ describe('LearningHome', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows how it works steps', () => {
+  it('shows how it works steps', async () => {
     renderWithProviders(<LearningHome />, { route: '/learn' });
-    expect(screen.getByText('Read')).toBeInTheDocument();
-    expect(screen.getByText('Quiz')).toBeInTheDocument();
-    expect(screen.getByText('Feedback')).toBeInTheDocument();
-    expect(screen.getByText('Master')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Study the explanation')).toBeInTheDocument();
+      expect(screen.getByText('Answer questions')).toBeInTheDocument();
+      expect(screen.getByText('Learn from mistakes')).toBeInTheDocument();
+      expect(screen.getByText('Score 100% to proceed')).toBeInTheDocument();
+    });
   });
 
-  it('shows feature cards', () => {
+  it('shows feature cards', async () => {
     renderWithProviders(<LearningHome />, { route: '/learn' });
-    expect(screen.getByText('Sequential Learning')).toBeInTheDocument();
-    expect(screen.getByText('Retrieval Practice')).toBeInTheDocument();
-    expect(screen.getByText('Mastery Required')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Sequential Learning')).toBeInTheDocument();
+      expect(screen.getByText('Retrieval Practice')).toBeInTheDocument();
+      expect(screen.getByText('Mastery Required')).toBeInTheDocument();
+    });
   });
 
   it('has navigation link to learn', () => {
@@ -516,10 +527,12 @@ describe('Accessibility', () => {
     expect(screen.getByRole('navigation', { name: /learning path progress/i })).toBeInTheDocument();
   });
 
-  it('LearningHome has proper heading hierarchy', () => {
+  it('LearningHome has proper heading hierarchy', async () => {
     renderWithProviders(<LearningHome />, { route: '/learn' });
 
-    expect(screen.getByRole('heading', { level: 1, name: /learn anything/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: /how it works/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1, name: /learn anything/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 2, name: /how it works/i })).toBeInTheDocument();
+    });
   });
 });

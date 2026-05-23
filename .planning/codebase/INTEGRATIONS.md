@@ -4,25 +4,25 @@
 
 ## APIs & External Services
 
-**OpenRouter (LLM Gateway):**
-- **Purpose:** Universal LLM inference for the adaptive learning system
-- **SDK:** `openai` Python library (OpenRouter is OpenAI-compatible)
-- **Models Used:**
-  - `google/gemini-2.5-pro` - High-capability model for planning tasks
-  - `google/gemini-2.5-flash` - Fast model for generation and quiz tasks
-  - 300+ additional models available (Claude, GPT-4o, DeepSeek, etc.)
-- **Client Implementation:** `server/utils/instructor_client.py`
-  - `AsyncOpenAI` client pointing to OpenRouter base URL
-  - Per-request API key injected via `X-OpenRouter-Key` header
-  - Role-based model selection (planner, generator, quizzer)
-- **Structured Output:** `server/utils/instructor_client.py`
-  - Uses `instructor` library with OpenAI provider
-  - Pydantic-validated responses via `instructor.Mode.TOOLS`
-  - Retry logic via `tenacity` (exponential backoff)
-- **Auth:** User-provided API key per request (no server-side key storage)
-- **Config (optional):**
-  - `OPENROUTER_BASE_URL` - API endpoint (default: `https://openrouter.ai/api/v1`)
-  - `OPENROUTER_TIMEOUT_SECONDS` - Request timeout (default: `60.0`)
+**AI Provider Abstraction (OpenRouter & General Compute):**
+- **Purpose:** Universal LLM inference supporting multiple backends for course generation
+- **Providers Supported:**
+  - **OpenRouter:** Universal LLM gateway (default base URL: `https://openrouter.ai/api/v1`)
+  - **General Compute:** High-efficiency OpenAI-compatible endpoint (default base URL: `https://api.generalcompute.com/v1`)
+- **SDK:** `openai` Python library (both providers use standard OpenAI compatibility)
+- **Structured Output Client:** `server/utils/instructor_client.py`
+  - Dynamic client generation: `AsyncOpenAI` instance initialized on a per-request basis
+  - Provider-aware parameters: dynamically sets target `base_url` and `timeout` values
+- **Header Contract:**
+  - `X-AI-Provider`: Controls routing, must be either `openrouter` or `generalcompute`
+  - `Authorization`: standard Bearer token header (`Bearer <API_KEY>`) carrying provider credentials
+- **Client Settings Module:** `client/src/lib/providerSettings.ts`
+  - Handles key entry, masking, validation, and active model selection
+  - Segregates saved state: switches between providers while preserving the API key and model selection of the other
+  - Automatic Migration: converts legacy `openrouter_settings` key to `ai_provider_settings` format on first mount
+- **Backend Routing:**
+  - Dispatched via `get_llm_context()` context manager in FastAPI routes
+  - Extracts active provider and credentials from requests, and propagates them to the base agent system
 
 **REST API (Internal):**
 - **Client:** Axios-based API client in `client/src/lib/learningApi.ts`

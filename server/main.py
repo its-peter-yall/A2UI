@@ -97,11 +97,12 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint exposing OpenRouter status."""
+    """Health check endpoint exposing provider status."""
     return {
         "status": "ok",
         "services": {
-            "openrouter": "enabled"
+            "openrouter": "enabled",
+            "generalcompute": "enabled",
         },
     }
 
