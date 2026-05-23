@@ -182,3 +182,126 @@ class TestLLMRouterModels(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 401)
+
+
+class TestLLMRouterGeneralCompute(unittest.TestCase):
+    """Tests for /llm/models with General Compute provider."""
+
+    def test_list_models_generalcompute_returns_models(self) -> None:
+        """GET /llm/models with General Compute returns models."""
+        mock_data = [
+            {"id": "gc-model-1"},
+            {"id": "gc-model-2"},
+        ]
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": mock_data}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_client_ctx = AsyncMock()
+        mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        app = FastAPI()
+        app.include_router(llm_router)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with patch(
+            "server.routers.llm.httpx.AsyncClient",
+            return_value=mock_client_ctx,
+        ):
+            response = client.get(
+                "/llm/models",
+                headers={
+                    "X-AI-Provider": "generalcompute",
+                    "X-GeneralCompute-Key": "gc-test-key",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        models = response.json()
+        self.assertEqual(len(models), 2)
+        self.assertEqual(models[0]["id"], "gc-model-1")
+        self.assertEqual(models[0]["name"], "gc-model-1")
+        self.assertIsNone(models[0]["context_length"])
+
+    def test_list_models_generalcompute_returns_401_without_key(self) -> None:
+        """GET /llm/models with GC provider but missing GC key returns 401."""
+        app = FastAPI()
+        app.include_router(llm_router)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        response = client.get(
+            "/llm/models",
+            headers={"X-AI-Provider": "generalcompute"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+        detail = response.json().get("detail", "")
+        self.assertIn("X-GeneralCompute-Key", detail)
+
+    def test_list_models_generalcompute_returns_502_on_upstream_error(self) -> None:
+        """GET /llm/models returns 502 when GC returns non-200."""
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_client_ctx = AsyncMock()
+        mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        app = FastAPI()
+        app.include_router(llm_router)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with patch(
+            "server.routers.llm.httpx.AsyncClient",
+            return_value=mock_client_ctx,
+        ):
+            response = client.get(
+                "/llm/models",
+                headers={
+                    "X-AI-Provider": "generalcompute",
+                    "X-GeneralCompute-Key": "gc-test-key",
+                },
+            )
+
+        self.assertEqual(response.status_code, 502)
+
+    def test_list_models_without_provider_defaults_to_openrouter(self) -> None:
+        """GET /llm/models without X-AI-Provider defaults to openrouter."""
+        mock_data = [{"id": "google/gemini-2.5-flash"}]
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"data": mock_data}
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        mock_client_ctx = AsyncMock()
+        mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_ctx.__aexit__ = MagicMock()
+
+        app = FastAPI()
+        app.include_router(llm_router)
+        client = TestClient(app, raise_server_exceptions=False)
+
+        with patch(
+            "server.routers.llm.httpx.AsyncClient",
+            return_value=mock_client_ctx,
+        ):
+            response = client.get(
+                "/llm/models",
+                headers={"X-OpenRouter-Key": "test-key"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        models = response.json()
+        self.assertEqual(models[0]["id"], "google/gemini-2.5-flash")

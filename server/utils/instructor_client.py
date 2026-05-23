@@ -45,6 +45,7 @@ from tenacity import (
 )
 
 from server.config import settings
+from server.schemas.llm import AIProviderEnum
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,20 @@ class InstructorClient:
                 f"Available: {list(MODEL_CONFIGS.keys())}"
             )
 
+    def _get_provider_config(
+        self, provider: AIProviderEnum
+    ) -> tuple[str, float]:
+        """Return (base_url, timeout) for the given provider."""
+        if provider == AIProviderEnum.GENERALCOMPUTE:
+            return (
+                settings.GENERALCOMPUTE_BASE_URL,
+                settings.GENERALCOMPUTE_TIMEOUT_SECONDS,
+            )
+        return (
+            settings.OPENROUTER_BASE_URL,
+            settings.OPENROUTER_TIMEOUT_SECONDS,
+        )
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -118,6 +133,7 @@ class InstructorClient:
         model_override: Optional[str] = None,
         attribution_headers: Optional[dict[str, str]] = None,
         system_prompt: Optional[str] = None,
+        provider: AIProviderEnum = AIProviderEnum.OPENROUTER,
         **kwargs: Any,
     ) -> T:
         """
@@ -131,10 +147,11 @@ class InstructorClient:
             role: Agent role key (planner, generator, quizzer)
             response_model: Pydantic model class for response validation
             messages: List of message dicts with 'role' and 'content' keys
-            api_key: OpenRouter API key
+            api_key: API key for the active provider
             model_override: Optional global model slug override
             attribution_headers: Optional HTTP headers for OpenRouter
             system_prompt: Optional system instruction to prepend
+            provider: AI provider enum to route requests through
             **kwargs: Additional arguments passed to the model
 
         Returns:
@@ -145,7 +162,7 @@ class InstructorClient:
 
         # Enforce key validation early
         if not api_key:
-            raise ValueError("OpenRouter API key is required.")
+            raise ValueError(f"{provider.value.title()} API key is required.")
 
         config = MODEL_CONFIGS[role]
 
@@ -165,11 +182,12 @@ class InstructorClient:
         # Construct OpenAI client wrapped with Instructor
         # max_retries=0: disable SDK retries — tenacity handles retries,
         # and SDK retries would ignore CancelledError from task cancellation
+        base_url, timeout = self._get_provider_config(provider)
         base_client = AsyncOpenAI(
-            base_url=settings.OPENROUTER_BASE_URL,
+            base_url=base_url,
             api_key=api_key,
             default_headers=attribution_headers or {},
-            timeout=settings.OPENROUTER_TIMEOUT_SECONDS,
+            timeout=timeout,
             max_retries=0,
         )
 

@@ -117,7 +117,8 @@ class BaseAgent(ABC):
         """
         # Validate that we have llm_context and a key
         if not llm_context or not llm_context.api_key:
-            raise ValueError("OpenRouter API key is required in llm_context.")
+            provider_name = llm_context.provider.value.title() if llm_context else "AI"
+            raise ValueError(f"{provider_name} API key is required in llm_context.")
 
         # Build the full system prompt with context
         full_system_prompt = self._build_system_prompt(context)
@@ -141,6 +142,7 @@ class BaseAgent(ABC):
                     model_override=model_override,
                     attribution_headers=attribution_headers,
                     system_prompt=full_system_prompt,
+                    provider=llm_context.provider,
                     **kwargs,
                 )
                 logger.info(

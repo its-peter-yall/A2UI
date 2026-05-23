@@ -25,37 +25,23 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 import httpx
 
-from server.schemas.llm import LLMContext, ModelResponse, get_llm_context
+from server.config import settings
+from server.schemas.llm import AIProviderEnum, LLMContext, ModelResponse, get_llm_context
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
 
-@router.get(
-    "/models",
-    response_model=List[ModelResponse],
-    summary="List available OpenRouter models",
-    description=(
-        "Fetch available models from OpenRouter API and return trimmed "
-        "metadata. Requires X-OpenRouter-Key header."
-    ),
-)
-async def list_models(
-    llm_context: LLMContext = Depends(get_llm_context),
-) -> List[ModelResponse]:
-    """
-    Fetch models from OpenRouter and trim to only include ID, Name,
-    and Context Length. Requires authentication via X-OpenRouter-Key.
-    """
-    url = "https://openrouter.ai/api/v1/models"
+async def _fetch_openrouter_models(llm_context: LLMContext) -> List[ModelResponse]:
+    """Fetch and trim models from OpenRouter."""
+    url = f"{settings.OPENROUTER_BASE_URL}/models"
     try:
-        # Build headers with API key and optional attribution
         headers = {"Authorization": f"Bearer {llm_context.api_key}"}
         attribution = llm_context.get_attribution_headers()
         headers.update(attribution)
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                url, headers=headers, timeout=10.0
+                url, headers=headers, timeout=settings.OPENROUTER_TIMEOUT_SECONDS
             )
             if response.status_code in (401, 403):
                 raise HTTPException(
@@ -65,9 +51,7 @@ async def list_models(
             if response.status_code != 200:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=(
-                        f"OpenRouter returned error: {response.text}"
-                    ),
+                    detail=f"OpenRouter returned error: {response.text}",
                 )
 
             data = response.json()
@@ -91,6 +75,72 @@ async def list_models(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Failed to connect to OpenRouter: {str(e)}",
         )
+
+
+async def _fetch_generalcompute_models(llm_context: LLMContext) -> List[ModelResponse]:
+    """Fetch and trim models from General Compute."""
+    url = f"{settings.GENERALCOMPUTE_BASE_URL}/models/list"
+    try:
+        headers = {"Authorization": f"Bearer {llm_context.api_key}"}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url, headers=headers, timeout=settings.GENERALCOMPUTE_TIMEOUT_SECONDS
+            )
+            if response.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or rejected General Compute API key.",
+                )
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"General Compute returned error: {response.text}",
+                )
+
+            data = response.json()
+            models_list = data.get("data", [])
+
+            result = []
+            for item in models_list:
+                model_id = item.get("id")
+                if not model_id:
+                    continue
+                result.append(
+                    ModelResponse(
+                        id=model_id,
+                        name=model_id,
+                        context_length=None,
+                    )
+                )
+            return result
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to connect to General Compute: {str(e)}",
+        )
+
+
+@router.get(
+    "/models",
+    response_model=List[ModelResponse],
+    summary="List available AI models",
+    description=(
+        "Fetch available models from the active AI provider and return trimmed "
+        "metadata. Requires X-AI-Provider and appropriate key headers."
+    ),
+)
+async def list_models(
+    llm_context: LLMContext = Depends(get_llm_context),
+) -> List[ModelResponse]:
+    """
+    Fetch models from active provider and trim to only include ID, Name,
+    and Context Length. Requires authentication.
+    """
+    try:
+        if llm_context.provider == AIProviderEnum.GENERALCOMPUTE:
+            return await _fetch_generalcompute_models(llm_context)
+        return await _fetch_openrouter_models(llm_context)
     except HTTPException:
         raise
     except Exception as e:
