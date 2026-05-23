@@ -34,7 +34,7 @@
 // learningApi.ts
 // API functions for retrieval-based learning features
 
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { getProviderSettings } from './providerSettings';
 import { buildProviderHeaders } from './providerApi';
 import type {
@@ -69,10 +69,10 @@ const api = axios.create({
 });
 
 // Shared interceptor factory to attach provider-aware headers
-function attachProviderHeaders(config: any) {
+function attachProviderHeaders(config: InternalAxiosRequestConfig) {
   const settings = getProviderSettings();
   const activeConfig = settings.providers[settings.activeProvider];
-  if (activeConfig.apiKey) {
+  if (activeConfig.apiKey && config.headers) {
     const headers = buildProviderHeaders(
       settings.activeProvider,
       activeConfig.apiKey,

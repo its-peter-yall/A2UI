@@ -30,7 +30,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   getProviderSettings,
-  setProviderSettings,
   getActiveProviderConfig,
   setActiveProvider,
   setProviderConfig,

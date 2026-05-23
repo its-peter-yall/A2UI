@@ -187,7 +187,7 @@ export function TopicInput({
           className="mt-3 text-sm text-amber-600 dark:text-amber-400 text-center"
           role="alert"
         >
-          Enter your API key in the settings below to start
+          Enter your API key in the settings page to start
           learning.
         </p>
       )}

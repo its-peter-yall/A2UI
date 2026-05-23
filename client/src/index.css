@@ -161,6 +161,21 @@
   }
 }
 
+@layer components {
+  /* Interactive element cursor defaults - ensures hand cursor on hover */
+  button,
+  a,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="switch"],
+  [role="checkbox"],
+  [role="radio"],
+  [tabindex="0"] {
+    cursor: pointer;
+  }
+}
+
 /* Custom Typography Overrides for Dark Mode */
 
 @layer utilities {

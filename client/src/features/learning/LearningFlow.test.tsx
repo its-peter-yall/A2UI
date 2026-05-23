@@ -280,10 +280,8 @@ describe('TopicInput', () => {
   });
 
   it('displays Stop button when loading and aborts the request when clicked', async () => {
-    let mockSignal: AbortSignal | undefined;
     const mockAbort = vi.fn();
-    (api.generateCourse as ReturnType<typeof vi.fn>).mockImplementation((data, signal) => {
-      mockSignal = signal;
+    (api.generateCourse as ReturnType<typeof vi.fn>).mockImplementation((_data, signal) => {
       if (signal) {
         signal.addEventListener('abort', mockAbort);
       }

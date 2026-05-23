@@ -52,14 +52,6 @@ const EMPTY_CONFIG: ProviderConfig = {
   modelTitle: '',
 };
 
-const EMPTY_SETTINGS: AIProviderSettings = {
-  activeProvider: 'openrouter',
-  providers: {
-    openrouter: { ...EMPTY_CONFIG },
-    generalcompute: { ...EMPTY_CONFIG },
-  },
-};
-
 /**
  * Reads settings from localStorage, migrating legacy OpenRouter settings if present.
  */

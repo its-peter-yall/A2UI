@@ -49,7 +49,7 @@ import { useRevisionSession } from './useRevisionSession';
 import { useRevisionMutations } from './useRevisionMutations';
 import { RevisionConceptCard } from './RevisionConceptCard';
 import { RevisionSummaryModal } from './RevisionSummaryModal';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { SettingsButton } from '@/components/SettingsButton';
 import { cn } from '@/lib/utils';
 import {
   carouselSlideVariants,
@@ -326,7 +326,7 @@ export function RevisionPage() {
             </div>
             
             <div className="w-24 flex justify-end">
-              <ThemeToggle />
+              <SettingsButton />
             </div> {/* Spacer for alignment */}
           </div>
 

@@ -5,28 +5,36 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Generic searchable model picker component supporting multiple AI providers.
+ *    Searchable unified model picker that fetches and combines model catalogs
+ *    from multiple configured AI providers.
  *
  * ROLE IN PROJECT:
- *    Provides the searchable select dropdown in settings panels, loading
- *    and rendering models matching the selected provider (OpenRouter or General Compute).
+ *    Acts as the primary model selection interface, allowing the user to select
+ *    any model from either OpenRouter or General Compute in a single unified dropdown.
  *
  * KEY COMPONENTS:
- *    - ModelPicker: Search + selection UI for AI models
- *    - useModelList(): React Query hook for caching model lists per provider/key
+ *    - ModelPicker: Search + selection UI for unified AI models list
+ *    - useModelList(): Custom React Query hook fetching models per provider
  *
  * DEPENDENCIES:
  *    - External: react, @tanstack/react-query, lucide-react, framer-motion
- *    - Internal: @/lib/providerApi, @/types/provider
+ *    - Internal: @/lib/providerApi, @/types/provider, @/lib/utils
  *
  * USAGE:
  *    import { ModelPicker } from '@/features/settings/ModelPicker';
+ *    <ModelPicker
+ *      openRouterKey={orKey}
+ *      generalComputeKey={gcKey}
+ *      activeProvider={activeProv}
+ *      activeModel={activeModel}
+ *      onSelect={handleModelSelect}
+ *    />
  * ============================================================================
  */
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, ChevronDown, AlertTriangle } from 'lucide-react';
+import { Search, ChevronDown, AlertTriangle, Cpu, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { getProviderModels, ProviderApiError } from '@/lib/providerApi';
@@ -34,10 +42,11 @@ import { cn } from '@/lib/utils';
 import type { AIProvider, ProviderModel } from '@/types/provider';
 
 export interface ModelPickerProps {
-  provider: AIProvider;
-  apiKey: string;
-  value: string;
-  onSelect: (modelId: string, modelTitle: string) => void;
+  openRouterKey: string;
+  generalComputeKey: string;
+  activeProvider: AIProvider;
+  activeModel: string;
+  onSelect: (provider: AIProvider, modelId: string, modelTitle: string) => void;
   disabled?: boolean;
 }
 
@@ -47,77 +56,114 @@ function useModelList(provider: AIProvider, apiKey: string) {
     queryFn: () => getProviderModels(provider, apiKey),
     staleTime: 1000 * 60 * 60 * 24, // 24 hours
     retry: false,
-    enabled: apiKey.length > 0,
+    enabled: apiKey.trim().length > 0,
   });
 }
 
 export function ModelPicker({
-  provider,
-  apiKey,
-  value,
+  openRouterKey,
+  generalComputeKey,
+  activeProvider,
+  activeModel,
   onSelect,
   disabled = false,
 }: ModelPickerProps) {
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
 
-  const { data: models, isLoading, error } = useModelList(provider, apiKey);
+  // Concurrently fetch models for configured providers
+  const {
+    data: orModels,
+    isLoading: orLoading,
+    error: orError,
+  } = useModelList('openrouter', openRouterKey);
+
+  const {
+    data: gcModels,
+    isLoading: gcLoading,
+    error: gcError,
+  } = useModelList('generalcompute', generalComputeKey);
+
+  const hasAnyKey = Boolean(openRouterKey.trim() || generalComputeKey.trim());
+  const isLoading = orLoading || gcLoading;
+
+  // Combine lists with provider tag
+  const combinedModels = useMemo(() => {
+    const list: Array<ProviderModel & { provider: AIProvider }> = [];
+    if (orModels) {
+      orModels.forEach((m) => list.push({ ...m, provider: 'openrouter' }));
+    }
+    if (gcModels) {
+      gcModels.forEach((m) => list.push({ ...m, provider: 'generalcompute' }));
+    }
+    return list;
+  }, [orModels, gcModels]);
 
   const filteredModels = useMemo(() => {
-    if (!models) return [];
-    if (!search.trim()) return models;
+    if (!search.trim()) return combinedModels;
     const query = search.toLowerCase();
-    return models.filter(
+    return combinedModels.filter(
       (m) =>
         m.id.toLowerCase().includes(query) ||
-        (m.name?.toLowerCase().includes(query) ?? false)
+        (m.name?.toLowerCase().includes(query) ?? false) ||
+        m.provider.toLowerCase().includes(query)
     );
-  }, [models, search]);
+  }, [combinedModels, search]);
 
-  const selectedModel = useMemo(
-    () => models?.find((m) => m.id === value),
-    [models, value]
-  );
+  const selectedModel = useMemo(() => {
+    return combinedModels.find(
+      (m) => m.id === activeModel && m.provider === activeProvider
+    );
+  }, [combinedModels, activeModel, activeProvider]);
 
   const handleSelect = useCallback(
-    (model: ProviderModel) => {
-      onSelect(model.id, model.name ?? model.id);
+    (model: ProviderModel & { provider: AIProvider }) => {
+      onSelect(model.provider, model.id, model.name ?? model.id);
       setIsOpen(false);
       setSearch('');
     },
     [onSelect]
   );
 
-  const is401 = error?.status === 401;
+  const triggerText = useMemo(() => {
+    if (!hasAnyKey) {
+      return 'Enter an API key below to select models';
+    }
+    if (isLoading) {
+      return 'Loading models...';
+    }
+    if (selectedModel) {
+      const providerLabel =
+        selectedModel.provider === 'openrouter' ? 'OpenRouter' : 'General Compute';
+      return `${selectedModel.name ?? selectedModel.id} (${providerLabel})`;
+    }
+    return activeModel ? `${activeModel} (${activeProvider === 'openrouter' ? 'OpenRouter' : 'General Compute'})` : 'Select a model';
+  }, [hasAnyKey, isLoading, selectedModel, activeModel, activeProvider]);
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       {/* Label */}
-      <label className="block text-sm font-medium mb-1.5">Model</label>
+      <label className="block text-sm font-semibold mb-2 text-[#FFD400] tracking-wide uppercase text-xs">
+        Select Model
+      </label>
 
-      {/* Trigger button */}
+      {/* Trigger Button */}
       <button
         type="button"
-        onClick={() => !disabled && setIsOpen((prev) => !prev)}
-        disabled={disabled || !apiKey}
+        onClick={() => !disabled && hasAnyKey && setIsOpen((prev) => !prev)}
+        disabled={disabled || !hasAnyKey}
         className={cn(
-          'w-full flex items-center justify-between rounded-lg px-3 py-2',
+          'w-full flex items-center justify-between rounded-lg px-4 py-3',
           'bg-white/5 border border-white/10 backdrop-blur-sm',
-          'text-sm text-left transition-colors',
-          'hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-400/50',
-          'disabled:opacity-50 disabled:cursor-not-allowed'
+          'text-sm text-left transition-all duration-200',
+          'hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-[#FFD400]',
+          'disabled:opacity-50 disabled:cursor-not-allowed shadow-inner'
         )}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className="truncate">
-          {!apiKey
-            ? 'Enter API key first'
-            : isLoading
-              ? 'Loading models...'
-              : selectedModel
-                ? selectedModel.name ?? selectedModel.id
-                : value || 'Select a model'}
+        <span className="truncate font-medium">
+          {triggerText}
         </span>
         <ChevronDown
           className={cn(
@@ -127,21 +173,21 @@ export function ModelPicker({
         />
       </button>
 
-      {/* Dropdown */}
+      {/* Dropdown Container */}
       <AnimatePresence>
-        {isOpen && !disabled && apiKey && (
+        {isOpen && !disabled && hasAnyKey && (
           <motion.div
-            initial={{ opacity: 0, y: 4 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
             className={cn(
-              'absolute z-50 bottom-full mb-1 w-full rounded-lg overflow-hidden',
-              'bg-gray-900/95 border border-white/10 backdrop-blur-md shadow-xl'
+              'absolute z-50 mt-1 w-full rounded-lg overflow-hidden',
+              'bg-[#121214]/95 border border-white/10 backdrop-blur-md shadow-2xl'
             )}
             role="listbox"
           >
-            {/* Search input */}
+            {/* Search Box */}
             <div className="p-2 border-b border-white/10">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -149,60 +195,88 @@ export function ModelPicker({
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search models..."
+                  placeholder="Search models across all providers..."
                   className={cn(
                     'w-full pl-8 pr-3 py-1.5 rounded-md text-sm',
                     'bg-white/5 border border-white/10 text-foreground',
                     'placeholder:text-muted-foreground',
-                    'focus:outline-none focus:ring-1 focus:ring-yellow-400/50'
+                    'focus:outline-none focus:ring-1 focus:ring-[#FFD400]'
                   )}
                   autoFocus
                 />
               </div>
             </div>
 
-            {/* Model list */}
-            <div className="max-h-60 overflow-y-auto p-1">
+            {/* Models Scrollable List */}
+            <div className="max-h-72 overflow-y-auto p-1 scrollbar-thin">
               {isLoading ? (
-                <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                  Loading models...
-                </div>
-              ) : is401 ? (
-                <div className="px-3 py-4 text-sm text-red-400 text-center flex flex-col items-center gap-1">
-                  <AlertTriangle className="h-4 w-4" />
-                  Invalid API key
+                <div className="px-3 py-6 text-sm text-muted-foreground text-center">
+                  <div className="h-5 w-5 border-2 border-[#FFD400] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  Loading models catalog...
                 </div>
               ) : filteredModels.length === 0 ? (
-                <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                  No models found
+                <div className="px-3 py-6 text-sm text-muted-foreground text-center flex flex-col items-center gap-2">
+                  {(orError || gcError) ? (
+                    <>
+                      <AlertTriangle className="h-5 w-5 text-red-400" />
+                      <span className="text-red-400 font-medium">Failed to fetch some models</span>
+                      <span className="text-xs text-muted-foreground">Verify API keys in the cards below.</span>
+                    </>
+                  ) : (
+                    <span>No models found.</span>
+                  )}
                 </div>
               ) : (
-                filteredModels.map((model) => (
-                  <button
-                    key={model.id}
-                    type="button"
-                    onClick={() => handleSelect(model)}
-                    className={cn(
-                      'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
-                      'hover:bg-white/10 focus:outline-none focus:bg-white/10',
-                      model.id === value && 'bg-yellow-400/10 text-yellow-400'
-                    )}
-                    role="option"
-                    aria-selected={model.id === value}
-                  >
-                    <div className="font-medium truncate">
-                      {model.name ?? model.id}
-                    </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2">
-                      <span className="truncate">{model.id}</span>
-                      {model.context_length && (
-                        <span className="shrink-0">
-                          {(model.context_length / 1000).toFixed(0)}k ctx
-                        </span>
+                filteredModels.map((model) => {
+                  const isSelected =
+                    model.id === activeModel && model.provider === activeProvider;
+                  const isOR = model.provider === 'openrouter';
+
+                  return (
+                    <button
+                      key={`${model.provider}-${model.id}`}
+                      type="button"
+                      onClick={() => handleSelect(model)}
+                      className={cn(
+                        'w-full text-left px-3 py-2.5 rounded-md text-sm transition-all duration-150 border border-transparent',
+                        'hover:bg-white/10 hover:border-white/5 focus:outline-none focus:bg-white/10',
+                        isSelected && 'bg-[#FFD400]/10 border-[#FFD400]/20 text-[#FFD400]'
                       )}
-                    </div>
-                  </button>
-                ))
+                      role="option"
+                      aria-selected={isSelected}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-semibold truncate">
+                          {model.name ?? model.id}
+                        </span>
+                        {/* Provider Badge */}
+                        <span
+                          className={cn(
+                            'text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 flex items-center gap-1',
+                            isOR
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                          )}
+                        >
+                          {isOR ? (
+                            <Globe className="h-2.5 w-2.5" />
+                          ) : (
+                            <Cpu className="h-2.5 w-2.5" />
+                          )}
+                          {isOR ? 'OpenRouter' : 'GenCompute'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1 truncate">
+                        <span className="truncate max-w-[180px] font-mono opacity-80">{model.id}</span>
+                        {model.context_length && (
+                          <span className="shrink-0 bg-white/5 px-1.5 py-0.2 rounded text-[10px]">
+                            {(model.context_length / 1000).toFixed(0)}k ctx
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </motion.div>

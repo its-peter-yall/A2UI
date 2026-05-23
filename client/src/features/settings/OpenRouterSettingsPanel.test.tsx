@@ -5,11 +5,12 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Unit tests for the redesigned multi-provider OpenRouterSettingsPanel component.
+ *    Unit tests for the redesigned multi-provider OpenRouterSettingsPanel component
+ *    featuring concurrent OpenRouter and General Compute layout boxes.
  *
  * ROLE IN PROJECT:
- *    Verifies tab selection, provider storage coordination, toggle button displays,
- *    validation states, and model select operations.
+ *    Verifies rendering of concurrent credential cards, independent input state
+ *    coordination, validation errors, saving keys, and model selection.
  *
  * KEY COMPONENTS:
  *    - OpenRouterSettingsPanel tests
@@ -31,6 +32,7 @@ import type { ReactNode } from 'react';
 
 import { OpenRouterSettingsPanel } from './OpenRouterSettingsPanel';
 import * as providerSettings from '@/lib/providerSettings';
+import { getProviderModels } from '@/lib/providerApi';
 
 vi.mock('@/lib/providerSettings', () => ({
   getProviderSettings: vi.fn(() => ({
@@ -40,7 +42,7 @@ vi.mock('@/lib/providerSettings', () => ({
       generalcompute: { apiKey: '', model: '', modelTitle: '' },
     },
   })),
-  updateProviderConfig: vi.fn(),
+  setProviderConfig: vi.fn(),
   setActiveProvider: vi.fn(),
   clearProviderConfig: vi.fn(),
 }));
@@ -81,12 +83,13 @@ describe('OpenRouterSettingsPanel', () => {
     });
   });
 
-  it('renders the toggle button with default text', () => {
+  it('renders both OpenRouter and General Compute credentials sections simultaneously', () => {
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
-    expect(screen.getByText('Configure AI Provider')).toBeInTheDocument();
+    expect(screen.getByText('OpenRouter Credentials')).toBeInTheDocument();
+    expect(screen.getByText('General Compute Credentials')).toBeInTheDocument();
   });
 
-  it('shows "Using {model} ({provider})" text when a key and model are saved', () => {
+  it('shows active model badge when an active model is saved', () => {
     vi.mocked(providerSettings.getProviderSettings).mockReturnValue({
       activeProvider: 'openrouter',
       providers: {
@@ -100,38 +103,34 @@ describe('OpenRouterSettingsPanel', () => {
     });
 
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
-    expect(screen.getByText('Using GPT-4o (OpenRouter)')).toBeInTheDocument();
+    expect(screen.getByText('Active: GPT-4o')).toBeInTheDocument();
   });
 
-  it('toggles settings panel open on button click and allows switching tabs', () => {
+  it('allows typing into both OpenRouter and General Compute API key fields', () => {
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
 
-    const toggle = screen.getByText('Configure AI Provider');
-    fireEvent.click(toggle);
+    const orInput = screen.getByPlaceholderText('sk-or-...') as HTMLInputElement;
+    const gcInput = screen.getByPlaceholderText('Enter General Compute API key') as HTMLInputElement;
 
-    expect(screen.getByLabelText('API Key')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('sk-or-...')).toBeInTheDocument();
+    fireEvent.change(orInput, { target: { value: 'sk-or-changed' } });
+    fireEvent.change(gcInput, { target: { value: 'gc-changed' } });
 
-    const gcTab = screen.getByRole('button', { name: 'General Compute' });
-    fireEvent.click(gcTab);
-
-    expect(providerSettings.setActiveProvider).toHaveBeenCalledWith('generalcompute');
+    expect(providerSettings.setProviderConfig).toHaveBeenCalledWith('openrouter', { apiKey: 'sk-or-changed' });
+    expect(providerSettings.setProviderConfig).toHaveBeenCalledWith('generalcompute', { apiKey: 'gc-changed' });
   });
 
-  it('shows validation error for empty key', () => {
+  it('shows validation error for empty key when verified', () => {
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
 
-    // Open panel
-    fireEvent.click(screen.getByText('Configure AI Provider'));
-
-    // Click save with empty key
-    const saveButton = screen.getByRole('button', { name: 'Save API key' });
-    fireEvent.click(saveButton);
+    const saveButtons = screen.getAllByRole('button', { name: 'Save and verify API key' });
+    
+    // OpenRouter Save Button
+    fireEvent.click(saveButtons[0]);
 
     expect(screen.getByText('API key is required')).toBeInTheDocument();
   });
 
-  it('clears settings when clear button is clicked', () => {
+  it('clears settings when clear button is clicked for a provider', () => {
     vi.mocked(providerSettings.getProviderSettings).mockReturnValue({
       activeProvider: 'openrouter',
       providers: {
@@ -146,13 +145,35 @@ describe('OpenRouterSettingsPanel', () => {
 
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
 
-    // Open panel
-    fireEvent.click(screen.getByText('Using GPT-4o (OpenRouter)'));
-
-    // Click clear button
-    const clearButton = screen.getByLabelText('Clear API key');
+    // OpenRouter has clear button since its key is non-empty
+    const clearButton = screen.getByRole('button', { name: 'Clear API key' });
     fireEvent.click(clearButton);
 
     expect(providerSettings.clearProviderConfig).toHaveBeenCalledWith('openrouter');
+  });
+
+  it('calls getProviderModels and displays success state on validation success', async () => {
+    vi.mocked(providerSettings.getProviderSettings).mockReturnValue({
+      activeProvider: 'openrouter',
+      providers: {
+        openrouter: {
+          apiKey: 'sk-or-test123456789',
+          model: '',
+          modelTitle: '',
+        },
+        generalcompute: { apiKey: '', model: '', modelTitle: '' },
+      },
+    });
+    vi.mocked(getProviderModels).mockResolvedValue([]);
+
+    render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
+
+    const verifyButtons = screen.getAllByRole('button', { name: 'Save and verify API key' });
+    fireEvent.click(verifyButtons[0]);
+
+    expect(getProviderModels).toHaveBeenCalledWith('openrouter', 'sk-or-test123456789');
+    
+    const successMsg = await screen.findByText(/API key saved & verified! Connected successfully./i);
+    expect(successMsg).toBeInTheDocument();
   });
 });

@@ -37,7 +37,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { LearningPathContainer } from './LearningPathContainer';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { SettingsButton } from '@/components/SettingsButton';
 import { getLearningSession } from '@/lib/learningApi';
 import { cn } from '@/lib/utils';
 
@@ -215,7 +215,7 @@ export function LearningPage() {
               >
                 New Topic
               </Link>
-              <ThemeToggle />
+              <SettingsButton />
             </nav>
           </div>
         </div>

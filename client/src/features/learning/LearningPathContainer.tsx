@@ -49,7 +49,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { LearningSessionWithNodes, QuizSubmitResponse } from '@/types/learning';
+import type { LearningSessionWithNodes, QuizSubmitResponse, GenerateCourseRequest } from '@/types/learning';
 import { generateCourse, getLearningSession, updateLastActiveNode } from '@/lib/learningApi';
 import { ConceptCard } from './ConceptCard';
 import { LearningErrorBoundary } from './LearningErrorBoundary';
@@ -170,7 +170,7 @@ export function LearningPathContainer({
 
   // Generate new course mutation
   const generateMutation = useMutation({
-    mutationFn: generateCourse,
+    mutationFn: (data: GenerateCourseRequest) => generateCourse(data),
     onSuccess: (data) => {
       setGeneratedSessionId(data.id);
       queryClient.setQueryData(['learningSession', data.id], data);

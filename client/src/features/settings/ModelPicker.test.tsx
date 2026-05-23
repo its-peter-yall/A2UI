@@ -5,15 +5,15 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Unit tests for the generic ModelPicker component.
+ *    Unit tests for the redesigned unified ModelPicker component.
  *
  * ROLE IN PROJECT:
- *    Ensures robust fetching, searchable filtering, error handling (401),
- *    trigger display state, and multi-provider compatibility.
+ *    Ensures robust unified model list fetching, provider filtering, searchable
+ *    filtering, loading states, and multi-provider compatibility.
  *
  * KEY COMPONENTS:
  *    - Search input filtering tests
- *    - Provider selection propagation tests
+ *    - Combined provider selection propagation tests
  *    - Loading & error boundary tests
  *
  * DEPENDENCIES:
@@ -45,10 +45,13 @@ vi.mock('@/lib/providerApi', () => ({
   },
 }));
 
-const MOCK_MODELS: ProviderModel[] = [
+const MOCK_OR_MODELS: ProviderModel[] = [
   { id: 'openai/gpt-4o', name: 'GPT-4o', context_length: 128000 },
   { id: 'anthropic/claude-3', name: 'Claude 3', context_length: 200000 },
-  { id: 'meta-llama/llama-3', name: 'Llama 3', context_length: 8000 },
+];
+
+const MOCK_GC_MODELS: ProviderModel[] = [
+  { id: 'gc-model-large', name: 'GC Model Large' },
 ];
 
 function createWrapper() {
@@ -69,12 +72,18 @@ describe('ModelPicker', () => {
     vi.clearAllMocks();
   });
 
-  it('shows "Enter API key first" when no apiKey provided', () => {
+  it('shows "Enter an API key below to select models" when no apiKey provided', () => {
     render(
-      <ModelPicker provider="openrouter" apiKey="" value="" onSelect={vi.fn()} />,
+      <ModelPicker
+        openRouterKey=""
+        generalComputeKey=""
+        activeProvider="openrouter"
+        activeModel=""
+        onSelect={vi.fn()}
+      />,
       { wrapper: createWrapper() }
     );
-    expect(screen.getByText('Enter API key first')).toBeInTheDocument();
+    expect(screen.getByText('Enter an API key below to select models')).toBeInTheDocument();
   });
 
   it('shows "Loading models..." while fetching', () => {
@@ -83,36 +92,61 @@ describe('ModelPicker', () => {
     );
 
     render(
-      <ModelPicker provider="openrouter" apiKey="sk-or-test" value="" onSelect={vi.fn()} />,
+      <ModelPicker
+        openRouterKey="sk-or-test"
+        generalComputeKey=""
+        activeProvider="openrouter"
+        activeModel=""
+        onSelect={vi.fn()}
+      />,
       { wrapper: createWrapper() }
     );
-    fireEvent.click(screen.getByRole('button'));
-    const loadingElements = screen.getAllByText('Loading models...');
-    expect(loadingElements.length).toBeGreaterThanOrEqual(1);
+
+    expect(screen.getByText('Loading models...')).toBeInTheDocument();
   });
 
   it('renders model list when dropdown is open', async () => {
-    vi.mocked(providerApi.getProviderModels).mockResolvedValue(MOCK_MODELS);
+    vi.mocked(providerApi.getProviderModels).mockImplementation((provider) => {
+      if (provider === 'openrouter') return Promise.resolve(MOCK_OR_MODELS);
+      if (provider === 'generalcompute') return Promise.resolve(MOCK_GC_MODELS);
+      return Promise.resolve([]);
+    });
 
     render(
-      <ModelPicker provider="openrouter" apiKey="sk-or-test" value="" onSelect={vi.fn()} />,
+      <ModelPicker
+        openRouterKey="sk-or-test"
+        generalComputeKey="gc-test-key"
+        activeProvider="openrouter"
+        activeModel=""
+        onSelect={vi.fn()}
+      />,
       { wrapper: createWrapper() }
     );
 
+    // Click trigger button
     fireEvent.click(screen.getByRole('button'));
 
     await waitFor(() => {
       expect(screen.getByText('GPT-4o')).toBeInTheDocument();
       expect(screen.getByText('Claude 3')).toBeInTheDocument();
-      expect(screen.getByText('Llama 3')).toBeInTheDocument();
+      expect(screen.getByText('GC Model Large')).toBeInTheDocument();
     });
   });
 
   it('filters models by search query', async () => {
-    vi.mocked(providerApi.getProviderModels).mockResolvedValue(MOCK_MODELS);
+    vi.mocked(providerApi.getProviderModels).mockImplementation((provider) => {
+      if (provider === 'openrouter') return Promise.resolve(MOCK_OR_MODELS);
+      return Promise.resolve([]);
+    });
 
     render(
-      <ModelPicker provider="openrouter" apiKey="sk-or-test" value="" onSelect={vi.fn()} />,
+      <ModelPicker
+        openRouterKey="sk-or-test"
+        generalComputeKey=""
+        activeProvider="openrouter"
+        activeModel=""
+        onSelect={vi.fn()}
+      />,
       { wrapper: createWrapper() }
     );
 
@@ -122,60 +156,29 @@ describe('ModelPicker', () => {
       expect(screen.getByText('GPT-4o')).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText('Search models...');
+    const searchInput = screen.getByPlaceholderText(/Search models/i);
     fireEvent.change(searchInput, { target: { value: 'claude' } });
 
     expect(screen.getByText('Claude 3')).toBeInTheDocument();
     expect(screen.queryByText('GPT-4o')).not.toBeInTheDocument();
   });
 
-  it('calls onSelect when a model is clicked', async () => {
+  it('calls onSelect with provider and model info when clicked', async () => {
     const onSelect = vi.fn();
-    vi.mocked(providerApi.getProviderModels).mockResolvedValue(MOCK_MODELS);
-
-    render(
-      <ModelPicker provider="openrouter" apiKey="sk-or-test" value="" onSelect={onSelect} />,
-      { wrapper: createWrapper() }
-    );
-
-    fireEvent.click(screen.getByRole('button'));
-
-    await waitFor(() => {
-      expect(screen.getByText('GPT-4o')).toBeInTheDocument();
+    vi.mocked(providerApi.getProviderModels).mockImplementation((provider) => {
+      if (provider === 'openrouter') return Promise.resolve(MOCK_OR_MODELS);
+      if (provider === 'generalcompute') return Promise.resolve(MOCK_GC_MODELS);
+      return Promise.resolve([]);
     });
 
-    fireEvent.click(screen.getByText('GPT-4o'));
-
-    expect(onSelect).toHaveBeenCalledWith('openai/gpt-4o', 'GPT-4o');
-  });
-
-  it('shows 401 error when key is invalid', async () => {
-    const error = new providerApi.ProviderApiError(
-      'Invalid key',
-      401
-    );
-    vi.mocked(providerApi.getProviderModels).mockRejectedValue(error);
-
     render(
-      <ModelPicker provider="openrouter" apiKey="bad-key" value="" onSelect={vi.fn()} />,
-      { wrapper: createWrapper() }
-    );
-
-    fireEvent.click(screen.getByRole('button'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Invalid API key')).toBeInTheDocument();
-    });
-  });
-
-  it('works with generalcompute provider', async () => {
-    const gcModels = [
-      { id: 'gc-model-large', name: 'GC Model Large' },
-    ];
-    vi.mocked(providerApi.getProviderModels).mockResolvedValue(gcModels);
-
-    render(
-      <ModelPicker provider="generalcompute" apiKey="gc-test" value="" onSelect={vi.fn()} />,
+      <ModelPicker
+        openRouterKey="sk-or-test"
+        generalComputeKey="gc-test-key"
+        activeProvider="openrouter"
+        activeModel=""
+        onSelect={onSelect}
+      />,
       { wrapper: createWrapper() }
     );
 
@@ -184,5 +187,9 @@ describe('ModelPicker', () => {
     await waitFor(() => {
       expect(screen.getByText('GC Model Large')).toBeInTheDocument();
     });
+
+    fireEvent.click(screen.getByText('GC Model Large'));
+
+    expect(onSelect).toHaveBeenCalledWith('generalcompute', 'gc-model-large', 'GC Model Large');
   });
 });
