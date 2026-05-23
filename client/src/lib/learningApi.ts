@@ -35,7 +35,8 @@
 // API functions for retrieval-based learning features
 
 import axios from 'axios';
-import { getOpenRouterSettings } from './openrouterSettings';
+import { getProviderSettings } from './providerSettings';
+import { buildProviderHeaders } from './providerApi';
 import type {
   ConceptNode,
   ConceptNodeWithVisibility,
@@ -67,19 +68,22 @@ const api = axios.create({
   timeout: 30000, // 30s timeout
 });
 
-// Request interceptor: attach OpenRouter headers when settings exist
-api.interceptors.request.use((config) => {
-  const settings = getOpenRouterSettings();
-  if (settings.apiKey) {
-    config.headers['X-OpenRouter-Key'] = settings.apiKey;
-    if (settings.model) {
-      config.headers['X-OpenRouter-Model'] = settings.model;
-    }
-    config.headers['HTTP-Referer'] = window.location.origin;
-    config.headers['X-OpenRouter-Title'] = 'A2UI';
+// Shared interceptor factory to attach provider-aware headers
+function attachProviderHeaders(config: any) {
+  const settings = getProviderSettings();
+  const activeConfig = settings.providers[settings.activeProvider];
+  if (activeConfig.apiKey) {
+    const headers = buildProviderHeaders(
+      settings.activeProvider,
+      activeConfig.apiKey,
+      activeConfig.model || undefined
+    );
+    Object.assign(config.headers, headers);
   }
   return config;
-});
+}
+
+api.interceptors.request.use(attachProviderHeaders);
 
 // Response interceptor for consistent error handling
 api.interceptors.response.use(
@@ -99,19 +103,7 @@ const learningApi = axios.create({
   timeout: 300000, // 5 minutes for course generation
 });
 
-// Request interceptor: attach OpenRouter headers when settings exist
-learningApi.interceptors.request.use((config) => {
-  const settings = getOpenRouterSettings();
-  if (settings.apiKey) {
-    config.headers['X-OpenRouter-Key'] = settings.apiKey;
-    if (settings.model) {
-      config.headers['X-OpenRouter-Model'] = settings.model;
-    }
-    config.headers['HTTP-Referer'] = window.location.origin;
-    config.headers['X-OpenRouter-Title'] = 'A2UI';
-  }
-  return config;
-});
+learningApi.interceptors.request.use(attachProviderHeaders);
 
 // Response interceptor for learning API
 learningApi.interceptors.response.use(
