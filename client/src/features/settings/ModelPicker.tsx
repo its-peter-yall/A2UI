@@ -142,8 +142,7 @@ export function ModelPicker({
 
   return (
     <div className="relative w-full">
-      {/* Label */}
-      <label className="block text-sm font-semibold mb-2 text-[#FFD400] tracking-wide uppercase text-xs">
+      <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
         Select Model
       </label>
 
@@ -154,9 +153,9 @@ export function ModelPicker({
         disabled={disabled || !hasAnyKey}
         className={cn(
           'w-full flex items-center justify-between rounded-lg px-4 py-3',
-          'bg-white/5 border border-white/10 backdrop-blur-sm',
+          'bg-muted border border-border text-foreground backdrop-blur-sm',
           'text-sm text-left transition-all duration-200',
-          'hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-[#FFD400]',
+          'hover:border-border/80 focus:outline-none focus:ring-2 focus:ring-primary/20',
           'disabled:opacity-50 disabled:cursor-not-allowed shadow-inner'
         )}
         aria-haspopup="listbox"
@@ -183,12 +182,12 @@ export function ModelPicker({
             transition={{ duration: 0.15 }}
             className={cn(
               'absolute z-50 mt-1 w-full rounded-lg overflow-hidden',
-              'bg-[#121214]/95 border border-white/10 backdrop-blur-md shadow-2xl'
+              'bg-popover border border-border text-popover-foreground backdrop-blur-md shadow-2xl'
             )}
             role="listbox"
           >
             {/* Search Box */}
-            <div className="p-2 border-b border-white/10">
+            <div className="p-2 border-b border-border">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <input
@@ -198,9 +197,9 @@ export function ModelPicker({
                   placeholder="Search models across all providers..."
                   className={cn(
                     'w-full pl-8 pr-3 py-1.5 rounded-md text-sm',
-                    'bg-white/5 border border-white/10 text-foreground',
+                    'bg-muted border border-border text-foreground',
                     'placeholder:text-muted-foreground',
-                    'focus:outline-none focus:ring-1 focus:ring-[#FFD400]'
+                    'focus:outline-none focus:ring-1 focus:ring-primary/50'
                   )}
                   autoFocus
                 />
@@ -211,7 +210,7 @@ export function ModelPicker({
             <div className="max-h-72 overflow-y-auto p-1 scrollbar-thin">
               {isLoading ? (
                 <div className="px-3 py-6 text-sm text-muted-foreground text-center">
-                  <div className="h-5 w-5 border-2 border-[#FFD400] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <div className="h-5 w-5 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                   Loading models catalog...
                 </div>
               ) : filteredModels.length === 0 ? (
@@ -239,8 +238,8 @@ export function ModelPicker({
                       onClick={() => handleSelect(model)}
                       className={cn(
                         'w-full text-left px-3 py-2.5 rounded-md text-sm transition-all duration-150 border border-transparent',
-                        'hover:bg-white/10 hover:border-white/5 focus:outline-none focus:bg-white/10',
-                        isSelected && 'bg-[#FFD400]/10 border-[#FFD400]/20 text-[#FFD400]'
+                        'hover:bg-muted focus:outline-none focus:bg-muted text-popover-foreground',
+                        isSelected && 'bg-primary/10 text-primary border-primary/20 font-semibold hover:bg-primary/15 focus:bg-primary/15'
                       )}
                       role="option"
                       aria-selected={isSelected}
@@ -254,8 +253,8 @@ export function ModelPicker({
                           className={cn(
                             'text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0 flex items-center gap-1',
                             isOR
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                              ? 'bg-muted text-muted-foreground border border-border'
+                              : 'bg-purple-500/10 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/20 dark:border-purple-500/30'
                           )}
                         >
                           {isOR ? (
@@ -269,7 +268,7 @@ export function ModelPicker({
                       <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1 truncate">
                         <span className="truncate max-w-[180px] font-mono opacity-80">{model.id}</span>
                         {model.context_length && (
-                          <span className="shrink-0 bg-white/5 px-1.5 py-0.2 rounded text-[10px]">
+                          <span className="shrink-0 bg-muted px-1.5 py-0.5 rounded text-[10px] border border-border">
                             {(model.context_length / 1000).toFixed(0)}k ctx
                           </span>
                         )}

@@ -45,8 +45,8 @@ export function SettingsPage() {
       name: 'Light Mode',
       description: 'Clean, high-contrast crisp look.',
       icon: Sun,
-      color: 'text-amber-500 bg-amber-500/10 dark:text-amber-400 dark:bg-amber-400/5',
-      glow: 'shadow-amber-500/10 hover:border-amber-400/50',
+      color: 'text-[#FFD400] bg-[#FFD400]/10 dark:text-[#FFD400]/90 dark:bg-[#FFD400]/5',
+      glow: 'shadow-[#FFD400]/10 hover:border-[#FFD400]/50',
     },
     {
       id: 'dark' as const,
@@ -123,7 +123,7 @@ export function SettingsPage() {
                   transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                   className={cn(
                     'relative text-left p-4 rounded-xl border flex flex-col justify-between transition-all duration-200 shadow-sm cursor-pointer h-full min-h-[140px]',
-                    'bg-white/5 border-white/10 backdrop-blur-md',
+                    'bg-card border-border backdrop-blur-md',
                     isSelected
                       ? 'border-[#FFD400] ring-1 ring-[#FFD400] shadow-md shadow-[#FFD400]/5 bg-[#FFD400]/5'
                       : t.glow,
@@ -159,7 +159,7 @@ export function SettingsPage() {
           <h2 id="ai-provider-heading" className="text-lg font-semibold tracking-tight border-b pb-2">
             AI Provider Credentials
           </h2>
-          <div className="bg-white/5 border border-white/10 backdrop-blur-md p-6 rounded-xl shadow-sm">
+          <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
             <p className="text-xs text-muted-foreground mb-4">
               Enter your API keys and select models below. Your API keys are saved securely in your local browser storage and are never uploaded to our servers.
             </p>
