@@ -5,15 +5,19 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Unit tests for the OpenRouterSettingsPanel component.
+ *    Unit tests for the redesigned multi-provider OpenRouterSettingsPanel component.
  *
  * ROLE IN PROJECT:
- *    Verifies panel toggle, API key persistence, masked display, validation
- *    errors, clear functionality, and model picker integration.
+ *    Verifies tab selection, provider storage coordination, toggle button displays,
+ *    validation states, and model select operations.
+ *
+ * KEY COMPONENTS:
+ *    - OpenRouterSettingsPanel tests
+ *    - Mocked providerSettings state
  *
  * DEPENDENCIES:
- *    - External: vitest, @testing-library/react
- *    - Internal: ./OpenRouterSettingsPanel, @/lib/openrouterSettings
+ *    - External: vitest, @testing-library/react, @tanstack/react-query
+ *    - Internal: ./OpenRouterSettingsPanel, @/lib/providerSettings
  *
  * USAGE:
  *    npm run test -- OpenRouterSettingsPanel.test.tsx
@@ -26,18 +30,24 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { OpenRouterSettingsPanel } from './OpenRouterSettingsPanel';
-import * as settingsModule from '@/lib/openrouterSettings';
+import * as providerSettings from '@/lib/providerSettings';
 
-vi.mock('@/lib/openrouterSettings', () => ({
-  getOpenRouterSettings: vi.fn(() => ({ apiKey: '', model: '', modelTitle: '' })),
-  setOpenRouterSettings: vi.fn(),
-  clearOpenRouterSettings: vi.fn(),
-  maskApiKey: vi.fn((key: string) => (key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '')),
+vi.mock('@/lib/providerSettings', () => ({
+  getProviderSettings: vi.fn(() => ({
+    activeProvider: 'openrouter',
+    providers: {
+      openrouter: { apiKey: '', model: '', modelTitle: '' },
+      generalcompute: { apiKey: '', model: '', modelTitle: '' },
+    },
+  })),
+  updateProviderConfig: vi.fn(),
+  setActiveProvider: vi.fn(),
+  clearProviderConfig: vi.fn(),
 }));
 
-vi.mock('@/lib/openrouterApi', () => ({
-  getOpenRouterModels: vi.fn(() => Promise.resolve([])),
-  OpenRouterApiError: class extends Error {
+vi.mock('@/lib/providerApi', () => ({
+  getProviderModels: vi.fn(() => Promise.resolve([])),
+  ProviderApiError: class extends Error {
     status: number;
     constructor(msg: string, status: number) {
       super(msg);
@@ -62,49 +72,57 @@ function createWrapper() {
 describe('OpenRouterSettingsPanel', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    // Re-apply default implementation after reset
-    vi.mocked(settingsModule.getOpenRouterSettings).mockReturnValue({
-      apiKey: '',
-      model: '',
-      modelTitle: '',
+    vi.mocked(providerSettings.getProviderSettings).mockReturnValue({
+      activeProvider: 'openrouter',
+      providers: {
+        openrouter: { apiKey: '', model: '', modelTitle: '' },
+        generalcompute: { apiKey: '', model: '', modelTitle: '' },
+      },
     });
-    vi.mocked(settingsModule.maskApiKey).mockImplementation(
-      (key: string | null | undefined) => (key ? `${key.slice(0, 6)}...${key.slice(-4)}` : '')
-    );
-    localStorage.clear();
   });
 
   it('renders the toggle button with default text', () => {
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
-    expect(screen.getByText('Configure OpenRouter')).toBeInTheDocument();
+    expect(screen.getByText('Configure AI Provider')).toBeInTheDocument();
   });
 
-  it('shows "Using {model}" text when a key and model are saved', () => {
-    vi.mocked(settingsModule.getOpenRouterSettings).mockReturnValue({
-      apiKey: 'sk-or-abc123456789',
-      model: 'openai/gpt-4o',
-      modelTitle: 'GPT-4o',
+  it('shows "Using {model} ({provider})" text when a key and model are saved', () => {
+    vi.mocked(providerSettings.getProviderSettings).mockReturnValue({
+      activeProvider: 'openrouter',
+      providers: {
+        openrouter: {
+          apiKey: 'sk-or-abc123456789',
+          model: 'openai/gpt-4o',
+          modelTitle: 'GPT-4o',
+        },
+        generalcompute: { apiKey: '', model: '', modelTitle: '' },
+      },
     });
 
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
-    expect(screen.getByText('Using GPT-4o')).toBeInTheDocument();
+    expect(screen.getByText('Using GPT-4o (OpenRouter)')).toBeInTheDocument();
   });
 
-  it('toggles settings panel open on button click', () => {
+  it('toggles settings panel open on button click and allows switching tabs', () => {
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
 
-    const toggle = screen.getByText('Configure OpenRouter');
+    const toggle = screen.getByText('Configure AI Provider');
     fireEvent.click(toggle);
 
     expect(screen.getByLabelText('API Key')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('sk-or-...')).toBeInTheDocument();
+
+    const gcTab = screen.getByRole('button', { name: 'General Compute' });
+    fireEvent.click(gcTab);
+
+    expect(providerSettings.setActiveProvider).toHaveBeenCalledWith('generalcompute');
   });
 
   it('shows validation error for empty key', () => {
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
 
     // Open panel
-    fireEvent.click(screen.getByText('Configure OpenRouter'));
+    fireEvent.click(screen.getByText('Configure AI Provider'));
 
     // Click save with empty key
     const saveButton = screen.getByRole('button', { name: 'Save API key' });
@@ -114,21 +132,27 @@ describe('OpenRouterSettingsPanel', () => {
   });
 
   it('clears settings when clear button is clicked', () => {
-    vi.mocked(settingsModule.getOpenRouterSettings).mockReturnValue({
-      apiKey: 'sk-or-test123456789',
-      model: 'openai/gpt-4o',
-      modelTitle: 'GPT-4o',
+    vi.mocked(providerSettings.getProviderSettings).mockReturnValue({
+      activeProvider: 'openrouter',
+      providers: {
+        openrouter: {
+          apiKey: 'sk-or-test123456789',
+          model: 'openai/gpt-4o',
+          modelTitle: 'GPT-4o',
+        },
+        generalcompute: { apiKey: '', model: '', modelTitle: '' },
+      },
     });
 
     render(<OpenRouterSettingsPanel />, { wrapper: createWrapper() });
 
     // Open panel
-    fireEvent.click(screen.getByText('Using GPT-4o'));
+    fireEvent.click(screen.getByText('Using GPT-4o (OpenRouter)'));
 
     // Click clear button
     const clearButton = screen.getByLabelText('Clear API key');
     fireEvent.click(clearButton);
 
-    expect(settingsModule.clearOpenRouterSettings).toHaveBeenCalled();
+    expect(providerSettings.clearProviderConfig).toHaveBeenCalledWith('openrouter');
   });
 });

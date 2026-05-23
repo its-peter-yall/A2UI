@@ -5,56 +5,70 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Collapsible settings panel for OpenRouter API key entry and model
- *    selection. Persists settings to localStorage and shows masked key
- *    display with a copy/reveal toggle.
+ *    Collapsible settings panel supporting multi-provider configuration
+ *    (OpenRouter and General Compute) with secure key entry and model picker.
  *
  * ROLE IN PROJECT:
- *    Rendered on LearningHome between the topic input and course dashboard.
- *    Provides the primary UI for configuring OpenRouter credentials before
- *    generating learning content.
+ *    Primary settings UI for the learning module. Manages independent provider
+ *    keys and models and updates the active provider.
  *
  * KEY COMPONENTS:
- *    - OpenRouterSettingsPanel: Collapsible card with key input + model picker
+ *    - OpenRouterSettingsPanel: The main collapsible component
+ *    - Tab selector for switching between active providers
+ *    - ModelPicker integration with filtered lists
  *
  * DEPENDENCIES:
  *    - External: react, lucide-react, framer-motion
- *    - Internal: @/lib/openrouterSettings, @/lib/openrouterApi,
- *                ./OpenRouterModelPicker, @/lib/utils
+ *    - Internal: @/lib/providerSettings, @/features/settings/ModelPicker,
+ *                @/lib/utils
  *
  * USAGE:
- *    ```tsx
- *    <OpenRouterSettingsPanel />
- *    ```
+ *    import { OpenRouterSettingsPanel } from './OpenRouterSettingsPanel';
  * ============================================================================
  */
-
-// OpenRouterSettingsPanel.tsx
-// OpenRouter API key and model selection panel
 
 import { useState, useCallback } from 'react';
 import { Settings, Eye, EyeOff, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import {
-  getOpenRouterSettings,
-  setOpenRouterSettings,
-  clearOpenRouterSettings,
-} from '@/lib/openrouterSettings';
+  getProviderSettings,
+  updateProviderConfig,
+  setActiveProvider,
+  clearProviderConfig,
+} from '@/lib/providerSettings';
+import type { AIProvider } from '@/types/provider';
+import { ModelPicker } from './ModelPicker';
 import { cn } from '@/lib/utils';
-import { OpenRouterModelPicker } from './OpenRouterModelPicker';
 
 export function OpenRouterSettingsPanel() {
   const [isOpen, setIsOpen] = useState(false);
-  const [apiKey, setApiKey] = useState(() => getOpenRouterSettings().apiKey ?? '');
-  const [model, setModel] = useState(() => getOpenRouterSettings().model ?? '');
-  const [modelTitle, setModelTitle] = useState(() => getOpenRouterSettings().modelTitle ?? '');
+  const [settings, setSettings] = useState(() => getProviderSettings());
   const [showKey, setShowKey] = useState(false);
-  const [keySaved, setKeySaved] = useState(() => Boolean(getOpenRouterSettings().apiKey));
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const activeProvider = settings.activeProvider;
+  const activeConfig = settings.providers[activeProvider];
+
+  const handleProviderChange = useCallback((provider: AIProvider) => {
+    setActiveProvider(provider);
+    setSettings(getProviderSettings());
+    setValidationError(null);
+    setShowKey(false);
+  }, []);
+
+  const handleKeyChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      updateProviderConfig(activeProvider, { apiKey: val });
+      setSettings(getProviderSettings());
+      setValidationError(null);
+    },
+    [activeProvider]
+  );
+
   const handleSaveKey = useCallback(() => {
-    const trimmed = apiKey.trim();
+    const trimmed = activeConfig.apiKey.trim();
     if (!trimmed) {
       setValidationError('API key is required');
       return;
@@ -64,31 +78,28 @@ export function OpenRouterSettingsPanel() {
       return;
     }
     setValidationError(null);
-    setOpenRouterSettings({ apiKey: trimmed });
-    setKeySaved(true);
     setShowKey(false);
-  }, [apiKey]);
+  }, [activeConfig.apiKey]);
 
   const handleClearKey = useCallback(() => {
-    clearOpenRouterSettings();
-    setApiKey('');
-    setModel('');
-    setModelTitle('');
-    setKeySaved(false);
+    clearProviderConfig(activeProvider);
+    setSettings(getProviderSettings());
     setShowKey(false);
     setValidationError(null);
-  }, []);
+  }, [activeProvider]);
 
   const handleModelSelect = useCallback(
     (modelId: string, title: string) => {
-      setModel(modelId);
-      setModelTitle(title);
-      setOpenRouterSettings({ model: modelId, modelTitle: title });
+      updateProviderConfig(activeProvider, {
+        model: modelId,
+        modelTitle: title,
+      });
+      setSettings(getProviderSettings());
     },
-    []
+    [activeProvider]
   );
 
-  const isConfigured = Boolean(apiKey.trim());
+  const isConfigured = Boolean(activeConfig.apiKey.trim());
 
   return (
     <div className="w-full max-w-lg mx-auto mb-8">
@@ -103,13 +114,13 @@ export function OpenRouterSettingsPanel() {
           isConfigured && 'text-yellow-400 hover:text-yellow-300'
         )}
         aria-expanded={isOpen}
-        aria-controls="openrouter-settings"
+        aria-controls="provider-settings-panel"
       >
         <Settings className="h-4 w-4" />
         <span>
-          {isConfigured && modelTitle
-            ? `Using ${modelTitle}`
-            : 'Configure OpenRouter'}
+          {isConfigured && activeConfig.modelTitle
+            ? `Using ${activeConfig.modelTitle} (${activeProvider === 'openrouter' ? 'OpenRouter' : 'General Compute'})`
+            : 'Configure AI Provider'}
         </span>
       </button>
 
@@ -117,7 +128,7 @@ export function OpenRouterSettingsPanel() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            id="openrouter-settings"
+            id="provider-settings-panel"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -130,22 +141,54 @@ export function OpenRouterSettingsPanel() {
                 'bg-white/5 border border-white/10 backdrop-blur-md'
               )}
             >
+              {/* Provider Tabs */}
+              <div className="flex border-b border-white/10 mb-4">
+                <button
+                  type="button"
+                  onClick={() => handleProviderChange('openrouter')}
+                  className={cn(
+                    'flex-1 pb-2 text-sm font-medium border-b-2 transition-colors',
+                    activeProvider === 'openrouter'
+                      ? 'border-yellow-400 text-yellow-400'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  OpenRouter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProviderChange('generalcompute')}
+                  className={cn(
+                    'flex-1 pb-2 text-sm font-medium border-b-2 transition-colors',
+                    activeProvider === 'generalcompute'
+                      ? 'border-yellow-400 text-yellow-400'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  General Compute
+                </button>
+              </div>
+
               {/* API Key section */}
               <div className="mb-4">
-                <label htmlFor="openrouter-api-key" className="block text-sm font-medium mb-1.5">
+                <label
+                  htmlFor="provider-api-key"
+                  className="block text-sm font-medium mb-1.5"
+                >
                   API Key
                 </label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <input
-                      id="openrouter-api-key"
+                      id="provider-api-key"
                       type={showKey ? 'text' : 'password'}
-                      value={apiKey}
-                      onChange={(e) => {
-                        setApiKey(e.target.value);
-                        setValidationError(null);
-                      }}
-                      placeholder="sk-or-..."
+                      value={activeConfig.apiKey}
+                      onChange={handleKeyChange}
+                      placeholder={
+                        activeProvider === 'openrouter'
+                          ? 'sk-or-...'
+                          : 'Enter General Compute API key'
+                      }
                       className={cn(
                         'w-full rounded-lg px-3 py-2 pr-9 text-sm',
                         'bg-white/5 border text-foreground',
@@ -206,7 +249,7 @@ export function OpenRouterSettingsPanel() {
                 )}
 
                 {/* Key saved confirmation */}
-                {keySaved && !showKey && (
+                {isConfigured && !showKey && (
                   <p className="mt-1.5 text-xs text-green-400 flex items-center gap-1">
                     <Check className="h-3 w-3" />
                     Key saved
@@ -215,9 +258,10 @@ export function OpenRouterSettingsPanel() {
               </div>
 
               {/* Model picker */}
-              <OpenRouterModelPicker
-                apiKey={apiKey.trim()}
-                value={model}
+              <ModelPicker
+                provider={activeProvider}
+                apiKey={activeConfig.apiKey.trim()}
+                value={activeConfig.model}
                 onSelect={handleModelSelect}
                 disabled={!isConfigured}
               />
