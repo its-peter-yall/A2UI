@@ -126,6 +126,29 @@ function renderDashboard(route: string = '/learn') {
 describe('Dashboard e2e flows', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    (learningApi.getSessionsList as ReturnType<typeof vi.fn>).mockResolvedValue({
+      sessions: [],
+      total_count: 0,
+      has_more: false,
+    });
+    const mockSettings = {
+      activeProvider: 'openrouter',
+      providers: {
+        openrouter: {
+          apiKey: 'sk-or-test-key-123456',
+          model: 'openai/gpt-4o',
+          modelTitle: 'GPT-4o',
+          thinking: { enabled: false, effort: 'high' }
+        },
+        generalcompute: {
+          apiKey: '',
+          model: '',
+          modelTitle: '',
+          thinking: { enabled: false, effort: 'high' }
+        }
+      }
+    };
+    localStorage.setItem('ai_provider_settings', JSON.stringify(mockSettings));
   });
 
   it('renders empty state for new users', async () => {
@@ -139,8 +162,8 @@ describe('Dashboard e2e flows', () => {
       expect(
         screen.getByRole('heading', { level: 1, name: /learn anything/i })
       ).toBeInTheDocument();
+      expect(screen.queryByText('Your Courses')).not.toBeInTheDocument();
     });
-    expect(screen.queryByText('Your Courses')).not.toBeInTheDocument();
   });
 
   it('shows course cards after course generation', async () => {

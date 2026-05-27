@@ -34,7 +34,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, ChevronDown, AlertTriangle, Cpu, Globe } from 'lucide-react';
+import { Search, ChevronDown, AlertTriangle, Cpu, Globe, Brain } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { getProviderModels, ProviderApiError } from '@/lib/providerApi';
@@ -270,6 +270,13 @@ export function ModelPicker({
                         {model.context_length && (
                           <span className="shrink-0 bg-muted px-1.5 py-0.5 rounded text-[10px] border border-border">
                             {(model.context_length / 1000).toFixed(0)}k ctx
+                          </span>
+                        )}
+                        {/* Thinking Support Badge */}
+                        {model.supports_thinking && (
+                          <span className="shrink-0 bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded text-[10px] border border-amber-500/20 dark:border-amber-500/30 flex items-center gap-1">
+                            <Brain className="h-2.5 w-2.5" />
+                            Thinking
                           </span>
                         )}
                       </div>

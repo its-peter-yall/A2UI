@@ -57,6 +57,33 @@ describe('providerApi', () => {
       expect(headers['X-GeneralCompute-Model']).toBe('gc-large');
       expect(headers['X-OpenRouter-Key']).toBeUndefined();
     });
+
+    it('adds thinking headers for openrouter when enabled', () => {
+      const headers = buildProviderHeaders('openrouter', 'sk-or-test', 'gpt-4', {
+        enabled: true,
+        effort: 'medium',
+      });
+      expect(headers['X-Thinking-Enabled']).toBe('true');
+      expect(headers['X-Thinking-Effort']).toBe('medium');
+    });
+
+    it('does not add thinking headers for openrouter when disabled', () => {
+      const headers = buildProviderHeaders('openrouter', 'sk-or-test', 'gpt-4', {
+        enabled: false,
+        effort: 'high',
+      });
+      expect(headers['X-Thinking-Enabled']).toBeUndefined();
+      expect(headers['X-Thinking-Effort']).toBeUndefined();
+    });
+
+    it('does not add thinking headers for generalcompute even if enabled', () => {
+      const headers = buildProviderHeaders('generalcompute', 'gc-test', 'gc-large', {
+        enabled: true,
+        effort: 'high',
+      });
+      expect(headers['X-Thinking-Enabled']).toBeUndefined();
+      expect(headers['X-Thinking-Effort']).toBeUndefined();
+    });
   });
 
   describe('getProviderModels', () => {

@@ -37,14 +37,32 @@ import {
   setProviderConfig,
   setActiveProvider,
   clearProviderConfig,
+  setProviderThinking,
 } from '@/lib/providerSettings';
-import { getProviderModels } from '@/lib/providerApi';
-import type { AIProvider } from '@/types/provider';
+import { getProviderModels, ProviderApiError } from '@/lib/providerApi';
+import type { AIProvider, ThinkingEffort, ProviderModel } from '@/types/provider';
 import { ModelPicker } from './ModelPicker';
 import { cn } from '@/lib/utils';
-
+import { ThinkingModeToggle } from './ThinkingModeToggle';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 export function OpenRouterSettingsPanel() {
   const [settings, setSettings] = useState(() => getProviderSettings());
+
+  // Get OpenRouter models from cache to check if the active model supports thinking
+  const { data: orModels } = useQuery<ProviderModel[], ProviderApiError>({
+    queryKey: ['provider-models', 'openrouter', settings.providers.openrouter.apiKey],
+    enabled: settings.providers.openrouter.apiKey.trim().length > 0,
+  });
+
+  const activeModelSupportsThinking = useMemo(() => {
+    if (settings.activeProvider !== 'openrouter') return false;
+    const activeModelId = settings.providers.openrouter.model;
+    if (!activeModelId) return false;
+    const activeModel = orModels?.find((m) => m.id === activeModelId);
+    return activeModel?.supports_thinking ?? false;
+  }, [settings.activeProvider, settings.providers.openrouter.model, orModels]);
+
   
 
 
@@ -176,6 +194,14 @@ export function OpenRouterSettingsPanel() {
     setSettings(getProviderSettings());
   }, []);
 
+  const handleThinkingChange = useCallback(
+    (enabled: boolean, effort: ThinkingEffort) => {
+      setProviderThinking(settings.activeProvider, { enabled, effort });
+      setSettings(getProviderSettings());
+    },
+    [settings.activeProvider]
+  );
+
   const openrouterConfig = settings.providers.openrouter;
   const generalcomputeConfig = settings.providers.generalcompute;
 
@@ -193,6 +219,17 @@ export function OpenRouterSettingsPanel() {
           activeModel={settings.providers[settings.activeProvider].model}
           onSelect={handleModelSelect}
         />
+        {/* Thinking Mode Toggle - Only for OpenRouter */}
+        {settings.activeProvider === 'openrouter' && openrouterConfig.apiKey && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <ThinkingModeToggle
+              enabled={openrouterConfig.thinking?.enabled ?? false}
+              effort={openrouterConfig.thinking?.effort ?? 'high'}
+              onChange={handleThinkingChange}
+              supportsThinking={activeModelSupportsThinking}
+            />
+          </div>
+        )}
       </div>
 
       {/* Concurrent Collapsible AI Provider Cards */}

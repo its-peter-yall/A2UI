@@ -23,7 +23,7 @@ USAGE:
 """
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException, Header, status
 from pydantic import BaseModel, Field, ConfigDict
@@ -58,6 +58,15 @@ class LLMContext(BaseModel):
         default=None,
         description="Application title for OpenRouter analytics attribution",
     )
+    thinking_enabled: bool = Field(
+        default=False,
+        description="Whether thinking/reasoning mode is enabled",
+    )
+    thinking_effort: Optional[str] = Field(
+        default=None,
+        description="Thinking effort level: minimal, low, medium, high, xhigh",
+        pattern="^(minimal|low|medium|high|xhigh)$",
+    )
 
     def get_attribution_headers(self) -> dict[str, str]:
         """
@@ -70,6 +79,22 @@ class LLMContext(BaseModel):
             if self.app_title:
                 headers["X-OpenRouter-Title"] = self.app_title
         return headers
+
+    def get_reasoning_params(self) -> Optional[dict[str, Any]]:
+        """
+        Build OpenRouter reasoning parameters dict.
+
+        Returns:
+            Dict with 'reasoning' key if thinking is enabled, else None.
+        """
+        if not self.thinking_enabled:
+            return None
+
+        if not self.thinking_effort:
+            # Default to 'high' if enabled but no effort specified
+            return {"reasoning": {"effort": "high"}}
+
+        return {"reasoning": {"effort": self.thinking_effort}}
 
 
 class ModelResponse(BaseModel):
@@ -84,6 +109,10 @@ class ModelResponse(BaseModel):
         None,
         description="Context window length in tokens",
     )
+    supports_thinking: bool = Field(
+        default=False,
+        description="Whether the model supports thinking/reasoning mode",
+    )
 
 
 async def get_llm_context(
@@ -94,6 +123,8 @@ async def get_llm_context(
     x_generalcompute_model: Optional[str] = Header(None, alias="X-GeneralCompute-Model"),
     http_referer: Optional[str] = Header(None, alias="HTTP-Referer"),
     x_openrouter_title: Optional[str] = Header(None, alias="X-OpenRouter-Title"),
+    x_thinking_enabled: Optional[str] = Header(None, alias="X-Thinking-Enabled"),
+    x_thinking_effort: Optional[str] = Header(None, alias="X-Thinking-Effort"),
 ) -> LLMContext:
     """
     FastAPI dependency to extract LLM context from request headers.
@@ -124,10 +155,26 @@ async def get_llm_context(
             detail=f"{key_header_name} header is missing.",
         )
 
+    # Parse thinking enabled (string 'true'/'false' -> bool)
+    thinking_enabled = bool(
+        x_thinking_enabled and x_thinking_enabled.lower() == 'true'
+    )
+
+    # Validate effort level if provided
+    thinking_effort = None
+    valid_efforts = {'minimal', 'low', 'medium', 'high', 'xhigh'}
+    if x_thinking_effort and x_thinking_effort in valid_efforts:
+        thinking_effort = x_thinking_effort
+    elif thinking_enabled:
+        # Default to 'high' if enabled but no valid effort provided
+        thinking_effort = 'high'
+
     return LLMContext(
         provider=provider,
         api_key=api_key,
         model=model,
         http_referer=http_referer,
         app_title=x_openrouter_title,
+        thinking_enabled=thinking_enabled,
+        thinking_effort=thinking_effort,
     )

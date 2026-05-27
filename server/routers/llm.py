@@ -62,11 +62,17 @@ async def _fetch_openrouter_models(llm_context: LLMContext) -> List[ModelRespons
                 model_id = item.get("id")
                 if not model_id:
                     continue
+
+                # Check if model supports thinking
+                supported_params = item.get("supported_parameters") or []
+                supports_thinking = "reasoning" in supported_params
+
                 result.append(
                     ModelResponse(
                         id=model_id,
                         name=item.get("name"),
                         context_length=item.get("context_length"),
+                        supports_thinking=supports_thinking,
                     )
                 )
             return result

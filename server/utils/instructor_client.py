@@ -134,6 +134,7 @@ class InstructorClient:
         attribution_headers: Optional[dict[str, str]] = None,
         system_prompt: Optional[str] = None,
         provider: AIProviderEnum = AIProviderEnum.OPENROUTER,
+        reasoning_params: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> T:
         """
@@ -152,6 +153,7 @@ class InstructorClient:
             attribution_headers: Optional HTTP headers for OpenRouter
             system_prompt: Optional system instruction to prepend
             provider: AI provider enum to route requests through
+            reasoning_params: Optional reasoning config dict (effort etc.)
             **kwargs: Additional arguments passed to the model
 
         Returns:
@@ -197,6 +199,11 @@ class InstructorClient:
         )
 
         try:
+            # Build extra_body with reasoning params if provided
+            extra_body = {}
+            if reasoning_params:
+                extra_body.update(reasoning_params)
+
             # Call the instructor client
             response = await client.chat.completions.create(
                 model=model_slug,
@@ -204,6 +211,7 @@ class InstructorClient:
                 messages=full_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                extra_body=extra_body if extra_body else None,
                 **kwargs,
             )
 

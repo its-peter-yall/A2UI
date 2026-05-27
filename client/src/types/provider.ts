@@ -13,7 +13,9 @@
  *
  * KEY COMPONENTS:
  *    - AIProvider: 'openrouter' | 'generalcompute'
- *    - ProviderModel: Unified model structure
+ *    - ProviderModel: Unified model structure including thinking support flag
+ *    - ThinkingEffort: Union of available OpenRouter effort levels
+ *    - ThinkingConfig: Interface for enabling and configuring reasoning effort
  *    - PROVIDERS: Metadata registry of available providers
  *
  * DEPENDENCIES:
@@ -33,6 +35,16 @@ export interface ProviderModel {
   id: string;
   name?: string;
   context_length?: number;
+  supports_thinking?: boolean;
+}
+
+/** Thinking effort levels for OpenRouter reasoning mode */
+export type ThinkingEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
+/** Thinking configuration stored per-provider */
+export interface ThinkingConfig {
+  enabled: boolean;
+  effort: ThinkingEffort;
 }
 
 /** Response shape from GET /llm/models */

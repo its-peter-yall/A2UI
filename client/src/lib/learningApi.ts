@@ -76,7 +76,8 @@ function attachProviderHeaders(config: InternalAxiosRequestConfig) {
     const headers = buildProviderHeaders(
       settings.activeProvider,
       activeConfig.apiKey,
-      activeConfig.model || undefined
+      activeConfig.model || undefined,
+      activeConfig.thinking
     );
     Object.assign(config.headers, headers);
   }

@@ -133,6 +133,7 @@ class BaseAgent(ABC):
                 api_key = llm_context.api_key
                 model_override = llm_context.model
                 attribution_headers = llm_context.get_attribution_headers()
+                reasoning_params = llm_context.get_reasoning_params()
 
                 response = await instructor_client.create_structured(
                     role=self._role,
@@ -143,6 +144,7 @@ class BaseAgent(ABC):
                     attribution_headers=attribution_headers,
                     system_prompt=full_system_prompt,
                     provider=llm_context.provider,
+                    reasoning_params=reasoning_params,
                     **kwargs,
                 )
                 logger.info(

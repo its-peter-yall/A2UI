@@ -287,7 +287,7 @@ class TestLLMRouterGeneralCompute(unittest.TestCase):
 
         mock_client_ctx = AsyncMock()
         mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_ctx.__aexit__ = MagicMock()
+        mock_client_ctx.__aexit__ = AsyncMock(return_value=False)
 
         app = FastAPI()
         app.include_router(llm_router)

@@ -30,7 +30,7 @@
  * ============================================================================
  */
 
-import type { AIProvider } from '@/types/provider';
+import type { AIProvider, ThinkingConfig } from '@/types/provider';
 
 const STORAGE_KEY = 'ai_provider_settings';
 const LEGACY_STORAGE_KEY = 'openrouter_settings';
@@ -39,6 +39,7 @@ export interface ProviderConfig {
   apiKey: string;
   model: string;
   modelTitle: string;
+  thinking?: ThinkingConfig;
 }
 
 export interface AIProviderSettings {
@@ -50,6 +51,10 @@ const EMPTY_CONFIG: ProviderConfig = {
   apiKey: '',
   model: '',
   modelTitle: '',
+  thinking: {
+    enabled: false,
+    effort: 'high',
+  },
 };
 
 /**
@@ -67,11 +72,13 @@ export function getProviderSettings(): AIProviderSettings {
             apiKey: typeof parsed?.providers?.openrouter?.apiKey === 'string' ? parsed.providers.openrouter.apiKey : '',
             model: typeof parsed?.providers?.openrouter?.model === 'string' ? parsed.providers.openrouter.model : '',
             modelTitle: typeof parsed?.providers?.openrouter?.modelTitle === 'string' ? parsed.providers.openrouter.modelTitle : '',
+            thinking: parsed?.providers?.openrouter?.thinking ?? { enabled: false, effort: 'high' },
           },
           generalcompute: {
             apiKey: typeof parsed?.providers?.generalcompute?.apiKey === 'string' ? parsed.providers.generalcompute.apiKey : '',
             model: typeof parsed?.providers?.generalcompute?.model === 'string' ? parsed.providers.generalcompute.model : '',
             modelTitle: typeof parsed?.providers?.generalcompute?.modelTitle === 'string' ? parsed.providers.generalcompute.modelTitle : '',
+            thinking: parsed?.providers?.generalcompute?.thinking ?? { enabled: false, effort: 'high' },
           },
         },
       };
@@ -88,6 +95,7 @@ export function getProviderSettings(): AIProviderSettings {
             apiKey: typeof legacyParsed.apiKey === 'string' ? legacyParsed.apiKey : '',
             model: typeof legacyParsed.model === 'string' ? legacyParsed.model : '',
             modelTitle: typeof legacyParsed.modelTitle === 'string' ? legacyParsed.modelTitle : '',
+            thinking: { enabled: false, effort: 'high' },
           },
           generalcompute: { ...EMPTY_CONFIG },
         },
@@ -173,6 +181,27 @@ export function setProviderConfig(
  */
 export function clearProviderConfig(provider: AIProvider): void {
   setProviderConfig(provider, { ...EMPTY_CONFIG });
+}
+
+/**
+ * Updates thinking configuration for a specific provider.
+ */
+export function setProviderThinking(
+  provider: AIProvider,
+  thinking: ThinkingConfig
+): void {
+  const settings = getProviderSettings();
+  const updatedProviders = {
+    ...settings.providers,
+    [provider]: {
+      ...settings.providers[provider],
+      thinking: {
+        enabled: thinking.enabled,
+        effort: thinking.effort,
+      },
+    },
+  };
+  setProviderSettings({ providers: updatedProviders });
 }
 
 /**

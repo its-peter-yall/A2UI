@@ -46,7 +46,8 @@ export class ProviderApiError extends Error {
 export function buildProviderHeaders(
   provider: AIProvider,
   apiKey: string,
-  model?: string
+  model?: string,
+  thinking?: { enabled: boolean; effort?: string }
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -58,6 +59,12 @@ export function buildProviderHeaders(
     if (model) headers['X-OpenRouter-Model'] = model;
     headers['HTTP-Referer'] = window.location.origin;
     headers['X-OpenRouter-Title'] = 'A2UI';
+    
+    // Add thinking headers for OpenRouter only
+    if (thinking?.enabled) {
+      headers['X-Thinking-Enabled'] = 'true';
+      headers['X-Thinking-Effort'] = thinking.effort || 'high';
+    }
   } else if (provider === 'generalcompute') {
     headers['X-GeneralCompute-Key'] = apiKey;
     if (model) headers['X-GeneralCompute-Model'] = model;

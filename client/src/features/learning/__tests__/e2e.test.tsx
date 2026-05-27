@@ -150,6 +150,24 @@ describe('Learning feature integration flow', () => {
       writable: true,
     });
     vi.clearAllMocks();
+    const mockSettings = {
+      activeProvider: 'openrouter',
+      providers: {
+        openrouter: {
+          apiKey: 'sk-or-test-key-123456',
+          model: 'openai/gpt-4o',
+          modelTitle: 'GPT-4o',
+          thinking: { enabled: false, effort: 'high' }
+        },
+        generalcompute: {
+          apiKey: '',
+          model: '',
+          modelTitle: '',
+          thinking: { enabled: false, effort: 'high' }
+        }
+      }
+    };
+    localStorage.setItem('ai_provider_settings', JSON.stringify(mockSettings));
   });
 
   it('navigates from topic input to session page', async () => {

@@ -35,6 +35,7 @@ import {
   setProviderConfig,
   clearProviderConfig,
   maskApiKey,
+  setProviderThinking,
 } from './providerSettings';
 
 const STORAGE_KEY = 'ai_provider_settings';
@@ -51,8 +52,8 @@ describe('providerSettings', () => {
       expect(settings).toEqual({
         activeProvider: 'openrouter',
         providers: {
-          openrouter: { apiKey: '', model: '', modelTitle: '' },
-          generalcompute: { apiKey: '', model: '', modelTitle: '' },
+          openrouter: { apiKey: '', model: '', modelTitle: '', thinking: { enabled: false, effort: 'high' } },
+          generalcompute: { apiKey: '', model: '', modelTitle: '', thinking: { enabled: false, effort: 'high' } },
         },
       });
     });
@@ -141,6 +142,43 @@ describe('providerSettings', () => {
       expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
       expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
     });
+
+    it('migrates legacy openrouter_settings correctly and adds thinking defaults', () => {
+      const legacyData = {
+        apiKey: 'legacy-sk-or',
+        model: 'legacy-model',
+        modelTitle: 'Legacy Model',
+      };
+      localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(legacyData));
+
+      const settings = getProviderSettings();
+      expect(settings.providers.openrouter.thinking).toEqual({
+        enabled: false,
+        effort: 'high',
+      });
+      expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
+    });
+
+    it('handles migrating old ai_provider_settings from localStorage without thinking key', () => {
+      const oldSettingsWithoutThinking = {
+        activeProvider: 'generalcompute',
+        providers: {
+          openrouter: { apiKey: 'sk-or-123', model: 'gpt-4', modelTitle: 'GPT-4' },
+          generalcompute: { apiKey: 'gc-456', model: 'gc-large', modelTitle: 'GC Large' },
+        },
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(oldSettingsWithoutThinking));
+
+      const settings = getProviderSettings();
+      expect(settings.providers.openrouter.thinking).toEqual({
+        enabled: false,
+        effort: 'high',
+      });
+      expect(settings.providers.generalcompute.thinking).toEqual({
+        enabled: false,
+        effort: 'high',
+      });
+    });
   });
 
   describe('maskApiKey', () => {
@@ -156,6 +194,36 @@ describe('providerSettings', () => {
 
     it('returns empty string for very short keys', () => {
       expect(maskApiKey('sk-or')).toBe('');
+    });
+  });
+
+  describe('Thinking Configuration', () => {
+    it('setProviderThinking persists thinking config', () => {
+      setProviderThinking('openrouter', { enabled: true, effort: 'high' });
+      const settings = getProviderSettings();
+      expect(settings.providers.openrouter.thinking).toEqual({
+        enabled: true,
+        effort: 'high',
+      });
+    });
+
+    it('setProviderThinking does not affect other providers', () => {
+      setProviderThinking('openrouter', { enabled: true, effort: 'low' });
+      setProviderThinking('generalcompute', { enabled: false, effort: 'medium' });
+      
+      const settings = getProviderSettings();
+      expect(settings.providers.openrouter.thinking?.enabled).toBe(true);
+      expect(settings.providers.openrouter.thinking?.effort).toBe('low');
+      expect(settings.providers.generalcompute.thinking?.enabled).toBe(false);
+      expect(settings.providers.generalcompute.thinking?.effort).toBe('medium');
+    });
+
+    it('default thinking config is disabled with high effort', () => {
+      const settings = getProviderSettings();
+      expect(settings.providers.openrouter.thinking).toEqual({
+        enabled: false,
+        effort: 'high',
+      });
     });
   });
 });
