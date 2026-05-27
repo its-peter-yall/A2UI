@@ -183,13 +183,14 @@ export function OpenRouterSettingsPanel() {
     }
   }, []);
 
-  const handleModelSelect = useCallback((provider: AIProvider, modelId: string, modelTitle: string) => {
+  const handleModelSelect = useCallback((provider: AIProvider, modelId: string, modelTitle: string, maxCompletionTokens?: number) => {
     // Switch active provider
     setActiveProvider(provider);
     // Update chosen model configuration under that provider
     setProviderConfig(provider, {
       model: modelId,
       modelTitle: modelTitle,
+      maxCompletionTokens: maxCompletionTokens,
     });
     setSettings(getProviderSettings());
   }, []);

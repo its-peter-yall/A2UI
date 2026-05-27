@@ -190,6 +190,6 @@ describe('ModelPicker', () => {
 
     fireEvent.click(screen.getByText('GC Model Large'));
 
-    expect(onSelect).toHaveBeenCalledWith('generalcompute', 'gc-model-large', 'GC Model Large');
+    expect(onSelect).toHaveBeenCalledWith('generalcompute', 'gc-model-large', 'GC Model Large', undefined);
   });
 });

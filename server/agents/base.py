@@ -145,6 +145,7 @@ class BaseAgent(ABC):
                     system_prompt=full_system_prompt,
                     provider=llm_context.provider,
                     reasoning_params=reasoning_params,
+                    max_completion_tokens=llm_context.max_completion_tokens,
                     **kwargs,
                 )
                 logger.info(

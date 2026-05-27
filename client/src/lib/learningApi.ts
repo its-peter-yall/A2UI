@@ -77,7 +77,8 @@ function attachProviderHeaders(config: InternalAxiosRequestConfig) {
       settings.activeProvider,
       activeConfig.apiKey,
       activeConfig.model || undefined,
-      activeConfig.thinking
+      activeConfig.thinking,
+      activeConfig.maxCompletionTokens
     );
     Object.assign(config.headers, headers);
   }

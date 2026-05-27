@@ -67,6 +67,10 @@ class LLMContext(BaseModel):
         description="Thinking effort level: minimal, low, medium, high, xhigh",
         pattern="^(minimal|low|medium|high|xhigh)$",
     )
+    max_completion_tokens: Optional[int] = Field(
+        default=None,
+        description="Model-specific max output token limit from settings",
+    )
 
     def get_attribution_headers(self) -> dict[str, str]:
         """
@@ -109,6 +113,10 @@ class ModelResponse(BaseModel):
         None,
         description="Context window length in tokens",
     )
+    max_completion_tokens: Optional[int] = Field(
+        None,
+        description="Maximum tokens the model can generate in a single response",
+    )
     supports_thinking: bool = Field(
         default=False,
         description="Whether the model supports thinking/reasoning mode",
@@ -121,6 +129,9 @@ async def get_llm_context(
     x_generalcompute_key: Optional[str] = Header(None, alias="X-GeneralCompute-Key"),
     x_openrouter_model: Optional[str] = Header(None, alias="X-OpenRouter-Model"),
     x_generalcompute_model: Optional[str] = Header(None, alias="X-GeneralCompute-Model"),
+    x_max_completion_tokens: Optional[str] = Header(
+        None, alias="X-Max-Completion-Tokens"
+    ),
     http_referer: Optional[str] = Header(None, alias="HTTP-Referer"),
     x_openrouter_title: Optional[str] = Header(None, alias="X-OpenRouter-Title"),
     x_thinking_enabled: Optional[str] = Header(None, alias="X-Thinking-Enabled"),
@@ -169,6 +180,14 @@ async def get_llm_context(
         # Default to 'high' if enabled but no valid effort provided
         thinking_effort = 'high'
 
+    # Parse max completion tokens (model-specific output limit)
+    max_completion_tokens = None
+    if x_max_completion_tokens and x_max_completion_tokens.strip():
+        try:
+            max_completion_tokens = int(x_max_completion_tokens)
+        except (ValueError, TypeError):
+            max_completion_tokens = None
+
     return LLMContext(
         provider=provider,
         api_key=api_key,
@@ -177,4 +196,5 @@ async def get_llm_context(
         app_title=x_openrouter_title,
         thinking_enabled=thinking_enabled,
         thinking_effort=thinking_effort,
+        max_completion_tokens=max_completion_tokens,
     )

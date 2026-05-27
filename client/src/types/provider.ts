@@ -35,6 +35,7 @@ export interface ProviderModel {
   id: string;
   name?: string;
   context_length?: number;
+  max_completion_tokens?: number;
   supports_thinking?: boolean;
 }
 

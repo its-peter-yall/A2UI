@@ -67,11 +67,18 @@ async def _fetch_openrouter_models(llm_context: LLMContext) -> List[ModelRespons
                 supported_params = item.get("supported_parameters") or []
                 supports_thinking = "reasoning" in supported_params
 
+                # Extract max completion tokens from top provider
+                top_provider_info = item.get("top_provider") or {}
+                max_completion_tokens = top_provider_info.get(
+                    "max_completion_tokens"
+                )
+
                 result.append(
                     ModelResponse(
                         id=model_id,
                         name=item.get("name"),
                         context_length=item.get("context_length"),
+                        max_completion_tokens=max_completion_tokens,
                         supports_thinking=supports_thinking,
                     )
                 )

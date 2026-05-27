@@ -46,7 +46,7 @@ export interface ModelPickerProps {
   generalComputeKey: string;
   activeProvider: AIProvider;
   activeModel: string;
-  onSelect: (provider: AIProvider, modelId: string, modelTitle: string) => void;
+  onSelect: (provider: AIProvider, modelId: string, modelTitle: string, maxCompletionTokens?: number) => void;
   disabled?: boolean;
 }
 
@@ -118,7 +118,7 @@ export function ModelPicker({
 
   const handleSelect = useCallback(
     (model: ProviderModel & { provider: AIProvider }) => {
-      onSelect(model.provider, model.id, model.name ?? model.id);
+      onSelect(model.provider, model.id, model.name ?? model.id, model.max_completion_tokens);
       setIsOpen(false);
       setSearch('');
     },

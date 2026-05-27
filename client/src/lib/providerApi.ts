@@ -47,7 +47,8 @@ export function buildProviderHeaders(
   provider: AIProvider,
   apiKey: string,
   model?: string,
-  thinking?: { enabled: boolean; effort?: string }
+  thinking?: { enabled: boolean; effort?: string },
+  maxCompletionTokens?: number
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -68,6 +69,11 @@ export function buildProviderHeaders(
   } else if (provider === 'generalcompute') {
     headers['X-GeneralCompute-Key'] = apiKey;
     if (model) headers['X-GeneralCompute-Model'] = model;
+  }
+
+  // Send model-specific max output token limit
+  if (maxCompletionTokens && maxCompletionTokens > 0) {
+    headers['X-Max-Completion-Tokens'] = String(maxCompletionTokens);
   }
 
   return headers;

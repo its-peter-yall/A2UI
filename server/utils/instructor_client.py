@@ -57,17 +57,17 @@ MODEL_CONFIGS = {
     "planner": {
         "model": "google/gemini-2.5-pro",
         "temperature": 0.3,
-        "max_tokens": 4096,
+        "max_tokens": 10000,
     },
     "generator": {
         "model": "google/gemini-2.5-flash",
         "temperature": 0.7,
-        "max_tokens": 2048,
+        "max_tokens": 60000,
     },
     "quizzer": {
         "model": "google/gemini-2.5-flash",
         "temperature": 0.2,
-        "max_tokens": 4096,
+        "max_tokens": 8000,
     },
 }
 
@@ -135,6 +135,7 @@ class InstructorClient:
         system_prompt: Optional[str] = None,
         provider: AIProviderEnum = AIProviderEnum.OPENROUTER,
         reasoning_params: Optional[dict[str, Any]] = None,
+        max_completion_tokens: Optional[int] = None,
         **kwargs: Any,
     ) -> T:
         """
@@ -154,6 +155,7 @@ class InstructorClient:
             system_prompt: Optional system instruction to prepend
             provider: AI provider enum to route requests through
             reasoning_params: Optional reasoning config dict (effort etc.)
+            max_completion_tokens: Optional model-specific max output limit
             **kwargs: Additional arguments passed to the model
 
         Returns:
@@ -180,6 +182,15 @@ class InstructorClient:
         # Build OpenRouter parameters
         temperature = config.get("temperature", 0.5)
         max_tokens = config.get("max_tokens", 2048)
+
+        # Clamp to model-specific limit if provided by the frontend
+        if max_completion_tokens and max_completion_tokens > 0:
+            if max_tokens > max_completion_tokens:
+                logger.info(
+                    f"Clamping max_tokens from {max_tokens} to "
+                    f"{max_completion_tokens} for model {model_slug}"
+                )
+                max_tokens = max_completion_tokens
 
         # Construct OpenAI client wrapped with Instructor
         # max_retries=0: disable SDK retries — tenacity handles retries,
