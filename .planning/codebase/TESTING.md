@@ -1,770 +1,548 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-02-16
+**Analysis Date:** 2026-05-27
 
-## Overview
+## Test Framework
 
-This codebase uses a dual testing strategy:
-- **Client (React/TypeScript)**: Vitest + React Testing Library + jsdom
-- **Server (Python/FastAPI)**: Python's built-in `unittest` + `unittest.mock`
-
-Target coverage: >80% as specified in `conductor/workflow.md`.
-
----
-
-## Client Testing (TypeScript/React)
-
-### Test Framework
-
-**Runner:**
-- **Vitest** v3.2.4 - Vite-native test runner
+**Client Runner:**
+- Vitest 3.2.4
 - Config: `client/vite.config.ts` (test section)
-- Setup: `client/vitest.setup.ts`
+- Environment: `jsdom`
+- Globals: `true` (describe/it/expect available without import)
+- Setup: `client/vitest.setup.ts` imports `@testing-library/jest-dom`
 
-**Assertion Library:**
-- **@testing-library/jest-dom** - DOM-specific matchers
-- Vitest's built-in `expect` for general assertions
+**Client Assertion Library:**
+- Vitest built-in (`expect`)
+- `@testing-library/jest-dom` for DOM matchers (`toBeInTheDocument`, `toBeDisabled`, etc.)
+- `@testing-library/react` for component rendering (`render`, `screen`, `fireEvent`, `waitFor`)
 
-**Environment:**
-- **jsdom** - Browser-like DOM environment
-- **globals: true** - describe/it/expect available without import
+**Server Runner:**
+- Python `unittest` (stdlib)
+- No pytest — uses `unittest.TestCase`, `unittest.IsolatedAsyncioTestCase`
+- Async tests via `IsolatedAsyncioTestCase` for `async def` test methods
 
-### Run Commands
-
+**Run Commands:**
 ```bash
-# Navigate to client directory
+# Client
 cd client
+npm run test                          # Watch mode (vitest)
+npm run test -- --run                 # Single run
+npm run test -- src/lib/api.test.ts   # Single file
+npm run test -- -t "QueryProvider"    # Test name filter
+npm run test -- --coverage            # Coverage (@vitest/coverage-v8)
 
-# Run all tests (watch mode)
-npm run test
-
-# Run single test file
-npm run test -- src/hooks/useTypewriter.test.ts
-
-# Run tests by name pattern
-npm run test -- -t "useTypewriter"
-
-# Run tests once (CI mode)
-npm run test -- --run
-
-# Run with coverage
-npm run test -- --coverage
-
-# Run coverage report (requires @vitest/coverage-v8)
-npm run test -- --coverage --reporter=html
+# Server
+cd server
+python -m unittest                                         # All tests
+python -m unittest server.tests.test_learning_router       # Single module
+python -m unittest server.tests.test_chat.ChatSessionTests.test_invalid_session_id_returns_404  # Single test
 ```
 
-### Test File Organization
+## Test File Organization
 
-**Location:**
-- **Co-located** with source files (same directory)
-- Example: `CourseCard.tsx` + `CourseCard.test.tsx` in same folder
+**Client Location:**
+- Co-located with source: `src/features/learning/ConceptCard.test.tsx` beside `src/features/learning/ConceptCard.tsx`
+- E2E tests in `__tests__/` subdirectory: `src/features/learning/__tests__/e2e.test.tsx`
+- Hook tests co-located: `src/hooks/useTypewriter.test.ts`
 
-**Naming:**
-- `*.test.ts` - Utility/hook tests
-- `*.test.tsx` - Component tests
+**Server Location:**
+- All tests in `server/tests/` directory
+- Naming: `test_*.py` (e.g., `test_learning_router.py`, `test_course_orchestrator.py`)
+- `server/tests/__init__.py` present for package recognition
 
-**Directory Structure:**
-```
-client/src/
-├── features/learning/
-│   ├── CourseCard.tsx           # Component
-│   ├── CourseCard.test.tsx      # Component tests
-│   ├── useLearningMutations.ts  # Hook
-│   ├── useLearningMutations.test.tsx  # Hook tests
-│   └── __tests__/               # E2E/integration tests
-│       ├── e2e.test.tsx
-│       ├── dashboard-e2e.test.tsx
-│       └── revision-e2e.test.tsx
-├── hooks/
-│   ├── useTypewriter.ts
-│   └── useTypewriter.test.ts
-└── providers/
-    ├── QueryProvider.tsx
-    └── QueryProvider.test.tsx
-```
+**Client Test Files (30 total):**
+- `src/features/settings/ModelPicker.test.tsx`
+- `src/features/settings/ThinkingModeToggle.test.tsx`
+- `src/features/settings/OpenRouterSettingsPanel.test.tsx`
+- `src/features/settings/SettingsPage.test.tsx`
+- `src/components/SettingsButton.test.tsx`
+- `src/providers/QueryProvider.test.tsx`
+- `src/hooks/useTypewriter.test.ts`
+- `src/lib/providerSettings.test.ts`
+- `src/lib/providerApi.test.ts`
+- `src/features/learning/ConceptCard.test.tsx`
+- `src/features/learning/LearningFlow.test.tsx`
+- `src/features/learning/LearningHome.test.tsx`
+- `src/features/learning/LearningPathContainer.test.tsx`
+- `src/features/learning/LearningPage.test.tsx`
+- `src/features/learning/useLearningMutations.test.tsx`
+- `src/features/learning/useNodeState.test.ts`
+- `src/features/learning/useCourseList.test.tsx`
+- `src/features/learning/QuizFeedback.test.tsx`
+- `src/features/learning/ErrorStates.test.tsx`
+- `src/features/learning/CourseCard.test.tsx`
+- `src/features/learning/CourseFilter.test.tsx`
+- `src/features/learning/RevisionPage.test.tsx`
+- `src/features/learning/RevisionConceptCard.test.tsx`
+- `src/features/learning/RevisionSummaryModal.test.tsx`
+- `src/features/learning/RevisionHistoryList.test.tsx`
+- `src/features/learning/animations/index.test.ts`
+- `src/features/learning/animations/MasteryCelebration.test.tsx`
+- `src/features/learning/__tests__/e2e.test.tsx`
+- `src/features/learning/__tests__/dashboard-e2e.test.tsx`
+- `src/features/learning/__tests__/revision-e2e.test.tsx`
 
-### Test Structure
+**Server Test Files (13 total):**
+- `server/tests/test_learning_router.py`
+- `server/tests/test_course_orchestrator.py`
+- `server/tests/test_learning_persistence.py`
+- `server/tests/test_learning_schemas.py`
+- `server/tests/test_quiz_randomization.py`
+- `server/tests/test_session_lifecycle.py`
+- `server/tests/test_orchestrator_integration.py`
+- `server/tests/test_planner_agent.py`
+- `server/tests/test_generator_agent.py`
+- `server/tests/test_quizzer_agent.py`
+- `server/tests/test_base_agent.py`
+- `server/tests/test_llm_router.py`
+- `server/tests/test_thinking.py`
 
-**Basic Pattern:**
-```typescript
-// ComponentName.test.tsx
-// Tests for ComponentName
+## Test Structure
 
-// Description of what is being tested
-
-// @see: path/to/ComponentName.tsx
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+**Client Suite Organization:**
+```tsx
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ComponentName } from './ComponentName';
-
-// Mock external dependencies
-vi.mock('@/lib/api', () => ({
-  fetchData: vi.fn(),
-}));
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 describe('ComponentName', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('renders the component correctly', () => {
-    render(<ComponentName prop="value" />);
-    
-    expect(screen.getByText('Expected Text')).toBeInTheDocument();
-  });
-
-  it('handles user interaction', async () => {
-    const onClick = vi.fn();
-    render(<ComponentName onClick={onClick} />);
-    
-    fireEvent.click(screen.getByRole('button'));
-    
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-});
-```
-
-**Hook Test Pattern:**
-```typescript
-// useHookName.test.ts
-import { describe, it, expect } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
-import { useHookName } from './useHookName';
-import { vi } from 'vitest';
-
-describe('useHookName', () => {
-  it('should return initial state', () => {
-    const { result } = renderHook(() => useHookName());
-    
-    expect(result.current.value).toBe('initial');
-  });
-
-  it('should update on interaction', async () => {
-    const { result } = renderHook(() => useHookName());
-    
-    act(() => {
-      result.current.updateValue('new');
+  const createWrapper = () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
     });
-    
-    expect(result.current.value).toBe('new');
+    return ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    );
+  };
+
+  it('renders correctly', () => {
+    render(<Component />, { wrapper: createWrapper() });
+    expect(screen.getByText('...')).toBeInTheDocument();
+  });
+
+  it('handles user interaction', () => {
+    const handler = vi.fn();
+    render(<Component onAction={handler} />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole('button'));
+    expect(handler).toHaveBeenCalledWith(expectedArg);
   });
 });
 ```
 
-### Mocking Patterns
+**Server Suite Organization:**
+```python
+import unittest
+from unittest.mock import MagicMock, AsyncMock, patch
 
-**Module Mocking with vi.mock():**
-```typescript
-// Mock an entire module
+class TestFeatureName(unittest.TestCase):
+    """Tests for feature behavior."""
+
+    def test_specific_behavior(self) -> None:
+        """Docstring describing the test case."""
+        # Arrange
+        fake_manager = MagicMock()
+        fake_manager.method.return_value = {...}
+
+        # Act + Assert
+        with patch("server.module.dependency", fake_manager):
+            result = function_under_test("arg")
+
+        self.assertEqual(result.field, expected)
+        fake_manager.method.assert_called_once_with(...)
+
+
+class TestAsyncFeature(unittest.IsolatedAsyncioTestCase):
+    """Tests for async behavior."""
+
+    async def test_async_behavior(self) -> None:
+        orchestrator = CourseOrchestrator()
+        with patch.object(
+            module, "dependency", new_callable=AsyncMock, return_value=value
+        ):
+            result = await orchestrator.async_method("arg")
+        self.assertEqual(result, expected)
+```
+
+## Mocking
+
+**Client Framework:** `vi.mock()` and `vi.fn()` from Vitest
+
+**Client Mocking Patterns:**
+```tsx
+// Module mock — top level
 vi.mock('@/lib/learningApi', () => ({
-  transitionNode: vi.fn(),
+  generateCourse: vi.fn(),
+  getLearningSession: vi.fn(),
   submitQuiz: vi.fn(),
-  retryQuiz: vi.fn(),
-  regenerateNode: vi.fn(),
 }));
 
-// Import mocked module for assertions
-import * as api from '@/lib/learningApi';
+// Provider settings mock
+vi.mock('@/lib/providerSettings', () => ({
+  getProviderSettings: vi.fn(() => ({
+    activeProvider: 'openrouter',
+    providers: {
+      openrouter: { apiKey: 'test-key', model: 'google/gemini-2.5-flash' },
+    },
+  })),
+}));
 
-// Use in test
-(api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
+// Router mock
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+// Per-test mock return value
+(api.getQuizAttempts as ReturnType<typeof vi.fn>).mockResolvedValue(data);
+(api.getQuizAttempts as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+
+// Inline mock
+const handler = vi.fn();
+handler.mockReturnValue(value);
+handler.mockImplementation(() => { throw new Error(); });
+```
+
+**Server Framework:** `unittest.mock` — `MagicMock`, `AsyncMock`, `patch`
+
+**Server Mocking Patterns:**
+```python
+# Context manager patching
+with patch("server.routers.learning.learning_manager", fake_manager):
+    result = function_under_test("arg")
+
+# Object-level patching with AsyncMock
+with patch.object(
+    orchestrator_module.generator_agent,
+    "generate_explanation",
+    new_callable=AsyncMock,
+    return_value=content,
+) as mock_generate:
+    result = await orchestrator._generate_concept_unit(...)
+
+# Multiple patches in one context
+with (
+    patch.object(module, "planner_agent", new_callable=AsyncMock) as mock_plan,
+    patch.object(module, "learning_manager", return_value=payload) as mock_create,
+):
+    mock_plan.return_value = outline
+    result = await orchestrator.generate_course(...)
+
+# Fake manager pattern
+fake_manager = MagicMock()
+fake_manager._get_connection.return_value = fake_conn
+fake_manager._get_node_by_id.return_value = node_dict
+fake_manager.create_quiz_attempt.return_value = attempt_dict
+
+# Fake connection pattern
+fake_conn = MagicMock()
+fake_manager._get_connection.return_value = fake_conn
+```
+
+**What to Mock:**
+- External API calls (OpenRouter, LLM agents)
+- Database persistence (`learning_manager` methods)
+- Provider settings (API keys, model selection)
+- React Router navigation (`useNavigate`)
+- Browser APIs (`localStorage`, `window.matchMedia`)
+
+**What NOT to Mock:**
+- Pure utility functions (`cn`, `isValidTransition`, `getNextStatus`)
+- Pydantic schema validation (test with real data)
+- Component rendering logic (test via Testing Library)
+- State machine logic in hooks (`useNodeState`)
+
+## Fixtures and Factories
+
+**Client Test Data:**
+```tsx
+// Factory function for mock nodes
+const mockNode = (status: NodeStatus): ConceptNode => ({
   id: 'node-1',
-  status: 'IN_QUIZ',
-});
-```
-
-**Mocking Framer Motion (Animation Library):**
-```typescript
-vi.mock('framer-motion', () => ({
-  motion: {
-    article: ({ children, ...props }: Record<string, unknown>) => {
-      const filtered: Record<string, unknown> = {};
-      const motionKeys = ['variants', 'initial', 'animate', 'exit', 'custom',
-        'transition', 'whileHover', 'whileTap', 'layout'];
-      for (const [key, value] of Object.entries(props)) {
-        if (!motionKeys.includes(key)) {
-          filtered[key] = value;
-        }
-      }
-      return <article {...filtered}>{children as ReactNode}</article>;
-    },
-    div: ({ children, ...props }: Record<string, unknown>) => {
-      // Similar filtering
-      return <div {...filtered}>{children as ReactNode}</div>;
-    },
+  learning_session_id: 'session-1',
+  sequence_index: 0,
+  title: 'Test Node',
+  content_markdown: '# Test Content\n\nThis is test content.',
+  status,
+  error_message: null,
+  retry_available: false,
+  quiz: {
+    question_text: 'Test question?',
+    options: [
+      { option_id: 'opt-a-uuid', display_label: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-b-uuid', display_label: 'B', text: 'Option B', is_correct: true, explanation: 'Correct' },
+      { option_id: 'opt-c-uuid', display_label: 'C', text: 'Option C', is_correct: false, explanation: 'Wrong' },
+      { option_id: 'opt-d-uuid', display_label: 'D', text: 'Option D', is_correct: false, explanation: 'Wrong' },
+    ],
+    difficulty: 'medium',
   },
-  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
+  quiz_set: null,
+  quiz_hidden: null,
+  quiz_set_hidden: null,
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+});
+
+// Inline mock data
+const mockQuizSetHiddenNode: ConceptNode = {
+  ...mockNode('IN_QUIZ'),
+  id: 'node-quizset',
+  quiz: null,
+  quiz_set_hidden: {
+    quizzes: [...],
+    current_index: 0,
+    total_quizzes: 3,
+  },
+};
 ```
 
-**Creating Promise Resolvers for Loading States:**
-```typescript
-it('sets isTransitioning to true during mutation', async () => {
-  let resolveTransition: (value: unknown) => void;
-  (api.transitionNode as ReturnType<typeof vi.fn>).mockImplementation(
-    () => new Promise((resolve) => { resolveTransition = resolve; })
+**Server Test Data:**
+```python
+# Factory functions
+def _make_quiz_card() -> QuizCard:
+    return QuizCard(
+        question_text="What is 2 + 2?",
+        options=[
+            QuizOption(option_id="opt-a", display_label="A", text="4", is_correct=True, explanation="Correct."),
+            QuizOption(option_id="opt-b", display_label="B", text="3", is_correct=False, explanation="Incorrect."),
+            QuizOption(option_id="opt-c", display_label="C", text="5", is_correct=False, explanation="Incorrect."),
+            QuizOption(option_id="opt-d", display_label="D", text="6", is_correct=False, explanation="Incorrect."),
+        ],
+        difficulty="easy",
+    )
+
+def _make_topics(count: int = 3) -> list[TopicNode]:
+    return [
+        TopicNode(index=i, title=f"Topic {i}", summary_for_context=f"Summary {i}",
+                  key_terms=[f"term-{i}a", f"term-{i}b"])
+        for i in range(count)
+    ]
+
+def _make_outline(count: int = 5) -> CourseOutline:
+    return CourseOutline(course_title="Mock Course", topics=_make_topics(count))
+
+def _make_test_llm_context() -> LLMContext:
+    return LLMContext(api_key="test-openrouter-key", model=None, http_referer=None, app_title=None)
+
+# Node response factory
+def _make_node_response(status: str) -> dict:
+    return {
+        "id": "node-1", "learning_session_id": "session-1", "sequence_index": 0,
+        "title": "Node", "content_markdown": "Content", "status": status,
+        "error_message": None, "retry_available": False,
+        "created_at": "2026-02-15T00:00:00+00:00", "updated_at": "2026-02-15T00:00:00+00:00",
+        "quiz": None, "quiz_set": None, "quiz_hidden": None, "quiz_set_hidden": None,
+    }
+```
+
+**Location:**
+- Client: inline in test files (no shared fixtures directory)
+- Server: factory functions at top of test files or in test helper modules
+
+## Coverage
+
+**Requirements:** >80% code coverage target (per AGENTS.md)
+
+**Client Coverage:**
+```bash
+cd client
+npm run test -- --coverage
+```
+- Requires `@vitest/coverage-v8` package (installed as devDependency)
+- Coverage provider: `v8`
+
+**Server Coverage:** No explicit coverage configuration detected. Target >80% per project guidelines.
+
+## Test Types
+
+**Unit Tests (Client):**
+- Component rendering: verify DOM output for each state
+- Hook behavior: test pure logic and state transitions
+- Utility functions: test `cn`, `isValidTransition`, `getNextStatus`
+- API module: test request building (mock axios)
+
+**Unit Tests (Server):**
+- Router endpoints: test request → response with mocked persistence
+- Schema validation: test Pydantic model constraints
+- Service logic: test orchestrator flow with mocked agents
+- Agent behavior: test planner/generator/quizzer with mocked LLM
+
+**Integration Tests (Client):**
+- Full learning flow: `LearningFlow.test.tsx` tests navigation + state across components
+- E2E tests in `__tests__/`: `e2e.test.tsx`, `dashboard-e2e.test.tsx`, `revision-e2e.test.tsx`
+- Uses `MemoryRouter` + `Routes` for navigation testing
+
+**Integration Tests (Server):**
+- `test_orchestrator_integration.py`: tests full orchestration flow
+- `test_session_lifecycle.py`: tests session creation → completion lifecycle
+- Uses `TestClient` from FastAPI for HTTP-level testing
+
+**E2E Tests:**
+- Client-side E2E in `src/features/learning/__tests__/`
+- Uses mocked API but full component tree
+- Tests: `e2e.test.tsx`, `dashboard-e2e.test.tsx`, `revision-e2e.test.tsx`
+
+## Common Patterns
+
+**Async Testing (Client):**
+```tsx
+// waitFor for async state changes
+await waitFor(() => {
+  expect(screen.getByText(/loading quiz feedback/i)).toBeInTheDocument();
+});
+
+// Mock async API
+(api.getQuizAttempts as ReturnType<typeof vi.fn>).mockImplementation(
+  () => new Promise(() => {})  // Never resolves = loading state
+);
+
+// Mock resolved value
+(api.getQuizAttempts as ReturnType<typeof vi.fn>).mockResolvedValue(data);
+
+// Mock rejected value
+(api.getQuizAttempts as ReturnType<typeof vi.fn>).mockRejectedValue(
+  new Error('Failed to load attempts')
+);
+```
+
+**Async Testing (Server):**
+```python
+# IsolatedAsyncioTestCase for async tests
+class TestOrchestrator(unittest.IsolatedAsyncioTestCase):
+    async def test_generate_course(self) -> None:
+        orchestrator = CourseOrchestrator()
+        with patch.object(module, "agent", new_callable=AsyncMock) as mock:
+            mock.return_value = outline
+            result = await orchestrator.generate_course("query")
+        self.assertEqual(result["session"]["id"], "session-1")
+
+# AsyncMock for awaitable calls
+mock_plan = AsyncMock(return_value=outline)
+mock_generate = AsyncMock(side_effect=[result1, result2])
+```
+
+**Error Testing (Client):**
+```tsx
+// Test error state rendering
+it('shows error state when API fails', async () => {
+  (api.getQuizAttempts as ReturnType<typeof vi.fn>).mockRejectedValue(
+    new Error('Failed to load attempts')
   );
-
-  const { result } = renderHook(
-    () => useLearningMutations({ sessionId: 'session-1' }),
-    { wrapper: createWrapper() }
-  );
-
-  result.current.proceedToQuiz('node-1');
-
+  render(<Component node={mockNode} />, { wrapper: createWrapper() });
   await waitFor(() => {
-    expect(result.current.isTransitioning).toBe(true);
-  });
-
-  resolveTransition!({ id: 'node-1', status: 'IN_QUIZ' });
-
-  await waitFor(() => {
-    expect(result.current.isTransitioning).toBe(false);
+    expect(screen.getByText(/unable to load feedback/i)).toBeInTheDocument();
   });
 });
 ```
 
-### React Query Testing
+**Error Testing (Server):**
+```python
+# Test HTTP error codes
+def test_returns_404_for_missing_session(self) -> None:
+    fake_manager = MagicMock()
+    fake_manager.get_session.return_value = None
+    with patch("server.routers.learning.learning_manager", fake_manager):
+        response = client.get("/learning/sessions/missing")
+    self.assertEqual(response.status_code, 404)
 
-**Wrapper Pattern:**
-```typescript
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+# Test exception propagation
+def test_returns_400_for_invalid_input(self) -> None:
+    fake_manager = MagicMock()
+    fake_manager.method.side_effect = ValueError("Invalid")
+    with patch("server.module.manager", fake_manager):
+        response = client.post("/endpoint", json={...})
+    self.assertEqual(response.status_code, 400)
+```
 
-function createWrapper() {
+**State Machine Testing (Client):**
+```tsx
+// Test all states of a node
+describe('useNodeState', () => {
+  describe('LOCKED state', () => {
+    it('returns locked view with no actions', () => {
+      const result = useNodeState(mockNode('LOCKED'));
+      expect(result.currentView).toBe('locked');
+      expect(result.actions.canSubmitQuiz).toBe(false);
+    });
+  });
+
+  describe('IN_QUIZ state', () => {
+    it('allows submitting quiz only', () => {
+      const result = useNodeState(mockNode('IN_QUIZ'));
+      expect(result.actions.canSubmitQuiz).toBe(true);
+      expect(result.actions.canViewExplanation).toBe(false);
+    });
+  });
+});
+
+// Test transitions
+describe('isValidTransition', () => {
+  it('allows LOCKED to VIEWING_EXPLANATION', () => {
+    expect(isValidTransition('LOCKED', 'VIEWING_EXPLANATION')).toBe(true);
+  });
+  it('denies LOCKED to COMPLETED', () => {
+    expect(isValidTransition('LOCKED', 'COMPLETED')).toBe(false);
+  });
+});
+```
+
+**Provider Wrapper Pattern (Client):**
+```tsx
+// Create wrapper for components needing QueryClient
+const createWrapper = () => {
   const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },  // Disable retries in tests
-      mutations: { retry: false },
-    },
+    defaultOptions: { queries: { retry: false } },
   });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       {children}
     </QueryClientProvider>
   );
-}
-
-// Usage in test
-const { result } = renderHook(
-  () => useLearningMutations({ sessionId: 'session-1' }),
-  { wrapper: createWrapper() }
-);
-```
-
-### DOM Assertions (jest-dom)
-
-**Common Matchers:**
-```typescript
-// Presence
-expect(screen.getByText('Hello')).toBeInTheDocument();
-expect(screen.queryByText('Hidden')).not.toBeInTheDocument();
-
-// Attributes
-expect(screen.getByRole('button')).toBeDisabled();
-expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'true');
-
-// Classes
-expect(screen.getByTestId('progress-bar-fill')).toHaveStyle({ width: '60%' });
-
-// Accessibility
-expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '60');
-```
-
-### Async Testing
-
-**waitFor Pattern:**
-```typescript
-import { waitFor } from '@testing-library/react';
-
-it('fetches data asynchronously', async () => {
-  render(<Component />);
-  
-  fireEvent.click(screen.getByText('Load'));
-  
-  await waitFor(() => {
-    expect(api.getData).toHaveBeenCalledWith('param');
-  });
-  
-  await waitFor(() => {
-    expect(screen.getByTestId('data-row')).toBeInTheDocument();
-  });
-});
-```
-
-**Fake Timers:**
-```typescript
-it('should type out text over time', async () => {
-  vi.useFakeTimers();
-  const { result } = renderHook(() => useTypewriter('Hi', true, 30));
-
-  act(() => {
-    vi.advanceTimersByTime(50);
-  });
-  expect(result.current).toContain('H');
-
-  vi.useRealTimers();
-});
-```
-
-### What to Mock
-
-**Always Mock:**
-- External API calls (axios/fetch)
-- Animation libraries (framer-motion)
-- Complex child components (when testing parent)
-- Browser APIs not in jsdom (matchMedia, localStorage if needed)
-
-**Don't Mock:**
-- Simple utility functions being tested
-- React hooks being tested (use the actual hook)
-- Static data/constants
-
-### Test Data Factories
-
-**Inline Mock Data:**
-```typescript
-const mockInProgressSession: LearningSessionSummary = {
-  id: 'session-1',
-  query: 'Explain quantum computing basics',
-  course_title: 'Quantum Computing Fundamentals',
-  status: 'in_progress',
-  progress_percent: 60,
-  total_nodes: 5,
-  completed_nodes: 3,
-  last_active_node_title: "Newton's Third Law",
-  created_at: '2025-01-15T10:00:00Z',
-  updated_at: '2025-01-20T14:30:00Z',
-  completed_at: null,
-  revision_count: 0,
 };
+
+// Usage
+render(<Component />, { wrapper: createWrapper() });
 ```
 
-**Helper Functions:**
-```typescript
-function createMockSession(overrides?: Partial<LearningSessionSummary>): LearningSessionSummary {
-  return {
-    id: 'session-default',
-    query: 'Test query',
-    course_title: 'Test Course',
-    status: 'in_progress',
-    progress_percent: 0,
-    total_nodes: 5,
-    completed_nodes: 0,
-    last_active_node_title: null,
-    created_at: '2025-01-01T00:00:00Z',
-    updated_at: '2025-01-01T00:00:00Z',
-    completed_at: null,
-    revision_count: 0,
-    ...overrides,
-  };
-}
-```
-
----
-
-## Server Testing (Python)
-
-### Test Framework
-
-**Runner:**
-- **unittest** - Python's standard library testing framework
-- No pytest configuration detected
-
-**Location:**
-- All tests in `server/tests/` directory
-- Naming: `test_*.py`
-
-**Key Features Used:**
-- `unittest.TestCase` - Base test class
-- `unittest.IsolatedAsyncioTestCase` - For async tests
-- `unittest.mock` - Mocking (patch, MagicMock, AsyncMock)
-
-### Run Commands
-
-```bash
-# Navigate to server directory and activate venv
-cd server
-.venv\Scripts\activate  # Windows
-
-# Run all tests
-python -m unittest
-
-# Run specific test module
-python -m unittest server.tests.test_course_orchestrator
-
-# Run specific test class
-python -m unittest server.tests.test_course_orchestrator.TestCourseOrchestratorGenerateCourse
-
-# Run single test method
-python -m unittest server.tests.test_course_orchestrator.TestCourseOrchestratorGenerateCourse.test_generate_course_scatter_gather_success
-
-# Discover and run all tests
-python -m unittest discover -s server/tests -p "test_*.py"
-```
-
-### Test File Organization
-
-**Structure:**
-```
-server/tests/
-├── test_base_agent.py
-├── test_course_orchestrator.py
-├── test_generator_agent.py
-├── test_learning_persistence.py
-├── test_learning_router.py
-├── test_learning_schemas.py
-├── test_orchestrator_integration.py
-├── test_planner_agent.py
-├── test_quiz_randomization.py
-├── test_quizzer_agent.py
-└── test_session_lifecycle.py
-```
-
-### Test Structure
-
-**Standard Test Class:**
+**FastAPI TestClient Pattern (Server):**
 ```python
-"""
-=============================================================================
-FILE: test_module_name.py
-=============================================================================
-
-PURPOSE:
-Description of what these tests cover.
-
-KEY TESTS:
-- test_something: What it tests
-- test_something_else: What it tests
-
-DEPENDENCIES:
-- unittest: Framework
-- module.under.test: System under test
-
-@see: path/to/implementation.py
-"""
-
-import unittest
-from unittest.mock import Mock, patch, MagicMock
-
-from server.module import ClassUnderTest
-
-
-class TestClassName(unittest.TestCase):
-    """Tests for ClassName functionality."""
-
-    def test_something_happens(self) -> None:
-        """Description of what this test verifies."""
-        # Arrange
-        obj = ClassUnderTest()
-        
-        # Act
-        result = obj.method()
-        
-        # Assert
-        self.assertEqual(result, expected_value)
-```
-
-**Async Test Class:**
-```python
-import unittest
-from unittest.mock import AsyncMock, patch
-
-
-class TestAsyncFunctionality(unittest.IsolatedAsyncioTestCase):
-    """Async tests for functionality requiring async/await."""
-
-    async def test_async_method_success(self) -> None:
-        """Test that async method works correctly."""
-        orchestrator = CourseOrchestrator()
-        
-        with patch.object(
-            module,
-            'async_dependency',
-            new_callable=AsyncMock,
-            return_value=mock_value
-        ) as mock:
-            result = await orchestrator.async_method()
-            
-        self.assertEqual(result['key'], 'value')
-        mock.assert_awaited_once()
-```
-
-### Mocking Patterns
-
-**Patching Module-Level Dependencies:**
-```python
-from unittest.mock import patch, MagicMock
-
-# Patch at module level
-with patch('server.routers.learning.learning_manager') as mock_manager:
-    mock_manager.get_session.return_value = {'id': 'session-1'}
-    
-    response = get_learning_session('session-1')
-    
-    self.assertEqual(response.id, 'session-1')
-    mock_manager.get_session.assert_called_once_with('session-1')
-```
-
-**Patching Object Methods:**
-```python
-from unittest.mock import patch, AsyncMock
-
-# Patch specific method with async
-with patch.object(
-    orchestrator_module.planner_agent,
-    'plan',
-    new_callable=AsyncMock,
-) as mock_plan:
-    mock_plan.return_value = outline
-    
-    result = await orchestrator.generate_course('query')
-    
-    mock_plan.assert_awaited_once_with('query')
-```
-
-**Creating Mock Objects:**
-```python
-from unittest.mock import MagicMock, Mock
-
-# Simple mock
-fake_manager = MagicMock()
-fake_manager.get_session.return_value = {'id': 'session-1'}
-
-# Mock with side effects
-fake_manager.delete.side_effect = [True, False]  # First call True, second False
-
-# Mock connection
-fake_conn = MagicMock()
-fake_manager._get_connection.return_value = fake_conn
-```
-
-**Mocking Pydantic Models:**
-```python
-from types import SimpleNamespace
-
-# Create mock objects that behave like Pydantic models
-content = SimpleNamespace(content_markdown="mock content")
-quiz = Mock()
-```
-
-### Test Data Factories
-
-**Helper Functions:**
-```python
-def _make_topics(count: int = 3) -> list[TopicNode]:
-    """Create test topics."""
-    return [
-        TopicNode(
-            index=i,
-            title=f"Topic {i}",
-            summary_for_context=f"Summary {i}",
-            key_terms=[f"term-{i}a", f"term-{i}b"],
-        )
-        for i in range(count)
-    ]
-
-
-def _make_outline(count: int = 5) -> CourseOutline:
-    """Create test course outline."""
-    return CourseOutline(
-        course_title="Mock Course",
-        topics=_make_topics(count)
-    )
-```
-
-**Enum Mocking:**
-```python
-class _FakeNodeStatus:
-    """Mock enum for testing when actual enum unavailable."""
-    UNLOCKED = _StatusValue("UNLOCKED")
-    LOCKED = _StatusValue("LOCKED")
-    COMPLETED = _StatusValue("COMPLETED")
-
-
-class _StatusValue:
-    def __init__(self, value: str) -> None:
-        self.value = value
-```
-
-### Schema Validation Tests
-
-**Pydantic Model Tests:**
-```python
-from pydantic import ValidationError
-
-class TestQuizSchemas(unittest.TestCase):
-    def test_quiz_card_requires_min_options(self) -> None:
-        """QuizCard must have at least 4 options."""
-        options = [
-            _make_quiz_option("A", True),
-            _make_quiz_option("B", False),
-            _make_quiz_option("C", False),
-        ]
-        
-        with self.assertRaises(ValidationError):
-            QuizCard(question_text="Too few", options=options)
-
-    def test_quiz_card_valid(self) -> None:
-        """Valid QuizCard creation."""
-        options = [
-            _make_quiz_option("A", True),
-            _make_quiz_option("B", False),
-            _make_quiz_option("C", False),
-            _make_quiz_option("D", False),
-        ]
-        
-        card = QuizCard(
-            question_text="What is the answer?",
-            options=options,
-            difficulty=QuizDifficulty.MEDIUM,
-        )
-        
-        self.assertEqual(len(card.options), 4)
-```
-
-### Router/Integration Tests
-
-**FastAPI TestClient:**
-```python
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from server.routers.learning import router as learning_router
-
 def _create_client() -> TestClient:
     app = FastAPI()
     app.include_router(learning_router)
+    from server.schemas.llm import LLMContext
+    app.dependency_overrides[get_llm_context] = lambda: LLMContext(
+        api_key="mock-key-for-tests"
+    )
     return TestClient(app)
 
-
-class TestLearningRouter(unittest.TestCase):
-    def test_endpoint_returns_200(self) -> None:
-        fake_manager = MagicMock()
-        fake_manager.get_data.return_value = {'id': 'test'}
-        client = _create_client()
-
-        with patch('server.routers.learning.learning_manager', fake_manager):
-            response = client.get("/learning/sessions")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['id'], 'test')
+# Usage
+client = _create_client()
+response = client.get("/learning/sessions")
+self.assertEqual(response.status_code, 200)
 ```
 
----
+## Test Data Conventions
 
-## Coverage Requirements
+**Timestamps in test fixtures:**
+- Client: `'2024-01-01T00:00:00Z'`
+- Server: `'2026-02-15T00:00:00+00:00'` or `'2026-01-01T00:00:00Z'`
 
-**Target:** >80% code coverage for new code (per `conductor/workflow.md`)
+**ID patterns in test fixtures:**
+- Nodes: `'node-1'`, `'node-2'`
+- Sessions: `'session-1'`
+- Options: `'opt-a-uuid'`, `'opt-b-uuid'` or `'option-1'`
+- Revisions: `'revision-1'`
 
-### Client Coverage
-
-```bash
-cd client
-npm run test -- --coverage
-```
-
-Coverage reported for:
-- Statements
-- Branches
-- Functions
-- Lines
-
-### Server Coverage
-
-Python's unittest doesn't include built-in coverage. Use coverage.py:
-
-```bash
-cd server
-pip install coverage
-coverage run -m unittest discover -s tests -p "test_*.py"
-coverage report
-```
-
----
-
-## Testing Best Practices
-
-### Test-Driven Development (TDD)
-
-**Workflow from `conductor/workflow.md`:**
-
-1. **Red Phase:** Write failing tests first
-   - Define expected behavior
-   - Verify tests fail before implementation
-
-2. **Green Phase:** Implement minimal code to pass
-   - Focus on functionality, not perfection
-   - All tests must pass
-
-3. **Refactor Phase:** Improve code quality
-   - Maintain all passing tests
-   - No behavior changes
-
-### Test Naming
-
-**Descriptive names that explain behavior:**
-```typescript
-// Good
-test('sets isTransitioning to true during mutation', async () => {});
-test('revision history section hidden when revision_count is 0', () => {});
-
-// Python
-async def test_generate_concept_unit_failure_returns_skeleton(self) -> None:
-    """Failed generation should return skeleton card with error."""
-```
-
-### Arrange-Act-Assert Pattern
-
-```typescript
-it('handles user interaction', () => {
-  // Arrange
-  const onClick = vi.fn();
-  render(<Button onClick={onClick} />);
-  
-  // Act
-  fireEvent.click(screen.getByRole('button'));
-  
-  // Assert
-  expect(onClick).toHaveBeenCalledTimes(1);
-});
-```
-
-### Testing Async Operations
-
-**Client:**
-```typescript
-// Use waitFor for async assertions
-await waitFor(() => {
-  expect(api.getData).toHaveBeenCalled();
-});
-```
-
-**Server:**
+**Quiz option structure:**
 ```python
-# Use IsolatedAsyncioTestCase for async methods
-class TestAsync(unittest.IsolatedAsyncioTestCase):
-    async def test_async_operation(self) -> None:
-        result = await async_function()
-        self.assertIsNotNone(result)
+QuizOption(option_id="opt-a", display_label="A", text="4", is_correct=True, explanation="Correct.")
+```
+```typescript
+{ option_id: 'opt-a-uuid', display_label: 'A', text: 'Option A', is_correct: false, explanation: 'Wrong' }
 ```
 
 ---
 
-## Summary Table
-
-| Aspect | Client (TypeScript) | Server (Python) |
-|--------|---------------------|-----------------|
-| Framework | Vitest | unittest |
-| Assertion | jest-dom + Vitest | unittest.TestCase |
-| Async Support | Native | IsolatedAsyncioTestCase |
-| Mocking | vi.mock(), vi.fn() | unittest.mock |
-| Test Location | Co-located (`*.test.ts`) | `server/tests/` |
-| Coverage Tool | @vitest/coverage-v8 | coverage.py |
-| DOM Testing | @testing-library/react | N/A |
-| Run Command | `npm run test` | `python -m unittest` |
-
----
-
-*Testing analysis: 2026-02-16*
+*Testing analysis: 2026-05-27*

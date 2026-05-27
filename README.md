@@ -67,14 +67,14 @@ A2UI/
 ├── client/                      # Frontend (React + TypeScript)
 │   ├── src/
 │   │   ├── main.tsx            # Entry point
-│   │   ├── App.tsx             # Root component
-│   │   ├── components/         # Reusable UI components
+│   │   ├── App.tsx             # Root component with routes
+│   │   ├── components/         # Shared UI components
 │   │   ├── features/
-│   │   │   ├── chat/          # Chat feature module
-│   │   │   └── learning/      # Learning system components
+│   │   │   ├── learning/      # Learning feature (primary)
+│   │   │   └── settings/      # Provider configuration
 │   │   ├── hooks/              # Custom React hooks
-│   │   ├── lib/                # Utilities and API client
-│   │   ├── providers/          # Context providers
+│   │   ├── lib/                # API clients and utilities
+│   │   ├── providers/          # React context providers
 │   │   └── types/              # TypeScript definitions
 │   └── package.json
 │
@@ -82,23 +82,34 @@ A2UI/
 │   ├── main.py                 # FastAPI app entry point
 │   ├── config.py               # Environment configuration
 │   ├── routers/
-│   │   └── learning.py        # Learning API routes
-│   ├── schemas/                # Pydantic models
+│   │   ├── learning.py        # Learning API routes
+│   │   └── llm.py             # Model catalog proxy
+│   ├── schemas/                # Pydantic v2 models
+│   │   ├── common.py          # Base classes
+│   │   ├── learning.py        # Learning domain models
+│   │   └── llm.py             # LLM context models
 │   ├── services/               # Business logic
-│   │   └── course_orchestrator.py
+│   │   ├── course_orchestrator.py  # Scatter-Gather pipeline
+│   │   └── quiz_randomization.py   # Quiz shuffling
 │   ├── agents/                 # AI agent implementations
-│   │   ├── base.py
-│   │   ├── planner.py
-│   │   ├── generator.py
-│   │   └── quizzer.py
+│   │   ├── base.py            # Abstract base agent
+│   │   ├── planner.py         # KLI curriculum decomposition
+│   │   ├── generator.py       # 5E content generation
+│   │   └── quizzer.py         # Retrieval-based quizzes
 │   ├── database/               # SQLite persistence layer
-│   └── utils/                  # OpenRouter client wrappers
+│   │   ├── persistence.py     # DB_PATH config
+│   │   └── learning_persistence.py  # All CRUD operations
+│   ├── utils/                  # Shared utilities
+│   │   └── instructor_client.py  # Instructor integration
+│   └── tests/                  # Python unit tests (15 files)
 │
 ├── conductor/                   # Product documentation
 ├── .planning/                   # Development planning
-│   ├── codebase/              # Architecture docs
-│   ├── phases/                # Implementation phases
-│   └── ROADMAP.md            # Feature roadmap
+│   ├── codebase/              # Architecture docs (7 files)
+│   ├── PROJECT.md             # Project scope
+│   └── ROADMAP.md             # Feature roadmap
+├── research/                    # Research notes
+├── plans/                       # Implementation plans
 └── run.bat                      # Windows startup script
 ```
 
@@ -203,19 +214,33 @@ npm run dev
 - `/learn` - Learning dashboard with course list
 - `/learn/:sessionId` - Active learning session
 - `/learn/:sessionId/revise/:revisionId` - Revision session
+- `/settings` - Provider configuration
 
 ### API Endpoints (Learning System)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/learning/generate` | Create new course from topic |
-| `GET` | `/learning/sessions` | List learning sessions |
+| `GET` | `/learning/sessions` | List learning sessions (paginated) |
 | `GET` | `/learning/sessions/{id}` | Get session with nodes |
 | `GET` | `/learning/sessions/{id}/progress` | Get progress summary |
-| `GET` | `/learning/nodes/{id}` | Get concept node |
+| `PATCH` | `/learning/sessions/{id}/last-active` | Update last active node |
+| `DELETE` | `/learning/sessions/{id}` | Delete session with cascade |
+| `GET` | `/learning/nodes/{id}` | Get concept node with visibility |
+| `POST` | `/learning/nodes/{id}/transition` | Transition node state |
 | `POST` | `/learning/nodes/{id}/submit-quiz` | Submit quiz answer |
 | `POST` | `/learning/nodes/{id}/retry-quiz` | Retry failed quiz |
+| `POST` | `/learning/nodes/{id}/previous-quiz` | Go to previous quiz |
 | `POST` | `/learning/nodes/{id}/regenerate` | Regenerate failed content |
+| `GET` | `/learning/nodes/{id}/attempts` | Get quiz attempt history |
+| `POST` | `/learning/sessions/{id}/revisions` | Create revision session |
+| `GET` | `/learning/sessions/{id}/revisions` | List revision sessions |
+| `GET` | `/learning/revisions/{id}` | Get revision with progress |
+| `DELETE` | `/learning/revisions/{id}` | Delete revision session |
+| `POST` | `/learning/revisions/{id}/nodes/{nodeId}/mark-reviewed` | Mark node reviewed |
+| `POST` | `/learning/revisions/{id}/nodes/{nodeId}/submit-quiz` | Submit revision quiz |
+| `GET` | `/learning/revisions/{id}/summary` | Get revision metrics |
+| `GET` | `/llm/models` | List available AI models |
 
 ## Development
 
@@ -312,7 +337,13 @@ python -m unittest server.tests.test_learning.TestLearningSessions.test_create_s
 ## Documentation
 
 Additional documentation available in:
-- `.planning/codebase/ARCHITECTURE.md` - Technical architecture
+- `.planning/codebase/ARCHITECTURE.md` - Technical architecture and patterns
+- `.planning/codebase/STACK.md` - Technology stack and dependencies
+- `.planning/codebase/STRUCTURE.md` - Directory layout and organization
+- `.planning/codebase/CONVENTIONS.md` - Coding conventions
+- `.planning/codebase/TESTING.md` - Testing patterns and practices
+- `.planning/codebase/INTEGRATIONS.md` - External service integrations
+- `.planning/codebase/CONCERNS.md` - Known tech debt and issues
 - `.planning/PROJECT.md` - Project scope and requirements
 - `.planning/ROADMAP.md` - Feature roadmap and milestones
 - `conductor/product-guidelines.md` - UX/UI standards

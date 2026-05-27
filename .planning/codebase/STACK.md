@@ -1,152 +1,116 @@
 # Technology Stack
 
-**Analysis Date:** 2026-02-16
+**Analysis Date:** 2026-05-27
 
 ## Languages
 
 **Primary:**
-- **TypeScript** ~5.9.3 - Frontend React application (`client/src/**/*.ts`, `client/src/**/*.tsx`)
-- **Python** 3.10+ - Backend FastAPI server (`server/**/*.py`)
+- TypeScript ~5.9.3 — Frontend application (`client/src/**/*.ts`, `client/src/**/*.tsx`)
+- Python 3.10+ — Backend server (`server/**/*.py`)
 
 **Secondary:**
-- **JavaScript/JSX** - Legacy compatibility (minimal usage)
-- **Markdown** - Documentation and content rendering (via `react-markdown`)
-- **CSS/Tailwind** - Styling (`client/src/index.css`, Tailwind utility classes)
+- HTML — Entry point and static assets (`client/index.html`, `client/public/`)
+- CSS — Tailwind CSS processed stylesheets (`client/src/index.css`)
+- JavaScript — Configuration files (`client/eslint.config.js`, `client/vite.config.ts`)
 
 ## Runtime
 
-**Client Environment:**
-- **Node.js** - Development and build runtime
-- **Vite** 7.2.4 - Build tool and dev server (`client/vite.config.ts`)
-- **Type:** ES Modules (`"type": "module"` in `client/package.json`)
-
-**Server Environment:**
-- **Python** 3.10+
-- **ASGI Server:** Uvicorn with standard extras (`uvicorn[standard]`)
-- **Virtual Environment:** `.venv/` in `server/` directory
+**Environment:**
+- Node.js — Frontend build tooling and development server
+- Python 3.10+ — Backend runtime via Uvicorn ASGI server
 
 **Package Manager:**
-- **Client:** npm (lockfile: `client/package-lock.json` - not detected, likely present)
-- **Server:** pip with `server/requirements.txt`
+- npm — Frontend dependency management
+- pip — Backend dependency management with `requirements.txt`
+- Lockfile: `client/package-lock.json` (present), `server/requirements.txt` (no lockfile, unpinned versions)
 
 ## Frameworks
 
-**Core Client:**
-- **React** 19.2.0 - UI library with JSX transform
-- **React DOM** 19.2.0 - DOM rendering
-- **React Router DOM** 7.13.0 - Client-side routing
-- **FastAPI** - Python web framework for REST API
-
-**UI/Styling:**
-- **Tailwind CSS** 4.1.18 - Utility-first CSS framework
-- **@tailwindcss/vite** 4.1.18 - Vite plugin for Tailwind v4
-- **@tailwindcss/typography** 0.5.19 - Prose content styling for Markdown
-- **Framer Motion** 12.29.2 - Animation library
-- **Lucide React** 0.563.0 - Icon library
-
-**State Management & Data:**
-- **TanStack React Query** 5.90.20 - Server state management and caching
-- **Axios** 1.13.4 - HTTP client for API requests
-
-**Content Rendering:**
-- **React Markdown** 10.1.0 - Markdown rendering in React
-- **Rehype Raw** 7.0.0 - Parse raw HTML in Markdown
-- **Rehype Sanitize** 6.0.0 - Sanitize HTML output
-- **Remark GFM** 4.0.1 - GitHub Flavored Markdown support
-
-**AI/ML Backend:**
-- **OpenAI Python SDK** (`openai`) - OpenRouter-compatible HTTP client
-- **Instructor** - Structured LLM output validation with Pydantic
-- **Pydantic** v2 - Data validation and settings management
-
-**Utilities:**
-- **Tenacity** - Retry logic with exponential backoff
-- **python-dotenv** - Environment variable loading
-- **jsonref** - JSON reference resolution
+**Core:**
+- React 19.2.0 — Frontend UI framework (`client/package.json`)
+- FastAPI — Backend REST API framework (`server/main.py`)
+- Vite 7.2.4 — Frontend build tool and dev server (`client/vite.config.ts`)
+- Tailwind CSS 4.1.18 — Utility-first CSS framework (`client/tailwind.config.js`)
 
 **Testing:**
-- **Vitest** 3.2.4 - Unit testing framework
-- **@vitest/coverage-v8** 3.2.4 - Code coverage
-- **@testing-library/react** 16.3.2 - React component testing
-- **@testing-library/jest-dom** 6.9.1 - DOM assertion matchers
-- **@testing-library/dom** 10.4.1 - DOM testing utilities
-- **jsdom** 27.0.1 - Browser environment for tests
-- **Python unittest** - Server-side testing (stdlib)
+- Vitest 3.2.4 — Frontend unit test runner (`client/vite.config.ts`, `client/vitest.setup.ts`)
+- @testing-library/react 16.3.2 — React component testing utilities (`client/package.json`)
+- unittest (stdlib) — Backend unit test framework (`server/tests/`)
 
-**Linting & Code Quality:**
-- **ESLint** 9.39.1 - TypeScript/JavaScript linting
-- **typescript-eslint** 8.46.4 - TypeScript ESLint rules
-- **eslint-plugin-react-hooks** 7.0.1 - React Hooks rules
-- **eslint-plugin-react-refresh** 0.4.24 - React Fast Refresh validation
-- **clsx** 2.1.1 - Conditional className construction
-- **tailwind-merge** 3.4.0 - Tailwind class conflict resolution
-
-**Build Tools:**
-- **Vite** 7.2.4 - Fast dev server and optimized builds
-- **@vitejs/plugin-react** 5.1.1 - React Fast Refresh integration
-- **TypeScript** ~5.9.3 - Type checking and transpilation
-- **PostCSS** 8.5.6 - CSS processing
-- **Autoprefixer** 10.4.23 - CSS vendor prefixing
+**Build/Dev:**
+- @vitejs/plugin-react 5.1.1 — Vite React integration with Fast Refresh (`client/vite.config.ts`)
+- @tailwindcss/vite 4.1.18 — Tailwind CSS Vite plugin for v4 (`client/vite.config.ts`)
+- Uvicorn — Python ASGI server with auto-reload (`server/main.py`)
+- watchdog — File system watcher for server auto-reload (`server/main.py`)
 
 ## Key Dependencies
 
-**Critical:**
-- `react@^19.2.0` - Core UI framework
-- `fastapi` - Backend API framework
-- `openai` - OpenRouter-compatible HTTP client for LLM features
-- `instructor` - Structured output from LLMs with Pydantic validation
-- `@tanstack/react-query` - Server state synchronization
-- `pydantic` - Data validation (both client types and server schemas)
+**Critical (Frontend):**
+- `react` 19.2.0 — Core UI library (`client/package.json`)
+- `react-dom` 19.2.0 — DOM rendering (`client/package.json`)
+- `react-router-dom` 7.13.0 — Client-side routing (`client/src/App.tsx`)
+- `@tanstack/react-query` 5.90.20 — Server state management and data fetching (`client/src/providers/QueryProvider.tsx`)
+- `axios` 1.13.4 — HTTP client for API communication (`client/src/lib/learningApi.ts`, `client/src/lib/providerApi.ts`)
+
+**Critical (Backend):**
+- `fastapi` — Web framework with async support and dependency injection (`server/main.py`)
+- `openai` — OpenAI-compatible SDK for LLM API calls (`server/utils/instructor_client.py`)
+- `instructor` — Structured output validation with Pydantic models (`server/utils/instructor_client.py`)
+- `pydantic` v2 — Data validation and serialization (`server/schemas/`)
+- `tenacity` — Retry logic with exponential backoff (`server/utils/instructor_client.py`)
+- `httpx` — Async HTTP client for external API calls (`server/routers/llm.py`)
 
 **Infrastructure:**
-- `uvicorn[standard]` - ASGI server for FastAPI
-- `axios` - HTTP client with interceptors
-- `react-router-dom` - SPA routing
-- `sqlite3` (stdlib) - Local database for persistence
+- `sqlite3` (stdlib) — Embedded database for persistence (`server/database/persistence.py`, `server/database/learning_persistence.py`)
+- `uvicorn[standard]` — ASGI server (`server/main.py`)
+- `python-dotenv` — Environment variable loading from `.env` (`server/config.py`)
+- `watchdog` — File system monitoring for auto-reload (`server/main.py`)
+
+**UI/Animation:**
+- `framer-motion` 12.29.2 — Animation library for React (`client/package.json`)
+- `lucide-react` 0.563.0 — Icon library (`client/package.json`)
+- `clsx` 2.1.1 — Conditional class name utility (`client/package.json`)
+- `tailwind-merge` 3.4.0 — Tailwind class deduplication (`client/package.json`)
+
+**Content Rendering:**
+- `react-markdown` 10.1.0 — Markdown rendering in React (`client/src/features/learning/MarkdownRenderer.tsx`)
+- `@tailwindcss/typography` 0.5.19 — Prose styling for markdown content (`client/package.json`)
+- `rehype-raw` 7.0.0 — Allow raw HTML in markdown (`client/package.json`)
+- `rehype-sanitize` 6.0.0 — Sanitize HTML in markdown (`client/package.json`)
+- `remark-gfm` 4.0.1 — GitHub Flavored Markdown support (`client/package.json`)
+
+**AI/LLM:**
+- `jsonref` — JSON Schema reference resolution (used in agent schemas)
+- `AsyncOpenAI` — Async OpenAI client for structured generation (`server/utils/instructor_client.py`)
 
 ## Configuration
 
-**Client Configuration:**
-- `client/vite.config.ts` - Vite build configuration with path aliases
-- `client/tsconfig.app.json` - TypeScript strict mode config
-- `client/tsconfig.node.json` - TypeScript config for Vite config file
-- `client/tsconfig.json` - Project references configuration
-- `client/tailwind.config.js` - Tailwind CSS v4 content paths
-- `client/eslint.config.js` - ESLint flat config
-- `client/vitest.setup.ts` - Test environment setup with Jest DOM matchers
+**Environment:**
+- Server uses `.env` file loaded by `python-dotenv` at import time (`server/config.py`)
+- Client uses `VITE_API_URL` environment variable for backend URL (defaults to `http://localhost:8000`) (`client/src/lib/learningApi.ts`)
+- AI provider API keys are user-supplied via frontend Settings panel, sent per-request via HTTP headers — no server-side API keys stored
+- `.env.example` documents available variables (`server/.env.example`)
 
-**Server Configuration:**
-- `server/config.py` - Environment-based settings (OPENROUTER_BASE_URL, timeout)
-- `server/.env` - Environment variables (not committed)
-- `server/.env.example` - Template for required environment variables
-- `server/requirements.txt` - Python dependencies
-
-**Environment Variables (Client):**
-- `VITE_API_URL` - Backend API base URL (defaults to `http://localhost:8000`)
-
-**Environment Variables (Server):**
-- `OPENROUTER_BASE_URL` - OpenRouter API endpoint (default: `https://openrouter.ai/api/v1`)
-- `OPENROUTER_TIMEOUT_SECONDS` - Request timeout (default: `60.0`)
-- `VERTEX_CONFIG` - Alternative way to set credentials path
+**Build:**
+- Vite configuration: `client/vite.config.ts` — React plugin, Tailwind CSS v4 plugin, path aliases, Vitest config
+- TypeScript configuration: `client/tsconfig.app.json` — Strict mode, bundler module resolution, `@/*` path alias
+- ESLint configuration: `client/eslint.config.js` — TypeScript, React Hooks, React Refresh rules
+- Tailwind CSS: `client/tailwind.config.js` — Tailwind v4 configuration
 
 ## Platform Requirements
 
 **Development:**
-- Node.js (for client build tools)
-- Python 3.10+ with virtual environment support
-- OpenRouter account with API key (user-provided per request)
-- Service account key file for Google Cloud authentication
+- Node.js (for Vite dev server and npm)
+- Python 3.10+ (for FastAPI and type hint syntax)
+- SQLite3 (bundled with Python, no separate install)
+- `.venv` virtual environment in `server/` directory
 
 **Production:**
-- ASGI-compatible server (Uvicorn recommended)
-- Static file server for built client assets
-- OpenRouter account (free tier available at https://openrouter.ai)
-- API key entered via the frontend Settings panel (no server-side config needed)
-
-**Ports:**
-- Client dev server: `5173` (Vite default)
-- Backend API: `8000` (FastAPI/Uvicorn default)
+- FastAPI served via Uvicorn ASGI server on port 8000 (`server/main.py`)
+- Vite builds static assets to `client/dist/` for deployment
+- CORS configured for `localhost:5173` and `127.0.0.1:5173` origins (`server/main.py`)
+- SQLite database stored at `server/data/a2ui.db` (`server/database/persistence.py`)
 
 ---
 
-*Stack analysis: 2026-02-16*
+*Stack analysis: 2026-05-27*

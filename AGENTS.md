@@ -23,13 +23,23 @@ Follow the commands and style rules below; match local patterns when editing.
 ## Repo Layout
 
 - `client/`: Vite + React 19 + TypeScript frontend
-- `server/`: FastAPI backend with Pydantic v2 (models, REST routers, services, utils)
+  - `src/features/learning/`: Adaptive learning feature (primary)
+  - `src/features/settings/`: Provider configuration
+  - `src/components/`: Shared UI components
+  - `src/hooks/`: Custom React hooks
+  - `src/lib/`: API clients and utilities
+  - `src/providers/`: React context providers
+  - `src/types/`: TypeScript type definitions
+- `server/`: FastAPI backend with Pydantic v2
+  - `agents/`: AI agent pipeline (Planner, Generator, Quizzer)
+  - `database/`: SQLite persistence layer
+  - `routers/`: REST API endpoints
+  - `schemas/`: Pydantic v2 domain models
+  - `services/`: Business logic orchestration
+  - `tests/`: Python unit tests
+  - `utils/`: Instructor client wrapper
 - `conductor/`: Product guidelines and UI/UX standards
-- `.planning/codebase/`: Comprehensive codebase documentation (architecture, stack, conventions)
-- `features/learning/`: Adaptive learning system components
-  - Client: LearningPage, LearningPathContainer, ConceptCard, QuizModal
-  - Server: CourseOrchestrator, agent architecture (PlannerAgent, GeneratorAgent, QuizzerAgent)
-  - Database: concept_nodes, quiz_data, learning_sessions tables
+- `.planning/codebase/`: Comprehensive codebase documentation
 
 ## Technology Versions
 
@@ -50,10 +60,11 @@ State/Query: `@tanstack/react-query`, `axios`
 Testing: `vitest`, `@vitest/coverage-v8`, `@testing-library/react`, `jsdom`
 
 ### Server
-Web Framework: `fastapi`, `uvicorn`, `python-multipart`
+Web Framework: `fastapi`, `uvicorn[standard]`
 AI/ML: `openai`, `instructor`, `pydantic`
-Database: `sqlalchemy`, `alembic`
-Utilities: `tenacity` (retry logic)
+Database: SQLite (stdlib `sqlite3`, no ORM)
+HTTP Client: `httpx`
+Utilities: `tenacity` (retry logic), `python-dotenv`, `jsonref`, `watchdog`
 Testing: `unittest` (stdlib)
 
 ## Build, Lint, and Test
@@ -181,32 +192,34 @@ from server.database.persistence import session_manager
 
 ### Routers (`server/routers/`)
 - REST API endpoints with FastAPI `APIRouter`
-- Chat: `/chat/sessions`, message endpoints
-- Learning: `/learning/generate`, `/learning/sessions/{id}`, etc.
+- `learning.py`: Learning endpoints (generate, sessions, nodes, quizzes, revisions)
+- `llm.py`: Model catalog proxy endpoint
 
 ### Schemas (`server/schemas/`)
 - Pydantic v2 models for request/response validation
-- Session schemas, message schemas, learning schemas
+- `common.py`: Base classes (ResponseBase, TimestampMixin)
+- `learning.py`: Learning domain models (NodeStatus, QuizCard, QuizSet, CourseOutline)
+- `llm.py`: LLMContext, ModelResponse, AIProviderEnum
 
 ### Services (`server/services/`)
 - Business logic layer
-- `course_orchestrator.py`: Main learning orchestration service
+- `course_orchestrator.py`: Scatter-Gather course generation pipeline
+- `quiz_randomization.py`: Deterministic quiz/option shuffling with seeds
 
 ### Utils (`server/utils/`)
 - Shared utility modules
-- `instructor_client.py`: Instructor library integration for OpenRouter structured outputs
+- `instructor_client.py`: Instructor library integration for structured LLM output
 
 ### Database (`server/database/`)
-- Persistence layer
-- `persistence.py`: SessionManager and data access
-- `models.py`: SQLAlchemy models
-- `connection.py`: Database connection management
+- Persistence layer (SQLite via sqlite3, no ORM)
+- `persistence.py`: DB_PATH configuration
+- `learning_persistence.py`: LearningManager with all CRUD operations
 
 ## Data Model Notes
-- Message roles: 'user' or 'model' (see `server/schemas/session.py`)
 - Timestamps: ISO strings in API responses
 - Session list endpoints: support `limit` and `offset`
 - `get_session_messages`: optional `limit` (None = full history)
+- Database tables: `learning_sessions`, `concept_nodes`, `quiz_data`, `revision_sessions`, `quiz_attempts`, `revision_node_progress`
 
 ## Learning Feature Architecture
 

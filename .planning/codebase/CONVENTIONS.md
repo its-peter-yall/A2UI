@@ -1,476 +1,273 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-02-16
+**Analysis Date:** 2026-05-27
 
-## Overview
+## Naming Patterns
 
-This codebase follows **Google Style Guides** for TypeScript, Python, and HTML/CSS, documented in `conductor/code_styleguides/`. The codebase has a dual-stack architecture with a React 19/Vite frontend and FastAPI/Python backend.
+**Files (TypeScript/React):**
+- Components: `UpperCamelCase.tsx` (e.g., `ConceptCard.tsx`, `LearningPage.tsx`, `QueryProvider.tsx`)
+- Hooks: `camelCase.ts` prefixed with `use` (e.g., `useTypewriter.ts`, `useNodeState.ts`, `useLearningMutations.ts`)
+- Utilities/Libraries: `camelCase.ts` (e.g., `learningApi.ts`, `providerSettings.ts`, `utils.ts`)
+- Types: `camelCase.ts` (e.g., `learning.ts`, `provider.ts`, `openrouter.ts`)
+- Tests: `*.test.ts` or `*.test.tsx` co-located with source (e.g., `ConceptCard.test.tsx` beside `ConceptCard.tsx`)
+- E2E tests: placed in `__tests__/` subdirectory (e.g., `__tests__/e2e.test.tsx`)
 
-## Language: TypeScript/React (Client)
+**Files (Python):**
+- Modules: `snake_case.py` (e.g., `course_orchestrator.py`, `learning_persistence.py`, `quiz_randomization.py`)
+- Tests: `test_*.py` in `server/tests/` directory (e.g., `test_learning_router.py`, `test_course_orchestrator.py`)
 
-### File Naming & Structure
+**Functions (TypeScript):**
+- camelCase: `generateCourse`, `getLearningSession`, `transitionNode`, `submitQuiz`
+- Hooks: `use` prefix: `useTypewriter`, `useNodeState`, `useLearningMutations`, `useQuizFeedback`
+- Boolean getters: `isValidTransition`, `getNextStatus`
 
-**Files:**
-- **Components**: `PascalCase.tsx` (e.g., `CourseCard.tsx`, `LearningPage.tsx`)
-- **Hooks**: `camelCase.ts` with `use` prefix (e.g., `useTypewriter.ts`, `useLearningMutations.ts`)
-- **Tests**: Co-located with source, suffix `.test.ts` or `.test.tsx` (e.g., `CourseCard.test.tsx`)
-- **Utils/Lib**: `camelCase.ts` (e.g., `learningApi.ts`, `utils.ts`)
-- **Styles**: Tailwind CSS via `cn()` utility, no separate CSS files for components
+**Functions (Python):**
+- `snake_case`: `generate_course`, `get_learning_session`, `update_node_status`
+- Private methods: `_` prefix: `_generate_concept_unit`, `_process_gather_results`, `_create_skeleton_card`
+- Validators: `validate_` prefix: `validate_display_label`, `validate_options`, `validate_topics`
 
-**Path Aliases:**
-- `@/` maps to `client/src/` (configured in `vite.config.ts` and `tsconfig.app.json`)
-- Example: `import { CourseCard } from '@/features/learning/CourseCard'`
+**Variables (TypeScript):**
+- camelCase: `queryClient`, `displayText`, `mockNode`, `mockNavigate`
+- Constants: `UPPER_SNAKE_CASE` for true constants (e.g., `CONTENT_VISIBLE_STATES`, `QUIZ_VISIBLE_STATES`)
+- Environment vars: `VITE_` prefix (e.g., `VITE_API_URL`)
 
-### Naming Conventions
+**Variables (Python):**
+- `snake_case`: `learning_manager`, `session_payload`, `node_payloads`
+- Module-level constants: `UPPER_SNAKE_CASE` (e.g., `AUTO_RELOAD`, `RELOAD_DELAY`, `WATCH_PATHS`)
+- Logger instances: `logger = logging.getLogger(__name__)`
 
-**Google TypeScript Style Guide (enforced):**
-- **Variables**: `lowerCamelCase` - `const displayText = ''`
-- **Functions**: `lowerCamelCase` - `function formatDate() {}`
-- **Components**: `UpperCamelCase` - `export function CourseCard() {}`
-- **Types/Interfaces**: `UpperCamelCase` - `interface CourseCardProps {}`
-- **Constants**: `CONSTANT_CASE` for module-level constants
-- **Hooks**: Must start with `use` - `useTypewriter()`, `useLearningMutations()`
-- **No default exports** - Use named exports only: `export function CourseCard() {}`
+**Types (TypeScript):**
+- Interfaces: `UpperCamelCase` (e.g., `ConceptNode`, `QuizCard`, `LearningSessionWithNodes`)
+- Type aliases: `UpperCamelCase` (e.g., `NodeStatus`, `QuizDifficulty`, `Complexity`)
+- Union types as string literals: `'LOCKED' | 'VIEWING_EXPLANATION' | 'IN_QUIZ'`
 
-**Forbidden:**
-- `var` keyword - Use `const` by default, `let` only when reassignment needed
-- Default exports - Always use named exports
-- `#private` fields - Use TypeScript `private` modifier
-- `_` prefix/suffix for private members
-- `any` type - Prefer `unknown` or specific types
+**Types (Python):**
+- Classes: `PascalCase` (e.g., `CourseOrchestrator`, `QuizCard`, `NodeStatus`)
+- Enums: `PascalCase` with `UPPER_SNAKE_CASE` values (e.g., `NodeStatus.LOCKED`, `NodeStatus.IN_QUIZ`)
+- Pydantic models: `PascalCase` with suffix conventions: `*Response`, `*Request`, `*Create`, `*Base`
 
-### Code Style
+## Code Style
 
-**TypeScript Configuration (`client/tsconfig.app.json`):**
-- Strict mode enabled: `"strict": true`
-- Unused locals/parameters are errors: `"noUnusedLocals": true`, `"noUnusedParameters": true`
-- Module: ESNext with bundler resolution
-- JSX: `react-jsx` (no React import needed)
-- Path mapping: `"@/*": ["./src/*"]`
+**Formatting (TypeScript):**
+- ESLint with TypeScript + React Hooks + React Refresh plugins
+- Config: `client/eslint.config.js`
+- Files: `**/*.{ts,tsx}` only
+- Key rules: `react-refresh/only-export-components` with allowlist for `useErrorToast`
+- Run: `npm run lint` from `client/`
 
-**Formatting:**
-- **Single quotes** for strings
-- **Explicit semicolons** required
-- **2-space indentation** for HTML/CSS, follows file type conventions
-- **Template literals** for interpolation: `` `Hello ${name}` ``
+**Formatting (Python):**
+- No explicit formatter config detected (ruff cache exists suggesting ruff usage)
+- 4-space indentation
+- Line length: approximately 80-100 characters observed
+- F-strings preferred for string interpolation
 
-**Linting (`client/eslint.config.js`):**
-- ESLint with TypeScript support (`typescript-eslint`)
-- React Hooks rules (`eslint-plugin-react-hooks`)
-- React Refresh validation (`eslint-plugin-react-refresh`)
-- Command: `npm run lint` (in `client/` directory)
+**Linting (TypeScript):**
+- TypeScript strict mode: `strict: true` in `client/tsconfig.app.json`
+- `noUnusedLocals: true` — unused variables are errors
+- `noUnusedParameters: true` — unused params are errors
+- `noFallthroughCasesInSwitch: true`
+- `noUncheckedSideEffectImports: true`
+- `erasableSyntaxOnly: true`
 
-### Import Organization
+**Linting (Python):**
+- No explicit linter config detected
+- Ruff cache directory present (`.ruff_cache/`) suggesting ruff is used
+- Standard Python conventions followed throughout
 
-**Order (enforced by Google Style):**
-```typescript
-// 1. Standard library imports
-import { useState, useEffect } from 'react';
-import type { ReactNode } from 'react';
+## Import Organization
 
-// 2. Third-party imports
-import { motion } from 'framer-motion';
-import { renderHook } from '@testing-library/react';
+**TypeScript Order:**
+1. React/framework imports (`import { StrictMode } from 'react'`)
+2. Type-only imports (`import type { ReactNode } from 'react'`)
+3. Third-party libraries (`import { QueryClient } from '@tanstack/react-query'`)
+4. Internal modules via `@/` alias (`import { cn } from '@/lib/utils'`)
+5. Relative imports (`import './index.css'`)
+6. Type-only from internal (`import type { ConceptNode } from '@/types/learning'`)
 
-// 3. Local application imports (using @ alias)
-import { CourseCard } from '@/features/learning/CourseCard';
-import type { LearningSessionSummary } from '@/types/learning';
-import { cn } from '@/lib/utils';
+**TypeScript Path Aliases:**
+- `@/*` maps to `client/src/*` (configured in `client/tsconfig.app.json` and `client/vite.config.ts`)
+- Use `@/` prefix for all internal imports: `import { api } from '@/lib/learningApi'`
+- Relative imports only for same-directory files
 
-// 4. Relative imports (if @ alias not applicable)
-import './index.css';
-```
+**Python Order:**
+1. Standard library (`import asyncio`, `import logging`, `from typing import Optional`)
+2. Third-party (`from fastapi import APIRouter, HTTPException, status`)
+3. Local (`from server.database.learning_persistence import learning_manager`)
+4. Use `from __future__ import annotations` when needed for forward references
 
-**Type-only imports:**
-```typescript
-import type { Session } from '@/types/api';
-```
+**Python Import Conventions:**
+- Module-level logger: `logger = logging.getLogger(__name__)`
+- Import specific names, not entire modules when possible
+- Group imports with blank lines between groups
 
-### Function Design
+## Error Handling
 
-**Arrow vs Function Declaration:**
-- Named functions: Prefer function declarations
-- Callbacks/anonymous: Use arrow functions
+**TypeScript Patterns:**
+- Axios interceptors for global error handling in `client/src/lib/learningApi.ts`
+- Response interceptor logs errors and re-rejects: `console.error('API Request Failed:', ...)`
+- Components handle errors via React Query's `isError`/`error` states
+- Error boundaries: `LearningErrorBoundary.tsx` for feature-level catch
+- Toast notifications via `useErrorToast` hook for user-facing errors
+- Never suppress errors with empty catch blocks
 
-```typescript
-// Good - named function
-export function CourseCard({ session }: CourseCardProps) {
-  // ...
-}
+**Python Patterns:**
+- Router endpoints: try/except → log → `HTTPException` with appropriate status code
+- Re-raise `HTTPException` untouched: `except HTTPException: raise`
+- Wrap unexpected exceptions: `except Exception as e: logger.error(...); raise HTTPException(500, ...)`
+- Specific exception types for known errors: `LookupError` → 404, `ValueError` → 400
+- Pattern in every router endpoint:
+  ```python
+  try:
+      # business logic
+  except HTTPException:
+      raise
+  except LookupError as e:
+      raise HTTPException(status_code=404, detail=str(e))
+  except ValueError as e:
+      raise HTTPException(status_code=400, detail=str(e))
+  except Exception as e:
+      logger.error(f"Error ...: {e}")
+      raise HTTPException(status_code=500, detail=f"Failed to ...: {str(e)}")
+  ```
 
-// Good - arrow function for callback
-const handleClick = (e: React.MouseEvent) => {
-  // ...
-};
+## Logging
 
-// Good - short arrow for simple cases
-const items = topics.map((t) => t.title);
-```
+**TypeScript:**
+- `console.error` for API failures in interceptors
+- No structured logging framework — browser console only
 
-**Parameters:**
-- Use destructuring for props
-- Optional params with `?` preferred over `| undefined`
+**Python:**
+- Module-level: `logger = logging.getLogger(__name__)`
+- Root config: `logging.basicConfig(level=logging.INFO)` in `server/main.py`
+- Levels: `logger.info()` for lifecycle, `logger.error()` for failures, `logger.debug()` for orchestrator details
+- F-string formatting: `logger.error(f"Error generating course: {e}")`
 
-```typescript
-interface CourseCardProps {
-  session: LearningSessionSummary;
-  onResume: (sessionId: string) => void;
-  onViewRevision?: (revisionId: string) => void;  // Optional with ?
-}
-```
+## Comments
 
-### Error Handling
+**TypeScript:**
+- Every file has a mandatory header block (76 `=` separator):
+  ```typescript
+  /**
+   * ============================================================================
+   * FILE: <filename>
+   * LOCATION: <filepath>
+   * ============================================================================
+   * PURPOSE: ...
+   * ROLE IN PROJECT: ...
+   * KEY COMPONENTS: ...
+   * DEPENDENCIES: ...
+   * USAGE: ...
+   * ============================================================================
+   */
+  ```
+- Section separators: `// --- Section Name ---` (e.g., `// --- Learning Session ---`)
+- Inline comments for non-obvious logic
+- JSDoc not widely used beyond file headers
 
-**API Error Pattern (`client/src/lib/learningApi.ts`):**
-```typescript
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('API Request Failed:', error.config?.url, error.response?.data || error.message);
-    return Promise.reject(error);
-  }
-);
-```
+**Python:**
+- Every file has a mandatory header block (76 `=` separator):
+  ```python
+  """
+  ============================================================================
+  FILE: <filename>
+  LOCATION: <filepath>
+  ============================================================================
+  PURPOSE: ...
+  ROLE IN PROJECT: ...
+  KEY COMPONENTS: ...
+  DEPENDENCIES: ...
+  USAGE: ...
+  ============================================================================
+  """
+  ```
+- Docstrings on public classes and methods with Args/Returns sections
+- Inline comments for complex logic
+- Type hints on public function signatures
 
-**Component Error Handling:**
-- Log errors with context (URL, response data)
-- Reject promises to let calling components handle UI states
-- Never use empty catch blocks: `catch(e) {}` is forbidden
+## Function Design
 
-### Type System
+**TypeScript:**
+- Arrow functions for API calls: `export const generateCourse = async (...) => { ... }`
+- Named functions for components: `function App() { ... }`
+- Named exports only — no default exports (mandatory convention)
+- Exception: `App.tsx` uses `export default App` (legacy)
+- Hooks return objects or primitives, not arrays (except `useTypewriter` which returns string)
+- Async functions return typed promises: `Promise<LearningSessionWithNodes>`
 
-**Array Types:**
-- `T[]` for simple types: `const items: string[] = []`
-- `Array<T>` for unions: `Array<string | number>`
+**Python:**
+- `def` for sync, `async def` for async
+- Type hints on all public parameters and return values
+- `Optional[T]` for nullable parameters with `None` default
+- Docstrings with summary + Args/Returns sections
+- No mutable default arguments — use `None` + fallback
 
-**Avoid:**
-- `{}` type - Use `Record<string, unknown>` or `object`
-- Type assertions (`as`) - Only when necessary with justification
-- Non-null assertions (`!`) - Avoid
+## Module Design
 
-**Interface/Type Pattern:**
-```typescript
-export interface CourseCardProps {
-  session: LearningSessionSummary;
-  onResume: (sessionId: string) => void;
-}
-```
+**TypeScript Exports:**
+- Named exports only (enforced by ESLint)
+- Barrel files: `client/src/features/learning/index.ts` re-exports feature components
+- Types exported from dedicated `types/` directory
+- API functions exported individually from `lib/` files
 
-### React Patterns
+**Python Exports:**
+- `__init__.py` files for package structure
+- Routers exported via `server/routers/__init__.py`
+- Schemas exported via `server/schemas/__init__.py`
+- Agents exported via `server/agents/__init__.py`
 
-**Component Structure:**
-```typescript
-// File header (MANDATORY for all files)
-// CourseCard.tsx
-// Card component displaying a single learning course
+## Component Patterns
 
-// Description block
-// Renders a course summary card for the dashboard with two visual states:
-// - In-progress: Shows progress bar, "Resume Course" button
-// - Completed: Shows green checkmark, revision buttons
+**React Components:**
+- Functional components only (no class components)
+- Props interfaces defined inline or as separate types
+- State management via React Query (`useQuery`, `useMutation`) for server state
+- Local state via `useState` for UI-only state
+- Effects via `useEffect` with proper cleanup
+- Memoization: not widespread — apply only when profiling shows need
 
-// @see: client/src/types/learning.ts
-// @note: onRevise accepts a mode param
+**Pydantic Models:**
+- `ConfigDict(from_attributes=True)` on all models for ORM compatibility
+- `Field(...)` with description for all fields
+- Validators via `@field_validator` decorator with `@classmethod`
+- Base/Response/Create pattern: `*Base` → `*Create` → `*Response`
+- Inheritance: `ResponseBase, TimestampMixin, ConceptNodeBase` composition
 
-import { motion } from 'framer-motion';
-import type { LearningSessionSummary } from '@/types/learning';
+## API Conventions
 
-export interface CourseCardProps {
-  session: LearningSessionSummary;
-  onResume: (sessionId: string) => void;
-}
+**FastAPI Routers:**
+- `APIRouter(prefix="/learning", tags=["learning"])`
+- `summary` and `description` on every endpoint decorator
+- `response_model` specified on every endpoint
+- `status_code` for non-200 responses
+- `Depends()` for dependency injection (e.g., `LLMContext`)
 
-export function CourseCard({ session, onResume }: CourseCardProps) {
-  // Implementation
-}
-```
+**Axios Client:**
+- Base URL from `VITE_API_URL` env var, defaults to `http://localhost:8000`
+- Standard client: 30s timeout for normal operations
+- Learning client: 5min timeout for course generation
+- Request interceptor attaches provider headers (API key, model)
+- Response interceptor logs errors and re-rejects
 
-**Styled Components with Tailwind:**
-```typescript
-import { cn } from '@/lib/utils';
+## Style Preferences
 
-// Use cn() for conditional classes
-className={cn(
-  'rounded-xl border border-white/10 p-5',
-  'bg-card/80 backdrop-blur-sm',
-  isActive && 'ring-2 ring-primary',
-  isDisabled && 'opacity-50 cursor-not-allowed'
-)}
-```
+**TypeScript:**
+- `const` by default; never `var`
+- Single quotes for strings
+- Explicit semicolons
+- Avoid `any`, `as`, and non-null assertions (`!`) — use sparingly
+- Optional params (`?`) preferred over `| undefined`
+- `T[]` for simple arrays; `Array<T>` for union types
+- Template literals for string interpolation
+- Destructuring for props and imports
+
+**Python:**
+- 4-space indentation
+- F-strings for interpolation
+- `Optional[T]` for nullable (not `T | None` in older code, both acceptable)
+- `from __future__ import annotations` for forward references
+- No bare `except:` — always specify exception type
+- Context managers (`with`) for resource cleanup
 
 ---
 
-## Language: Python (Server)
-
-### File Naming & Structure
-
-**Files:**
-- **Modules**: `snake_case.py` (e.g., `course_orchestrator.py`, `learning_persistence.py`)
-- **Tests**: `test_*.py` in `server/tests/` directory (e.g., `test_course_orchestrator.py`)
-- **Schemas**: Grouped by feature (e.g., `learning.py` contains all learning schemas)
-
-### Naming Conventions
-
-**Google Python Style Guide (enforced):**
-- **Modules**: `snake_case` - `course_orchestrator.py`
-- **Functions**: `snake_case` - `def generate_course():`
-- **Variables**: `snake_case` - `session_id = '...'`
-- **Classes**: `PascalCase` - `class CourseOrchestrator:`
-- **Constants**: `ALL_CAPS_WITH_UNDERSCORES` - `MAX_RETRY_COUNT = 3`
-- **Internal**: Single leading underscore `_internal_var`
-
-### Code Style
-
-**Line Length:**
-- Maximum **80 characters** per line
-- Break lines at logical points
-
-**Indentation:**
-- **4 spaces** per level
-- Never use tabs
-
-**Blank Lines:**
-- Two blank lines between top-level definitions (classes, functions)
-- One blank line between method definitions
-
-**Import Organization:**
-```python
-# 1. Standard library
-import asyncio
-import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional
-
-# 2. Third-party
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
-
-# 3. Local application (server.*)
-from server.agents import generator_agent, planner_agent
-from server.database.learning_persistence import learning_manager
-from server.schemas.learning import CourseOutline, NodeStatus
-```
-
-### Docstrings
-
-**Format (Google Style):**
-```python
-def generate_course(self, query: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-    """Generate a complete learning course from user query.
-
-    Args:
-        query: The user's learning request/topic.
-        user_id: Optional user identifier for tracking.
-
-    Returns:
-        Dictionary containing session, nodes, and metrics.
-
-    Raises:
-        ValueError: If query is empty or invalid.
-    """
-```
-
-### Type Hints
-
-**Required for public APIs:**
-```python
-from typing import Optional, List
-
-def get_session(self, session_id: str) -> Optional[LearningSession]:
-    """Retrieve session by ID."""
-    ...
-
-def create_nodes(self, nodes: List[ConceptNodeCreate]) -> List[ConceptNode]:
-    """Create multiple concept nodes."""
-    ...
-```
-
-### Error Handling
-
-**Pattern (FastAPI routers):**
-```python
-from fastapi import HTTPException, status
-
-@router.get("/sessions/{session_id}")
-async def get_session(session_id: str):
-    try:
-        result = await learning_manager.get_session(session_id)
-        if not result:
-            raise HTTPException(status_code=404, detail="Session not found")
-        return result
-    except HTTPException:
-        raise  # Re-raise FastAPI exceptions as-is
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
-```
-
-**Logging:**
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Usage
-logger.info("Course generated", extra={"session_id": session_id})
-logger.error("Generation failed", exc_info=True)
-```
-
-### Pydantic Schemas
-
-**Pattern:**
-```python
-from pydantic import BaseModel, Field, ConfigDict
-from enum import Enum
-
-class NodeStatus(str, Enum):
-    LOCKED = "LOCKED"
-    VIEWING_EXPLANATION = "VIEWING_EXPLANATION"
-    IN_QUIZ = "IN_QUIZ"
-    COMPLETED = "COMPLETED"
-
-class ConceptNodeCreate(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    learning_session_id: str
-    sequence_index: int = Field(ge=0)
-    title: str = Field(min_length=1, max_length=200)
-    content_markdown: str
-    status: NodeStatus = NodeStatus.LOCKED
-```
-
-**Validation Rules:**
-- Use `Field()` for constraints (min_length, ge, le)
-- `ConfigDict(from_attributes=True)` for ORM compatibility
-- Enums for status fields
-
-### Main Function Pattern
-
-**Executable files must have main():**
-```python
-def main() -> None:
-    """Entry point for CLI execution."""
-    parser = argparse.ArgumentParser()
-    # ...
-
-if __name__ == "__main__":
-    main()
-```
-
----
-
-## HTML/CSS Conventions
-
-### Tailwind CSS Usage
-
-**Primary styling method** - Tailwind CSS v4 with custom utility `cn()`:
-
-```tsx
-import { cn } from '@/lib/utils';
-
-// Conditional classes with cn()
-<div className={cn(
-  'rounded-xl border border-white/10 p-5',
-  'bg-card/80 backdrop-blur-sm',
-  'flex flex-col gap-3',
-  isActive && 'ring-2 ring-primary',
-  isDisabled && 'opacity-50'
-)} />
-```
-
-### Class Naming
-
-**When custom classes needed (rare):**
-- Use kebab-case: `.course-card`, `.progress-bar-fill`
-- Meaningful names: `.revision-history-list` not `.rhl`
-- Avoid ID selectors for styling
-
-### CSS Properties (if writing raw CSS)
-
-**Google CSS Style:**
-- Alphabetize declarations within rules
-- Use shorthand properties
-- Omit units for 0 values: `margin: 0;` not `margin: 0px;`
-- Leading 0 for decimals: `0.8em` not `.8em`
-- 3-char hex when possible: `#fff` not `#ffffff`
-
----
-
-## File Headers (MANDATORY)
-
-**All source files must have header comments:**
-
-```typescript
-// CourseCard.tsx
-// Card component displaying a single learning course
-
-// Renders a course summary card with progress and actions.
-// Supports in-progress and completed states with different actions.
-
-// @see: client/src/types/learning.ts
-// @note: onRevise accepts mode param ('full_review' | 'quiz_only')
-```
-
-```python
-"""
-=============================================================================
-FILE: course_orchestrator.py
-=============================================================================
-
-PURPOSE:
-Coordinates course generation using Scatter-Gather pattern.
-
-KEY COMPONENTS:
-- CourseOrchestrator: Main orchestrator class
-- generate_course(): Entry point for course generation
-
-@see: server/agents/planner_agent.py
-@note: Partial failures handled via SkeletonCard creation
-"""
-```
-
----
-
-## Comment Style
-
-**When to Comment:**
-- Complex business logic
-- Non-obvious workarounds
-- Performance considerations
-- API contract notes
-
-**JSDoc/TSDoc:**
-- Use for public functions and components
-- Don't repeat type info (TypeScript already provides it)
-- Add value beyond code:
-
-```typescript
-// BAD - redundant
-/** Returns the session ID (string) */
-function getSessionId(): string { }
-
-// GOOD - adds context
-/** Returns stable session ID for analytics correlation.
- *  Format: UUID v4 without dashes.
- */
-function getSessionId(): string { }
-```
-
----
-
-## Key Principles Summary
-
-| Aspect | TypeScript/React | Python |
-|--------|------------------|---------|
-| Naming | `UpperCamelCase` components, `lowerCamelCase` functions | `snake_case` functions, `PascalCase` classes |
-| Exports | Named only, no default | Named only |
-| Line length | ~100 soft limit | 80 characters hard limit |
-| Indentation | 2 spaces | 4 spaces |
-| Quotes | Single for code, double for HTML attrs | Consistent single or double |
-| Type safety | Strict mode, no `any` | Type hints for public APIs |
-| Error handling | Reject promises, log context | Try/except → log → HTTPException |
-| Documentation | File headers + JSDoc for public APIs | Docstrings with Args/Returns/Raises |
-
----
-
-*Convention analysis: 2026-02-16*
+*Convention analysis: 2026-05-27*
