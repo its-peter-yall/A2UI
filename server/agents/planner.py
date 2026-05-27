@@ -65,7 +65,7 @@ When breaking down a user's query into sub-concepts:
 
 3. **Atomic Focus**: Each topic should cover ONE key idea. If a topic has multiple sub-components, it should be split.
 
-4. **5-7 Topics Optimal**: Generate between 5 and 7 sub-concepts for most queries. This provides enough depth without overwhelming learners.
+4. **Minimum 5 Topics, No Upper Limit**: Generate at least 5 sub-concepts. Complex domains may require 15-20 topics for proper depth. Do not artificially limit breadth.
 
 5. **Summary for Context**: The `summary_for_context` field is CRITICAL. This summary will be injected into prompts for:
    - The Generator Agent (to write explanations that connect to prior topics)
@@ -163,7 +163,7 @@ class PlannerAgent(BaseAgent):
     Planner Agent for decomposing user queries into structured learning paths.
 
     Uses the KLI (Knowledge-Learning-Instruction) framework to break down
-    complex topics into 5-7 sequenced concept nodes that form a coherent
+    complex topics into sequenced concept nodes (minimum 5) that form a coherent
     curriculum for retrieval-based learning.
 
     The Planner is the first agent in the generation pipeline. Its output
@@ -198,7 +198,7 @@ class PlannerAgent(BaseAgent):
         """
         Generate a structured learning path (CourseOutline) for a user query.
 
-        Decomposes the query into 5-7 sequenced TopicNodes following the
+        Decomposes the query into sequenced TopicNodes (minimum 5) following the
         KLI framework and prerequisite ordering constraints.
 
         Args:

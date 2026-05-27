@@ -531,9 +531,8 @@ class CourseOutline(BaseModel):
     course_title: str = Field(..., description="Title of the course", min_length=1)
     topics: List[TopicNode] = Field(
         ...,
-        description="Ordered list of topic nodes (5-7 topics required)",
+        description="Ordered list of topic nodes (minimum 5 topics required)",
         min_length=5,
-        max_length=7,
     )
 
     @field_validator("topics")
@@ -541,8 +540,6 @@ class CourseOutline(BaseModel):
     def validate_topics(cls, topics: List[TopicNode]) -> List[TopicNode]:
         if len(topics) < 5:
             raise ValueError("CourseOutline requires at least 5 topics")
-        if len(topics) > 7:
-            raise ValueError("CourseOutline requires at most 7 topics")
         # Validate contiguous indices (0, 1, 2, ...) match list order
         for i, topic in enumerate(topics):
             if topic.index != i:

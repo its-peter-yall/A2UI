@@ -91,9 +91,9 @@ class TestPlannerAgent(unittest.TestCase):
         # Prerequisite ordering
         self.assertIn("Prerequisite Ordering", prompt)
 
-        # 5-7 topics requirement
-        self.assertIn("5-7", prompt)
-        self.assertIn("5", prompt)
+        # Minimum 5 topics requirement (no upper limit)
+        self.assertIn("at least 5", prompt)
+        self.assertIn("Upper Limit", prompt)
 
         # Context injection explanation
         self.assertIn("summary_for_context", prompt)
