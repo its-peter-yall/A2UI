@@ -229,20 +229,30 @@ Plans:
 | 9-15 | v1.1 | 14/14 | Complete | 2025-02-16 |
 | 16-20 | v1.2 | 9/9 | Complete | 2026-02-17 |
 | 21-24 | v1.3 | 4/4 | Complete | 2026-03-08 |
+| 25 | v1.4 | 3/3 | Complete | 2026-05-28 |
 
 ---
 
-### 🚧 v1.4+ (Planned)
+### ✅ v1.4 AI-Powered Assistance & Accessibility (In Progress)
 
-**Milestone Goal:** Future enhancements for the retrieval-based learning feature.
+**Milestone Goal:** Enhance the learning experience with AI-powered assistance and accessibility features.
 
-**Potential Features:**
+- [x] **Phase 25: Concept Chatbot** — Context-aware inline Q&A assistant for learning concepts with heading-level context selection, streaming responses, and separate model picker in settings (completed 2026-05-28)
+- [ ] **Phase 26: Accessibility & Mobile** — Accessibility improvements and mobile responsiveness
 
-## Future Milestones (v1.4+)
+### Phase 25: Concept Chatbot
+**Goal**: Add a context-aware chatbot assistant that helps users with questions about learning concept explanations
+**Depends on**: Phase 24 (v1.3 complete)
+**Requirements**: CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05
+**Success Criteria** (what must be TRUE):
+  1. User can open a chat panel from a FAB or heading icon while viewing a concept explanation
+  2. User can select specific headings as context focus for chat questions
+  3. User receives streaming SSE responses from the backend
+  4. User can configure a separate chat model in settings
+  5. Chat history is ephemeral and capped to 10 messages
+**Plans**: 3 plans
 
-- **Spaced Repetition Automation**: SM-2 algorithm with scheduled review notifications
-- **Adaptive Difficulty**: Quizzer adjusts question difficulty based on performance history
-- **RAG Integration**: Ground explanations in verified source material
-- **Semantic Caching**: Recognize similar queries, serve cached courses
-- **Multi-Modal**: Generate diagrams with Imagen 3
-- **User Authentication**: Proper user accounts for cross-device sync
+Plans:
+- [x] 25-01-PLAN.md — Backend chat endpoint, streaming, provider resolution
+- [x] 25-02-PLAN.md — Frontend chat panel, heading icons, streaming hook, settings
+- [x] 25-03-PLAN.md — Integration, edge cases, accessibility, final verification
