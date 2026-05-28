@@ -49,9 +49,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MessageCircle } from 'lucide-react';
 import type { LearningSessionWithNodes, QuizSubmitResponse, GenerateCourseRequest } from '@/types/learning';
 import { generateCourse, getLearningSession, updateLastActiveNode } from '@/lib/learningApi';
 import { ConceptCard } from './ConceptCard';
+import { ChatPanel } from './ChatPanel';
 import { LearningErrorBoundary } from './LearningErrorBoundary';
 import { MasteryCelebration } from './animations/MasteryCelebration';
 import { ProgressBar } from './ProgressBar';
@@ -107,6 +109,19 @@ export function LearningPathContainer({
   const activeSessionId = sessionId ?? generatedSessionId;
   const activeSessionKey = activeSessionId ?? 'new';
   const { toasts, showError, dismissToast } = useErrorToast();
+
+  // Chat panel state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
+
+  const handleToggleHeadingChat = useCallback((headingId: string) => {
+    setSelectedHeadingIds((prev) =>
+      prev.includes(headingId)
+        ? prev.filter((id) => id !== headingId)
+        : [...prev, headingId],
+    );
+    setIsChatOpen(true);
+  }, []);
 
   // Track quiz results for feedback display
   const [quizResultsBySession, setQuizResultsBySession] = useState<
@@ -675,6 +690,8 @@ export function LearningPathContainer({
                       }}
                       onPrevious={goToPrev}
                       canPrevious={canGoPrev}
+                      selectedHeadingIds={selectedHeadingIds}
+                      onToggleHeadingChat={handleToggleHeadingChat}
                     />
                   </motion.div>
                 )}
@@ -691,6 +708,26 @@ export function LearningPathContainer({
           )}
         </div>
       </LearningErrorBoundary>
+
+      {/* Chat FAB - bottom-right fixed */}
+      <button
+        onClick={() => setIsChatOpen(true)}
+        className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[#FFD400] text-black shadow-lg hover:bg-[#FFD400]/90 transition-colors flex items-center justify-center"
+        aria-label="Open chat"
+      >
+        <MessageCircle className="h-6 w-6" />
+      </button>
+
+      {/* Chat Panel Drawer */}
+      <ChatPanel
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        sessionId={activeSessionId ?? ''}
+        nodeId={currentSlideNode?.id ?? ''}
+        selectedHeadingIds={selectedHeadingIds}
+        onClearHeadings={() => setSelectedHeadingIds([])}
+      />
+
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
