@@ -58,6 +58,10 @@ class LLMContext(BaseModel):
         default=None,
         description="Application title for OpenRouter analytics attribution",
     )
+    chat_model: Optional[str] = Field(
+        default=None,
+        description="Model slug for concept chat (overrides main model when set)",
+    )
     thinking_enabled: bool = Field(
         default=False,
         description="Whether thinking/reasoning mode is enabled",
