@@ -21,24 +21,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { streamConceptChat } from "./chatApi";
 
 // Mock providerSettings and providerApi
-vi.mock("./providerSettings", () => ({
-	getProviderSettings: () => ({
-		activeProvider: "openrouter",
-		providers: {
-			openrouter: {
-				apiKey: "test-key",
-				model: "openai/gpt-4o",
-				modelTitle: "GPT-4o",
-				chatModel: "openai/gpt-4o-mini",
-				chatModelTitle: "GPT-4o Mini",
-			},
-			generalcompute: {
-				apiKey: "",
-				model: "",
-				modelTitle: "",
-			},
+const mockGetProviderSettings = vi.fn(() => ({
+	activeProvider: "openrouter",
+	providers: {
+		openrouter: {
+			apiKey: "test-key",
+			model: "openai/gpt-4o",
+			modelTitle: "GPT-4o",
+			chatModel: "openai/gpt-4o-mini",
+			chatModelTitle: "GPT-4o Mini",
 		},
-	}),
+		generalcompute: { apiKey: "", model: "", modelTitle: "" },
+	},
+}));
+
+vi.mock("./providerSettings", () => ({
+	getProviderSettings: () => mockGetProviderSettings(),
 }));
 
 vi.mock("./providerApi", () => ({
@@ -258,5 +256,44 @@ describe("streamConceptChat", () => {
 			(globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
 		);
 		expect(body.selected_heading_ids).toEqual(["h-2-intro", "h-3-details"]);
+	});
+
+	it("sends X-Model header even when no chat model is set", async () => {
+		mockGetProviderSettings.mockReturnValue({
+			activeProvider: "openrouter",
+			providers: {
+				openrouter: {
+					apiKey: "test-key",
+					model: "openai/gpt-4o",
+					modelTitle: "GPT-4o",
+					chatModel: "",
+					chatModelTitle: "",
+				},
+				generalcompute: { apiKey: "", model: "", modelTitle: "" },
+			},
+		});
+
+		const stream = createMockReadableStream(["data: [DONE]\n\n"]);
+		vi.spyOn(globalThis, "fetch").mockResolvedValue(
+			new Response(stream, {
+				status: 200,
+				headers: { "Content-Type": "text/event-stream" },
+			}),
+		);
+
+		await streamConceptChat({
+			sessionId: "s",
+			nodeId: "n",
+			message: "test",
+			history: [],
+			selectedHeadingIds: [],
+			onDelta: () => {},
+		});
+
+		const headers = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+			.calls[0][1].headers;
+		expect(headers["X-Model"]).toBe("openai/gpt-4o");
+		// X-Chat-Model falls back to main model when chatModel is not set
+		expect(headers["X-Chat-Model"]).toBe("openai/gpt-4o");
 	});
 });
