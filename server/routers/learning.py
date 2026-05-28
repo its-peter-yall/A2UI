@@ -34,11 +34,13 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status, Depends, Request
+from fastapi import APIRouter, Header, HTTPException, Query, status, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
 from server.schemas.learning import (
+    ConceptChatRequest,
     ConceptNodeResponse,
     LearningSessionResponse,
     NodeStatus,
@@ -56,6 +58,7 @@ from server.schemas.learning import (
     SessionListResponse,
 )
 from server.schemas.llm import LLMContext, get_llm_context
+from server.services.concept_chat import stream_concept_chat
 from server.services.course_orchestrator import course_orchestrator
 from server.services.quiz_randomization import (
     get_or_create_shuffle_order,
@@ -1031,3 +1034,82 @@ async def regenerate_node_endpoint(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to regenerate node: {str(e)}",
         )
+
+
+@router.post(
+    "/sessions/{session_id}/nodes/{node_id}/chat",
+    summary="Concept chat assistant",
+    description=(
+        "Stream a chat response for a concept node using the concept content "
+        "as context. Returns SSE text/event-stream."
+    ),
+)
+async def concept_chat(
+    session_id: str,
+    node_id: str,
+    request_body: ConceptChatRequest,
+    x_provider_api_key: str = Header(..., alias="X-Provider-Api-Key"),
+    x_model: str = Header(None, alias="X-Model"),
+    x_chat_model: str = Header(None, alias="X-Chat-Model"),
+) -> StreamingResponse:
+    """Stream a context-aware chat response for a concept node."""
+    if not x_provider_api_key or not x_provider_api_key.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Provider-Api-Key header is required",
+        )
+
+    effective_model = x_chat_model or x_model
+    if not effective_model or not effective_model.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Chat-Model or X-Model header is required",
+        )
+
+    conn = learning_manager._get_connection()
+    try:
+        session = learning_manager.get_learning_session(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Learning session not found: {session_id}",
+            )
+
+        node = learning_manager._get_node_by_id(node_id, conn)
+        if not node:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Concept node not found: {node_id}",
+            )
+
+        if node.get("learning_session_id") != session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    f"Node {node_id} does not belong to "
+                    f"session {session_id}"
+                ),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error validating chat session/node: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate chat context: {str(e)}",
+        )
+    finally:
+        conn.close()
+
+    return StreamingResponse(
+        stream_concept_chat(
+            api_key=x_provider_api_key.strip(),
+            model_slug=effective_model.strip(),
+            message=request_body.message,
+            history=request_body.history,
+            content_markdown=node["content_markdown"],
+            selected_heading_ids=request_body.selected_heading_ids,
+            node_title=node["title"],
+        ),
+        media_type="text/event-stream",
+    )
