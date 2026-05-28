@@ -307,14 +307,18 @@ describe('Learning feature integration flow', () => {
       node_status: 'SHOWING_FEEDBACK',
     };
 
-    (api.getLearningSession as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(session)          // Initial load
-      .mockResolvedValueOnce(feedbackSession)  // After quiz submission
-      .mockResolvedValue(unlockedSession);     // After clicking continue
-    (api.submitQuiz as ReturnType<typeof vi.fn>).mockResolvedValue(result);
-    (api.transitionNode as ReturnType<typeof vi.fn>).mockResolvedValue({
-      id: 'node-1',
-      status: 'SHOWING_FEEDBACK',
+    let currentSessionState = session;
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockImplementation(async () => currentSessionState);
+    (api.submitQuiz as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      currentSessionState = feedbackSession;
+      return result;
+    });
+    (api.transitionNode as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+      currentSessionState = unlockedSession;
+      return {
+        id: 'node-1',
+        status: 'SHOWING_FEEDBACK',
+      };
     });
 
     renderRoutes(['/learn/session-1']);

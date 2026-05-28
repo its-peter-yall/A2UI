@@ -229,7 +229,7 @@ export function LearningPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div className="flex flex-col h-dvh overflow-hidden bg-background">
 			{/* Skip to main content link for keyboard users */}
 			<a
 				href="#main-content"
@@ -237,9 +237,8 @@ export function LearningPage() {
 			>
 				Skip to main content
 			</a>
-			{/* Header with navigation */}
-			<header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
-				<div className="max-w-4xl mx-auto px-4 py-3">
+			<header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b shrink-0">
+				<div className="max-w-6xl mx-auto px-4 py-3">
 					<div className="flex items-center justify-between mb-3">
 						<button
 							onClick={() => navigate("/learn")}
@@ -279,7 +278,7 @@ export function LearningPage() {
 			{/* Resume banner */}
 			{showResumeBanner && (
 				<div
-					className="bg-primary/10 text-primary text-sm text-center py-1.5 px-4 animate-in fade-in duration-300"
+					className="bg-primary/10 text-primary text-sm text-center py-1.5 px-4 animate-in fade-in duration-300 shrink-0"
 					role="status"
 				>
 					Resuming where you left off...
@@ -287,7 +286,7 @@ export function LearningPage() {
 			)}
 
 			{/* Main content */}
-			<main id="main-content" className="py-8">
+			<main id="main-content" className="flex-1 min-h-0 overflow-hidden">
 				<LearningPathContainer
 					sessionId={sessionId}
 					session={session ?? undefined}
@@ -358,10 +357,6 @@ export function LearningPage() {
 				</div>
 			)}
 
-			{/* Footer */}
-			<footer className="border-t py-4 text-center text-sm text-muted-foreground">
-				<p>Powered by retrieval-based learning</p>
-			</footer>
 		</div>
 	);
 }

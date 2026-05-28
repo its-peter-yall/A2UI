@@ -636,14 +636,14 @@ export function LearningPathContainer({
 					console.error("Learning component crashed:", boundaryError);
 				}}
 			>
-				<div className="flex w-full h-dvh overflow-hidden">
+				<div className="flex w-full h-full overflow-hidden">
 					{/* Main content area - shrinks when chat is open */}
 					<motion.div
 						className="flex flex-col gap-6 p-4 overflow-y-auto"
 						animate={{ flex: isChatOpen ? "1 1 0%" : "1 1 100%" }}
 						transition={{ type: "spring", damping: 30, stiffness: 300 }}
 					>
-						<div className={cn("mx-auto w-full", isChatOpen ? "max-w-3xl" : "max-w-4xl")}>
+						<div className={cn("mx-auto w-full", isChatOpen ? "max-w-5xl" : "max-w-6xl")}>
 							{/* Header */}
 							<header className="text-center">
 								<h1 className="text-2xl font-bold">{session.course_title}</h1>
@@ -786,6 +786,11 @@ export function LearningPathContainer({
 						nodeId={currentSlideNode?.id ?? ""}
 						selectedHeadingIds={selectedHeadingIds}
 						onClearHeadings={() => setSelectedHeadingIds([])}
+						isCourseComplete={
+							session?.nodes &&
+							session.nodes.length > 0 &&
+							session.nodes.every((n) => n.status === "COMPLETED")
+						}
 					/>
 				</div>
 			</LearningErrorBoundary>

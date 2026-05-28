@@ -41,6 +41,7 @@ vi.mock("@/lib/providerSettings", () => ({
 describe("useConceptChat", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		localStorage.clear();
 	});
 
 	it("starts with empty messages", () => {
@@ -161,5 +162,73 @@ describe("useConceptChat", () => {
 
 		expect(result.current.messages).toEqual([]);
 		expect(mockStreamConceptChat).not.toHaveBeenCalled();
+	});
+
+	it("initializes from localStorage if matching sessionId and nodeId are present", () => {
+		const saved = {
+			sessionId: "s",
+			nodeId: "n",
+			messages: [{ role: "user", content: "hello" }],
+			lastPromptTimestamp: Date.now(),
+		};
+		localStorage.setItem("active_concept_chat", JSON.stringify(saved));
+
+		const { result } = renderHook(() => useConceptChat("s", "n"));
+		expect(result.current.messages).toEqual([{ role: "user", content: "hello" }]);
+	});
+
+	it("does not load from localStorage if sessionId or nodeId does not match", () => {
+		const saved = {
+			sessionId: "other-session",
+			nodeId: "n",
+			messages: [{ role: "user", content: "hello" }],
+			lastPromptTimestamp: Date.now(),
+		};
+		localStorage.setItem("active_concept_chat", JSON.stringify(saved));
+
+		const { result } = renderHook(() => useConceptChat("s", "n"));
+		expect(result.current.messages).toEqual([]);
+	});
+
+	it("expires and clears chat from localStorage if older than 1 hour", () => {
+		const saved = {
+			sessionId: "s",
+			nodeId: "n",
+			messages: [{ role: "user", content: "hello" }],
+			lastPromptTimestamp: Date.now() - 3601000, // 1 hour + 1 second ago
+		};
+		localStorage.setItem("active_concept_chat", JSON.stringify(saved));
+
+		const { result } = renderHook(() => useConceptChat("s", "n"));
+		expect(result.current.messages).toEqual([]);
+		expect(localStorage.getItem("active_concept_chat")).toBeNull();
+	});
+
+	it("clears chat if isCourseComplete is true", () => {
+		const saved = {
+			sessionId: "s",
+			nodeId: "n",
+			messages: [{ role: "user", content: "hello" }],
+			lastPromptTimestamp: Date.now(),
+		};
+		localStorage.setItem("active_concept_chat", JSON.stringify(saved));
+
+		const { result } = renderHook(() => useConceptChat("s", "n", true));
+		expect(result.current.messages).toEqual([]);
+		expect(localStorage.getItem("active_concept_chat")).toBeNull();
+	});
+
+	it("does not clear localStorage when sessionId or nodeId is empty", () => {
+		const saved = {
+			sessionId: "s",
+			nodeId: "n",
+			messages: [{ role: "user", content: "hello" }],
+			lastPromptTimestamp: Date.now(),
+		};
+		localStorage.setItem("active_concept_chat", JSON.stringify(saved));
+
+		const { result } = renderHook(() => useConceptChat("", ""));
+		expect(result.current.messages).toEqual([]);
+		expect(localStorage.getItem("active_concept_chat")).not.toBeNull();
 	});
 });

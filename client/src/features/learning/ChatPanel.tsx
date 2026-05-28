@@ -38,13 +38,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, MessageCircle } from "lucide-react";
+import { X, Send, MessageCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useConceptChat } from "./useConceptChat";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface ChatPanelProps {
 	isOpen: boolean;
@@ -53,7 +50,16 @@ interface ChatPanelProps {
 	nodeId: string;
 	selectedHeadingIds: string[];
 	onClearHeadings: () => void;
+	isCourseComplete?: boolean;
 }
+
+const TypingIndicator = () => (
+	<div className="flex items-center gap-1.5 py-2 px-1" aria-label="Thinking">
+		<span className="h-1.5 w-1.5 bg-(--cyber-yellow) rounded-full animate-bounce" style={{ animationDelay: "0ms", animationDuration: "0.8s" }} />
+		<span className="h-1.5 w-1.5 bg-(--cyber-yellow)/80 rounded-full animate-bounce" style={{ animationDelay: "150ms", animationDuration: "0.8s" }} />
+		<span className="h-1.5 w-1.5 bg-(--cyber-yellow)/50 rounded-full animate-bounce" style={{ animationDelay: "300ms", animationDuration: "0.8s" }} />
+	</div>
+);
 
 export function ChatPanel({
 	isOpen,
@@ -62,15 +68,16 @@ export function ChatPanel({
 	nodeId,
 	selectedHeadingIds,
 	onClearHeadings,
+	isCourseComplete = false,
 }: ChatPanelProps) {
 	const {
 		messages,
 		isStreaming,
 		error,
 		sendMessage,
-		resetChat,
+		clearChat,
 		stopStreaming,
-	} = useConceptChat(sessionId, nodeId);
+	} = useConceptChat(sessionId, nodeId, isCourseComplete);
 
 	const [input, setInput] = useState("");
 	const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
@@ -92,17 +99,17 @@ export function ChatPanel({
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 	}, [messages]);
 
-	// Reset chat when panel closes and restore focus
+	// Stop streaming when panel closes and restore focus (but retain messages)
 	useEffect(() => {
 		if (!isOpen) {
-			resetChat();
+			stopStreaming();
 			// Return focus to the element that opened the panel
 			if (previousFocusRef.current) {
 				previousFocusRef.current.focus();
 				previousFocusRef.current = null;
 			}
 		}
-	}, [isOpen, resetChat]);
+	}, [isOpen, stopStreaming]);
 
 	// Auto-focus textarea and save previous focus when opened
 	useEffect(() => {
@@ -183,7 +190,7 @@ export function ChatPanel({
 					aria-modal="false"
 					aria-labelledby="chat-panel-title"
 					initial={{ width: 0, opacity: 0 }}
-					animate={{ width: 380, opacity: 1 }}
+					animate={{ width: 480, opacity: 1 }}
 					exit={{ width: 0, opacity: 0 }}
 					transition={{ type: "spring", damping: 30, stiffness: 300 }}
 					className={cn(
@@ -200,13 +207,25 @@ export function ChatPanel({
 								Ask about this concept
 							</h2>
 						</div>
-						<button
-							onClick={onClose}
-							className="p-1.5 rounded-md hover:bg-muted transition-colors"
-							aria-label="Close concept chat"
-						>
-							<X className="h-4 w-4" />
-						</button>
+						<div className="flex items-center gap-1">
+							{messages.length > 0 && (
+								<button
+									onClick={clearChat}
+									className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors"
+									aria-label="Clear conversation"
+									title="Clear conversation"
+								>
+									<Trash2 className="h-4 w-4" />
+								</button>
+							)}
+							<button
+								onClick={onClose}
+								className="p-1.5 rounded-md hover:bg-muted transition-colors"
+								aria-label="Close concept chat"
+							>
+								<X className="h-4 w-4" />
+							</button>
+						</div>
 					</div>
 
 					{/* Selected headings indicator */}
@@ -263,14 +282,14 @@ export function ChatPanel({
 									)}
 								>
 									{msg.role === "assistant" ? (
-										<div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
-											<ReactMarkdown
-												remarkPlugins={[remarkGfm]}
-												rehypePlugins={[rehypeRaw, rehypeSanitize]}
-											>
-												{msg.content || "..."}
-											</ReactMarkdown>
-										</div>
+										msg.content ? (
+											<MarkdownRenderer
+												content={msg.content}
+												className="prose-sm text-[13.5px] leading-relaxed max-w-none"
+											/>
+										) : (
+											<TypingIndicator />
+										)
 									) : (
 										<span>{msg.content}</span>
 									)}

@@ -29,24 +29,132 @@
  * ============================================================================
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import type { ConceptChatMessage } from "@/types/learning";
 import { streamConceptChat } from "@/lib/chatApi";
 
 const MAX_HISTORY_MESSAGES = 10;
 
+interface StoredChat {
+	sessionId: string;
+	nodeId: string;
+	messages: ConceptChatMessage[];
+	lastPromptTimestamp: number;
+}
+
 /**
  * Hook for ephemeral concept chat with SSE streaming.
+ * Supports localStorage persistence across page refreshes.
  *
  * @param sessionId - Active learning session ID
  * @param nodeId - Active concept node ID
+ * @param isCourseComplete - True if all course nodes are completed
  * @returns Chat state and actions
  */
-export function useConceptChat(sessionId: string, nodeId: string) {
-	const [messages, setMessages] = useState<ConceptChatMessage[]>([]);
+export function useConceptChat(
+	sessionId: string,
+	nodeId: string,
+	isCourseComplete = false,
+) {
+	const abortRef = useRef<AbortController | null>(null);
+
+	const loadStoredChat = useCallback((): ConceptChatMessage[] => {
+		if (isCourseComplete) {
+			try {
+				localStorage.removeItem("active_concept_chat");
+			} catch (e) {
+				console.error("Failed to clear chat on course completion:", e);
+			}
+			return [];
+		}
+
+		try {
+			const storedRaw = localStorage.getItem("active_concept_chat");
+			if (!storedRaw) return [];
+			const stored: StoredChat = JSON.parse(storedRaw);
+
+			// If sessionId or nodeId is not yet resolved, do not clear the saved chat, just return empty
+			if (!sessionId || !nodeId) {
+				return [];
+			}
+
+			// Validate sessionId and nodeId
+			if (stored.sessionId !== sessionId || stored.nodeId !== nodeId) {
+				// Changed topic or session -> clear
+				localStorage.removeItem("active_concept_chat");
+				return [];
+			}
+
+			// Validate 1-hour expiration
+			const ONE_HOUR = 60 * 60 * 1000;
+			if (Date.now() - stored.lastPromptTimestamp > ONE_HOUR) {
+				// Expired -> clear
+				localStorage.removeItem("active_concept_chat");
+				return [];
+			}
+
+			return stored.messages;
+		} catch (err) {
+			console.error("Failed to parse stored concept chat:", err);
+			return [];
+		}
+	}, [sessionId, nodeId, isCourseComplete]);
+
+	const [messages, setMessages] = useState<ConceptChatMessage[]>(() =>
+		loadStoredChat(),
+	);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const abortRef = useRef<AbortController | null>(null);
+
+	// Sync state when topic, session, or completion state changes
+	useEffect(() => {
+		const loaded = loadStoredChat();
+		setMessages(loaded);
+		setError(null);
+		setIsStreaming(false);
+		if (abortRef.current) {
+			abortRef.current.abort();
+			abortRef.current = null;
+		}
+	}, [sessionId, nodeId, isCourseComplete, loadStoredChat]);
+
+	const clearChat = useCallback(() => {
+		if (abortRef.current) {
+			abortRef.current.abort();
+			abortRef.current = null;
+		}
+		setMessages([]);
+		setIsStreaming(false);
+		setError(null);
+		try {
+			localStorage.removeItem("active_concept_chat");
+		} catch (e) {
+			console.error("Failed to delete stored chat:", e);
+		}
+	}, []);
+
+	// Periodic checker for 1-hour expiration
+	useEffect(() => {
+		const checkExpiration = () => {
+			try {
+				const storedRaw = localStorage.getItem("active_concept_chat");
+				if (storedRaw) {
+					const stored: StoredChat = JSON.parse(storedRaw);
+					const ONE_HOUR = 60 * 60 * 1000;
+					if (Date.now() - stored.lastPromptTimestamp > ONE_HOUR) {
+						clearChat();
+					}
+				}
+			} catch (e) {
+				console.error("Expiration check failed:", e);
+			}
+		};
+
+		checkExpiration();
+
+		const interval = setInterval(checkExpiration, 10000);
+		return () => clearInterval(interval);
+	}, [clearChat]);
 
 	const sendMessage = useCallback(
 		async (message: string, selectedHeadingIds: string[]) => {
@@ -63,9 +171,23 @@ export function useConceptChat(sessionId: string, nodeId: string) {
 				-MAX_HISTORY_MESSAGES,
 			);
 
-			setMessages((prev) => [...prev, userMessage]);
+			const updatedWithUser = [...messages, userMessage];
+			setMessages(updatedWithUser);
 			setIsStreaming(true);
 			setError(null);
+
+			const timestamp = Date.now();
+			try {
+				const data: StoredChat = {
+					sessionId,
+					nodeId,
+					messages: updatedWithUser,
+					lastPromptTimestamp: timestamp,
+				};
+				localStorage.setItem("active_concept_chat", JSON.stringify(data));
+			} catch (e) {
+				console.error("Failed to save user message to storage:", e);
+			}
 
 			// Prepare assistant placeholder
 			const assistantMessage: ConceptChatMessage = {
@@ -95,6 +217,17 @@ export function useConceptChat(sessionId: string, nodeId: string) {
 									content: last.content + delta,
 								};
 							}
+							try {
+								const data: StoredChat = {
+									sessionId,
+									nodeId,
+									messages: updated,
+									lastPromptTimestamp: timestamp,
+								};
+								localStorage.setItem("active_concept_chat", JSON.stringify(data));
+							} catch (e) {
+								console.error("Failed to save streaming delta:", e);
+							}
 							return updated;
 						});
 					},
@@ -108,10 +241,22 @@ export function useConceptChat(sessionId: string, nodeId: string) {
 				// Remove empty assistant placeholder on error
 				setMessages((prev) => {
 					const last = prev[prev.length - 1];
+					let updated = prev;
 					if (last?.role === "assistant" && !last.content) {
-						return prev.slice(0, -1);
+						updated = prev.slice(0, -1);
 					}
-					return prev;
+					try {
+						const data: StoredChat = {
+							sessionId,
+							nodeId,
+							messages: updated,
+							lastPromptTimestamp: timestamp,
+						};
+						localStorage.setItem("active_concept_chat", JSON.stringify(data));
+					} catch (e) {
+						console.error("Failed to clean up storage after error:", e);
+					}
+					return updated;
 				});
 			} finally {
 				if (abortRef.current === controller) {
@@ -122,16 +267,6 @@ export function useConceptChat(sessionId: string, nodeId: string) {
 		},
 		[messages, sessionId, nodeId],
 	);
-
-	const resetChat = useCallback(() => {
-		if (abortRef.current) {
-			abortRef.current.abort();
-			abortRef.current = null;
-		}
-		setMessages([]);
-		setIsStreaming(false);
-		setError(null);
-	}, []);
 
 	const stopStreaming = useCallback(() => {
 		if (abortRef.current) {
@@ -145,7 +280,8 @@ export function useConceptChat(sessionId: string, nodeId: string) {
 		isStreaming,
 		error,
 		sendMessage,
-		resetChat,
+		resetChat: clearChat,
+		clearChat,
 		stopStreaming,
 	};
 }
