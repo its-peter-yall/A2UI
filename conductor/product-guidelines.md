@@ -35,3 +35,78 @@
     - Clean list view with "Active" state indicators.
     - Simple "New Session" button at the top.
     - Contextual menus for rename/delete actions.
+
+## 5. Accessibility (WCAG 2.1 Level AA)
+
+### Target Compliance
+- **WCAG Level:** AA (targeting Level AA for all new features)
+- **Section 508:** Compliant
+- **ADA:** Compliant
+
+### Key Requirements
+
+#### Keyboard Navigation
+- All interactive elements must be keyboard accessible
+- Tab order must be logical and intuitive
+- Focus indicators must be visible (minimum 3:1 contrast ratio)
+- Skip-to-content link on all pages
+- Focus trapping in modals and dialogs
+- Arrow key navigation in lists and menus
+
+#### Screen Reader Support
+- All images have meaningful alt text or aria-hidden="true" for decorative
+- Form inputs have associated labels (visible or sr-only)
+- Dynamic content uses aria-live regions
+- ARIA roles and properties for custom components
+- Proper heading hierarchy (h1 > h2 > h3)
+- Landmark regions (header, main, nav, footer)
+
+#### Motion and Animation
+- Respect prefers-reduced-motion media query
+- No content flashes more than 3 times per second
+- Animations can be disabled via CSS and Framer Motion config
+
+#### Color and Contrast
+- Minimum 4.5:1 contrast ratio for normal text
+- Minimum 3:1 contrast ratio for large text and UI components
+- Color is not the sole means of conveying information
+- Theme-aware color tokens for light/dark mode
+
+#### Forms and Inputs
+- All form controls have labels
+- Error messages are associated with inputs
+- Required fields are indicated programmatically
+- Input purposes identified for autocomplete
+
+### Testing Protocol
+1. **Automated Testing:** Run axe-core or Lighthouse accessibility audits
+2. **Manual Testing:** Keyboard-only navigation testing
+3. **Screen Reader Testing:** Test with NVDA, JAWS, and VoiceOver
+4. **Color Contrast:** Verify with WebAIM contrast checker
+5. **Motion:** Test with reduced motion OS setting enabled
+
+### Component-Specific Guidelines
+
+#### Modals and Dialogs
+- Must trap focus within the dialog
+- Escape key must close the dialog
+- Focus returns to trigger element on close
+- Use role="dialog" and aria-modal="true"
+- Provide aria-labelledby and aria-describedby
+
+#### Forms
+- Labels must be programmatically associated with inputs
+- Use htmlFor/id pattern or wrap input in label
+- Placeholder text is not a substitute for labels
+- Error messages use aria-describedby
+
+#### Tables and Lists
+- Use semantic HTML (table, ul, ol)
+- Provide column headers for data tables
+- Use aria-describedby for complex tables
+
+#### Carousels
+- Use role="region" with aria-roledescription="carousel"
+- Announce slide changes with aria-live
+- Provide slide navigation controls
+- Keyboard navigation for slide controls

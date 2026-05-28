@@ -51,6 +51,7 @@
 **Formatting (TypeScript):**
 - ESLint with TypeScript + React Hooks + React Refresh plugins
 - Config: `client/eslint.config.js`
+- Files: `**/*.{ts,tsx}` only
 - Key rules: `react-refresh/only-export-components` with allowlist for `useErrorToast`
 - Run: `npm run lint` from `client/`
 
@@ -144,7 +145,7 @@
 ## Comments
 
 **TypeScript:**
-- Every file has mandatory header block (76 `=` separator):
+- Every file has a mandatory header block (76 `=` separator):
   ```typescript
   /**
    * ============================================================================
@@ -164,7 +165,7 @@
 - JSDoc not widely used beyond file headers
 
 **Python:**
-- Every file has mandatory header block (76 `=` separator):
+- Every file has a mandatory header block (76 `=` separator):
   ```python
   """
   ============================================================================
@@ -251,7 +252,7 @@
 
 **TypeScript:**
 - `const` by default; never `var`
-- Single quotes
+- Single quotes for strings
 - Explicit semicolons
 - Avoid `any`, `as`, and non-null assertions (`!`) — use sparingly
 - Optional params (`?`) preferred over `| undefined`

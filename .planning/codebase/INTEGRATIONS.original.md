@@ -10,7 +10,7 @@
   - Base URL: `https://openrouter.ai/api/v1` (configurable via `OPENROUTER_BASE_URL`)
   - Auth: User-supplied API key sent per-request via `X-OpenRouter-Key` HTTP header (`server/schemas/llm.py:126-167`)
   - Timeout: 60 seconds default (`server/config.py:40-42`)
-  - Used for: Planner, Generator, Quizzer agent structured generation (`server/utils/instructor_client.py:56-72`)
+  - Used for: Planner, Generator, and Quizzer agent structured generation (`server/utils/instructor_client.py:56-72`)
   - Attribution: `HTTP-Referer` and `X-OpenRouter-Title` headers sent for analytics (`server/schemas/llm.py:75-85`)
   - Thinking/Reasoning: Supported via `reasoning` parameter with configurable effort levels (`server/schemas/llm.py:87-101`)
 
@@ -50,7 +50,7 @@
 
 **Auth Provider:**
 - Custom — No third-party auth provider
-  - API keys user-supplied via frontend Settings panel, stored in browser `localStorage` (`client/src/lib/providerSettings.ts:35-37`)
+  - API keys are user-supplied via frontend Settings panel and stored in browser `localStorage` (`client/src/lib/providerSettings.ts:35-37`)
   - Keys sent per-request via HTTP headers — never stored server-side (`server/.env.example:3-8`)
   - Auth validation: Server validates key presence on each request via `get_llm_context()` dependency (`server/schemas/llm.py:126-200`)
   - Returns 401 when key is missing or blank (`server/schemas/llm.py:163-167`)
@@ -112,7 +112,7 @@
 
 ## Request Header Contract
 
-Client sends provider-specific headers on every LLM-related request. Server extracts these via FastAPI's `Depends(get_llm_context)` pattern:
+The client sends provider-specific headers on every LLM-related request. The server extracts these via FastAPI's `Depends(get_llm_context)` pattern:
 
 | Header | Purpose | Required |
 |--------|---------|----------|

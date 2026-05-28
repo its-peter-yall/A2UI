@@ -35,29 +35,40 @@
 // App.tsx
 // Application router and top-level page composition
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LearningHome, LearningPage } from '@/features/learning';
-import { RevisionPage } from '@/features/learning/RevisionPage';
-import { SettingsPage } from '@/features/settings/SettingsPage';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { MotionConfig } from "framer-motion";
+import { LearningHome, LearningPage } from "@/features/learning";
+import { RevisionPage } from "@/features/learning/RevisionPage";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 
+/**
+ * Global motion configuration wrapper.
+ * Setting reducedMotion="user" tells Framer Motion to respect the
+ * user's prefers-reduced-motion OS/browser setting automatically.
+ */
 function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        {/* Learning routes - default */}
-        <Route path="/" element={<LearningHome />} />
-        <Route path="/learn" element={<LearningHome />} />
-        <Route path="/learn/:sessionId" element={<LearningPage />} />
-        <Route path="/learn/:sessionId/revise/:revisionId" element={<RevisionPage />} />
-        
-        {/* Settings configuration route */}
-        <Route path="/settings" element={<SettingsPage />} />
+	return (
+		<MotionConfig reducedMotion="user">
+			<BrowserRouter>
+				<Routes>
+					{/* Learning routes - default */}
+					<Route path="/" element={<LearningHome />} />
+					<Route path="/learn" element={<LearningHome />} />
+					<Route path="/learn/:sessionId" element={<LearningPage />} />
+					<Route
+						path="/learn/:sessionId/revise/:revisionId"
+						element={<RevisionPage />}
+					/>
 
-        {/* Fallback - redirect unknown routes to learn */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+					{/* Settings configuration route */}
+					<Route path="/settings" element={<SettingsPage />} />
+
+					{/* Fallback - redirect unknown routes to learn */}
+					<Route path="*" element={<Navigate to="/" replace />} />
+				</Routes>
+			</BrowserRouter>
+		</MotionConfig>
+	);
 }
 
 export default App;

@@ -1,6 +1,7 @@
 # A2UI Agent Guide
 
-Orients agentic coding assistants. Follow commands, style rules below; match local patterns.
+This file orients agentic coding assistants working in this repo.
+Follow the commands and style rules below; match local patterns when editing.
 
 ## Spec-Based Development
 
@@ -17,7 +18,7 @@ Orients agentic coding assistants. Follow commands, style rules below; match loc
 | `.planning/codebase/INTEGRATIONS.md` | External service integrations and configuration |
 | `.planning/codebase/CONCERNS.md` | Known tech debt, security considerations, performance bottlenecks |
 
-**Rule**: Read relevant spec documents before implementing any feature.
+**Rule**: Before implementing any feature, read the relevant spec documents above.
 
 ## Repo Layout
 
@@ -107,7 +108,7 @@ python -m unittest server.tests.test_chat.ChatSessionTests.test_invalid_session_
 
 ## Application Routes
 
-Uses `react-router-dom` with routes:
+The application uses `react-router-dom` with the following routes:
 - `/chat` - Main chat interface (default)
 - `/learn` - Adaptive learning page
 
@@ -256,11 +257,11 @@ from server.database.persistence import session_manager
 ### SWE Best Practices (per `.planning/codebase/TESTING.md`)
 - **Write tests BEFORE or WITH code**, not after — TDD required
 - **Verify with diagnostics**: Run diagnostics before marking tasks complete
-- **Build & test**: Run build/test commands after implementation
+- **Build & test**: Always run build/test commands after implementation
 - **Type safety first**: Never suppress errors with `as any`, `@ts-ignore`
 - **Error handling**: Never leave empty catch blocks `catch(e) {}`
 - **Minimal changes**: Fix bugs without refactoring unrelated code
-- **Running python files**: Use .venv in root of server directory, run with `python -m` for correct imports and environment
+- **Running python files**: Always use .venv in the root of the server directory, and run with `python -m` to ensure correct imports and environment
 
 ### Quality Gates (per `.planning/codebase/TESTING.md`)
 Before marking any task complete, verify:
@@ -286,7 +287,7 @@ Before marking any task complete, verify:
 ### TDD Phases (Explicit)
 
 #### Red Phase
-- Write tests that define expected behavior
+- Write tests that define the expected behavior
 - **Verify tests FAIL before implementation** (critical!)
 - Tests act as specification and safety net
 - Do not proceed until tests fail appropriately

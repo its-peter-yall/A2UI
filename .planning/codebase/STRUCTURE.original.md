@@ -50,78 +50,78 @@ AgUI/
 ## Directory Purposes
 
 **`client/src/components/`:**
-- Shared UI components used across features
-- Reusable presentational components
+- Purpose: Shared UI components used across features
+- Contains: Reusable presentational components
 - Key files: `SettingsButton.tsx`, `ThemeToggle.tsx`
 
 **`client/src/features/learning/`:**
-- Adaptive learning feature — primary application feature
-- Page components, cards, hooks, animations, tests, barrel exports
+- Purpose: Adaptive learning feature — the primary application feature
+- Contains: Page components, cards, hooks, animations, tests, barrel exports
 - Key files: `LearningHome.tsx`, `LearningPage.tsx`, `LearningPathContainer.tsx`, `ConceptCard.tsx`, `RevisionPage.tsx`, `index.ts` (barrel)
 
 **`client/src/features/settings/`:**
-- AI provider configuration (API keys, model selection, thinking mode)
-- Settings page, model picker, provider panel, thinking toggle
+- Purpose: AI provider configuration (API keys, model selection, thinking mode)
+- Contains: Settings page, model picker, provider panel, thinking toggle
 - Key files: `SettingsPage.tsx`, `ModelPicker.tsx`, `OpenRouterSettingsPanel.tsx`, `ThinkingModeToggle.tsx`
 
 **`client/src/hooks/`:**
-- Shared custom React hooks
-- Reusable stateful logic
+- Purpose: Shared custom React hooks
+- Contains: Reusable stateful logic
 - Key files: `useTypewriter.ts`, `useTheme.ts`
 
 **`client/src/lib/`:**
-- API clients, utilities, provider configuration
-- Axios instances, API functions, localStorage helpers
+- Purpose: API clients, utilities, and provider configuration
+- Contains: Axios instances, API functions, localStorage helpers
 - Key files: `learningApi.ts`, `providerApi.ts`, `providerSettings.ts`, `utils.ts`
 
 **`client/src/providers/`:**
-- React context providers for app-wide state
-- Query client, theme management
+- Purpose: React context providers for app-wide state
+- Contains: Query client, theme management
 - Key files: `QueryProvider.tsx`, `ThemeProvider.tsx`, `theme-context.tsx`
 
 **`client/src/types/`:**
-- TypeScript type definitions mirroring backend schemas
-- Interface definitions for API contracts
+- Purpose: TypeScript type definitions mirroring backend schemas
+- Contains: Interface definitions for API contracts
 - Key files: `learning.ts`, `openrouter.ts`, `provider.ts`
 
 **`server/agents/`:**
-- AI agent pipeline for content generation
-- Base agent class and three specialized agents
+- Purpose: AI agent pipeline for content generation
+- Contains: Base agent class and three specialized agents
 - Key files: `base.py`, `planner.py`, `generator.py`, `quizzer.py`
 
 **`server/database/`:**
-- SQLite persistence layer
-- Database path config and LearningManager
+- Purpose: SQLite persistence layer
+- Contains: Database path config and LearningManager
 - Key files: `persistence.py` (DB_PATH), `learning_persistence.py` (all CRUD)
 
 **`server/routers/`:**
-- FastAPI REST API endpoint definitions
-- APIRouter modules with request/response handling
+- Purpose: FastAPI REST API endpoint definitions
+- Contains: APIRouter modules with request/response handling
 - Key files: `learning.py` (learning endpoints), `llm.py` (model proxy)
 
 **`server/schemas/`:**
-- Pydantic v2 data contracts
-- Domain models, request/response schemas, LLM output schemas
+- Purpose: Pydantic v2 data contracts
+- Contains: Domain models, request/response schemas, LLM output schemas
 - Key files: `common.py` (base classes), `learning.py` (learning domain), `llm.py` (LLM context)
 
 **`server/services/`:**
-- Business logic orchestration
-- Course generation orchestration, quiz randomization
+- Purpose: Business logic orchestration
+- Contains: Course generation orchestration, quiz randomization
 - Key files: `course_orchestrator.py`, `quiz_randomization.py`
 
 **`server/utils/`:**
-- Shared utility modules
-- Instructor client wrapper for structured LLM output
+- Purpose: Shared utility modules
+- Contains: Instructor client wrapper for structured LLM output
 - Key files: `instructor_client.py`
 
 **`server/tests/`:**
-- Python unit tests using stdlib unittest
-- Test modules for agents, routers, services, persistence
+- Purpose: Python unit tests using stdlib unittest
+- Contains: Test modules for agents, routers, services, persistence
 - Key files: `test_planner_agent.py`, `test_learning_router.py`, `test_course_orchestrator.py`, etc.
 
 **`conductor/`:**
-- Product guidelines and UI/UX standards
-- Visual identity, component standards, workflow docs
+- Purpose: Product guidelines and UI/UX standards
+- Contains: Visual identity, component standards, workflow docs
 - Key files: `product-guidelines.md`, `tech-stack.md`, `workflow.md`
 
 ## Key File Locations
@@ -235,42 +235,42 @@ AgUI/
 ## Special Directories
 
 **`client/node_modules/`:**
-- npm dependencies
+- Purpose: npm dependencies
 - Generated: Yes (`npm install`)
 - Committed: No (in `.gitignore`)
 
 **`server/.venv/`:**
-- Python virtual environment
+- Purpose: Python virtual environment
 - Generated: Yes (`python -m venv .venv`)
 - Committed: No (in `.gitignore`)
 
 **`server/data/`:**
-- SQLite database files
+- Purpose: SQLite database files
 - Generated: Yes (created at runtime)
 - Committed: No (in `.gitignore`)
 
 **`client/dist/`:**
-- Vite production build output
+- Purpose: Vite production build output
 - Generated: Yes (`npm run build`)
 - Committed: No (in `.gitignore`)
 
 **`.planning/`:**
-- Project planning, roadmaps, codebase documentation
+- Purpose: Project planning, roadmaps, and codebase documentation
 - Generated: No (manually maintained)
 - Committed: Yes
 
 **`conductor/`:**
-- Product guidelines, UI/UX standards, workflow documentation
+- Purpose: Product guidelines, UI/UX standards, workflow documentation
 - Generated: No (manually maintained)
 - Committed: Yes
 
 **`client/src/features/learning/__tests__/`:**
-- E2E-style integration tests for learning feature
+- Purpose: E2E-style integration tests for learning feature
 - Generated: No
 - Committed: Yes
 
 **`server/tests/`:**
-- Python unit tests using stdlib unittest
+- Purpose: Python unit tests using stdlib unittest
 - Generated: No
 - Committed: Yes
 

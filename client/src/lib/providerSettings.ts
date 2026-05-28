@@ -30,197 +30,276 @@
  * ============================================================================
  */
 
-import type { AIProvider, ThinkingConfig } from '@/types/provider';
+import type { AIProvider, ThinkingConfig } from "@/types/provider";
 
-const STORAGE_KEY = 'ai_provider_settings';
-const LEGACY_STORAGE_KEY = 'openrouter_settings';
+const STORAGE_KEY = "ai_provider_settings";
+const LEGACY_STORAGE_KEY = "openrouter_settings";
 
 export interface ProviderConfig {
-  apiKey: string;
-  model: string;
-  modelTitle: string;
-  chatModel?: string;
-  chatModelTitle?: string;
-  maxCompletionTokens?: number;
-  thinking?: ThinkingConfig;
+	apiKey: string;
+	model: string;
+	modelTitle: string;
+	chatModel?: string;
+	chatModelTitle?: string;
+	chatModelProvider?: AIProvider;
+	maxCompletionTokens?: number;
+	thinking?: ThinkingConfig;
 }
 
 export interface AIProviderSettings {
-  activeProvider: AIProvider;
-  providers: Record<AIProvider, ProviderConfig>;
+	activeProvider: AIProvider;
+	providers: Record<AIProvider, ProviderConfig>;
 }
 
 const EMPTY_CONFIG: ProviderConfig = {
-  apiKey: '',
-  model: '',
-  modelTitle: '',
-  maxCompletionTokens: undefined,
-  thinking: {
-    enabled: false,
-    effort: 'high',
-  },
+	apiKey: "",
+	model: "",
+	modelTitle: "",
+	maxCompletionTokens: undefined,
+	thinking: {
+		enabled: false,
+		effort: "high",
+	},
 };
 
 /**
  * Reads settings from localStorage, migrating legacy OpenRouter settings if present.
  */
 export function getProviderSettings(): AIProviderSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<AIProviderSettings>;
-      return {
-        activeProvider: parsed?.activeProvider === 'generalcompute' ? 'generalcompute' : 'openrouter',
-        providers: {
-          openrouter: {
-            apiKey: typeof parsed?.providers?.openrouter?.apiKey === 'string' ? parsed.providers.openrouter.apiKey : '',
-            model: typeof parsed?.providers?.openrouter?.model === 'string' ? parsed.providers.openrouter.model : '',
-            modelTitle: typeof parsed?.providers?.openrouter?.modelTitle === 'string' ? parsed.providers.openrouter.modelTitle : '',
-            chatModel: typeof parsed?.providers?.openrouter?.chatModel === 'string' ? parsed.providers.openrouter.chatModel : undefined,
-            chatModelTitle: typeof parsed?.providers?.openrouter?.chatModelTitle === 'string' ? parsed.providers.openrouter.chatModelTitle : undefined,
-            maxCompletionTokens: parsed?.providers?.openrouter?.maxCompletionTokens ?? undefined,
-            thinking: parsed?.providers?.openrouter?.thinking ?? { enabled: false, effort: 'high' },
-          },
-          generalcompute: {
-            apiKey: typeof parsed?.providers?.generalcompute?.apiKey === 'string' ? parsed.providers.generalcompute.apiKey : '',
-            model: typeof parsed?.providers?.generalcompute?.model === 'string' ? parsed.providers.generalcompute.model : '',
-            modelTitle: typeof parsed?.providers?.generalcompute?.modelTitle === 'string' ? parsed.providers.generalcompute.modelTitle : '',
-            chatModel: typeof parsed?.providers?.generalcompute?.chatModel === 'string' ? parsed.providers.generalcompute.chatModel : undefined,
-            chatModelTitle: typeof parsed?.providers?.generalcompute?.chatModelTitle === 'string' ? parsed.providers.generalcompute.chatModelTitle : undefined,
-            maxCompletionTokens: parsed?.providers?.generalcompute?.maxCompletionTokens ?? undefined,
-            thinking: parsed?.providers?.generalcompute?.thinking ?? { enabled: false, effort: 'high' },
-          },
-        },
-      };
-    }
+	try {
+		const raw = localStorage.getItem(STORAGE_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw) as Partial<AIProviderSettings>;
+			return {
+				activeProvider:
+					parsed?.activeProvider === "generalcompute"
+						? "generalcompute"
+						: "openrouter",
+				providers: {
+					openrouter: {
+						apiKey:
+							typeof parsed?.providers?.openrouter?.apiKey === "string"
+								? parsed.providers.openrouter.apiKey
+								: "",
+						model:
+							typeof parsed?.providers?.openrouter?.model === "string"
+								? parsed.providers.openrouter.model
+								: "",
+						modelTitle:
+							typeof parsed?.providers?.openrouter?.modelTitle === "string"
+								? parsed.providers.openrouter.modelTitle
+								: "",
+						chatModel:
+							typeof parsed?.providers?.openrouter?.chatModel === "string"
+								? parsed.providers.openrouter.chatModel
+								: undefined,
+						chatModelTitle:
+							typeof parsed?.providers?.openrouter?.chatModelTitle === "string"
+								? parsed.providers.openrouter.chatModelTitle
+								: undefined,
+						chatModelProvider:
+							parsed?.providers?.openrouter?.chatModelProvider ===
+							"generalcompute"
+								? "generalcompute"
+								: parsed?.providers?.openrouter?.chatModelProvider ===
+										"openrouter"
+									? "openrouter"
+									: undefined,
+						maxCompletionTokens:
+							parsed?.providers?.openrouter?.maxCompletionTokens ?? undefined,
+						thinking: parsed?.providers?.openrouter?.thinking ?? {
+							enabled: false,
+							effort: "high",
+						},
+					},
+					generalcompute: {
+						apiKey:
+							typeof parsed?.providers?.generalcompute?.apiKey === "string"
+								? parsed.providers.generalcompute.apiKey
+								: "",
+						model:
+							typeof parsed?.providers?.generalcompute?.model === "string"
+								? parsed.providers.generalcompute.model
+								: "",
+						modelTitle:
+							typeof parsed?.providers?.generalcompute?.modelTitle === "string"
+								? parsed.providers.generalcompute.modelTitle
+								: "",
+						chatModel:
+							typeof parsed?.providers?.generalcompute?.chatModel === "string"
+								? parsed.providers.generalcompute.chatModel
+								: undefined,
+						chatModelTitle:
+							typeof parsed?.providers?.generalcompute?.chatModelTitle ===
+							"string"
+								? parsed.providers.generalcompute.chatModelTitle
+								: undefined,
+						chatModelProvider:
+							parsed?.providers?.generalcompute?.chatModelProvider ===
+							"generalcompute"
+								? "generalcompute"
+								: parsed?.providers?.generalcompute?.chatModelProvider ===
+										"openrouter"
+									? "openrouter"
+									: undefined,
+						maxCompletionTokens:
+							parsed?.providers?.generalcompute?.maxCompletionTokens ??
+							undefined,
+						thinking: parsed?.providers?.generalcompute?.thinking ?? {
+							enabled: false,
+							effort: "high",
+						},
+					},
+				},
+			};
+		}
 
-    // Try reading legacy format
-    const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacyRaw) {
-      const legacyParsed = JSON.parse(legacyRaw) as { apiKey?: string; model?: string; modelTitle?: string };
-      const migrated: AIProviderSettings = {
-        activeProvider: 'openrouter',
-        providers: {
-          openrouter: {
-            apiKey: typeof legacyParsed.apiKey === 'string' ? legacyParsed.apiKey : '',
-            model: typeof legacyParsed.model === 'string' ? legacyParsed.model : '',
-            modelTitle: typeof legacyParsed.modelTitle === 'string' ? legacyParsed.modelTitle : '',
-            thinking: { enabled: false, effort: 'high' },
-          },
-          generalcompute: { ...EMPTY_CONFIG },
-        },
-      };
-      // Save migrated data & cleanup legacy
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      return migrated;
-    }
+		// Try reading legacy format
+		const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+		if (legacyRaw) {
+			const legacyParsed = JSON.parse(legacyRaw) as {
+				apiKey?: string;
+				model?: string;
+				modelTitle?: string;
+			};
+			const migrated: AIProviderSettings = {
+				activeProvider: "openrouter",
+				providers: {
+					openrouter: {
+						apiKey:
+							typeof legacyParsed.apiKey === "string"
+								? legacyParsed.apiKey
+								: "",
+						model:
+							typeof legacyParsed.model === "string" ? legacyParsed.model : "",
+						modelTitle:
+							typeof legacyParsed.modelTitle === "string"
+								? legacyParsed.modelTitle
+								: "",
+						thinking: { enabled: false, effort: "high" },
+					},
+					generalcompute: { ...EMPTY_CONFIG },
+				},
+			};
+			// Save migrated data & cleanup legacy
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+			localStorage.removeItem(LEGACY_STORAGE_KEY);
+			return migrated;
+		}
 
-    return {
-      activeProvider: 'openrouter',
-      providers: {
-        openrouter: { ...EMPTY_CONFIG },
-        generalcompute: { ...EMPTY_CONFIG },
-      },
-    };
-  } catch {
-    return {
-      activeProvider: 'openrouter',
-      providers: {
-        openrouter: { ...EMPTY_CONFIG },
-        generalcompute: { ...EMPTY_CONFIG },
-      },
-    };
-  }
+		return {
+			activeProvider: "openrouter",
+			providers: {
+				openrouter: { ...EMPTY_CONFIG },
+				generalcompute: { ...EMPTY_CONFIG },
+			},
+		};
+	} catch {
+		return {
+			activeProvider: "openrouter",
+			providers: {
+				openrouter: { ...EMPTY_CONFIG },
+				generalcompute: { ...EMPTY_CONFIG },
+			},
+		};
+	}
 }
 
 /**
  * Partially updates settings in localStorage, merging with existing values.
  */
-export function setProviderSettings(partial: Partial<AIProviderSettings>): void {
-  const current = getProviderSettings();
-  const merged: AIProviderSettings = {
-    activeProvider: partial.activeProvider !== undefined ? partial.activeProvider : current.activeProvider,
-    providers: {
-      openrouter: partial.providers?.openrouter 
-        ? { ...current.providers.openrouter, ...partial.providers.openrouter }
-        : current.providers.openrouter,
-      generalcompute: partial.providers?.generalcompute 
-        ? { ...current.providers.generalcompute, ...partial.providers.generalcompute }
-        : current.providers.generalcompute,
-    },
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+export function setProviderSettings(
+	partial: Partial<AIProviderSettings>,
+): void {
+	const current = getProviderSettings();
+	const merged: AIProviderSettings = {
+		activeProvider:
+			partial.activeProvider !== undefined
+				? partial.activeProvider
+				: current.activeProvider,
+		providers: {
+			openrouter: partial.providers?.openrouter
+				? { ...current.providers.openrouter, ...partial.providers.openrouter }
+				: current.providers.openrouter,
+			generalcompute: partial.providers?.generalcompute
+				? {
+						...current.providers.generalcompute,
+						...partial.providers.generalcompute,
+					}
+				: current.providers.generalcompute,
+		},
+	};
+	localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
 }
 
 /**
  * Returns configuration for the active provider.
  */
 export function getActiveProviderConfig(): ProviderConfig {
-  const settings = getProviderSettings();
-  return settings.providers[settings.activeProvider];
+	const settings = getProviderSettings();
+	return settings.providers[settings.activeProvider];
 }
 
 /**
  * Sets the active AI provider.
  */
 export function setActiveProvider(provider: AIProvider): void {
-  setProviderSettings({ activeProvider: provider });
+	setProviderSettings({ activeProvider: provider });
 }
 
 /**
  * Updates a specific provider's configuration.
  */
 export function setProviderConfig(
-  provider: AIProvider,
-  config: Partial<ProviderConfig>
+	provider: AIProvider,
+	config: Partial<ProviderConfig>,
 ): void {
-  const settings = getProviderSettings();
-  const updatedProviders = {
-    ...settings.providers,
-    [provider]: {
-      ...settings.providers[provider],
-      ...config,
-    },
-  };
-  setProviderSettings({ providers: updatedProviders });
+	const settings = getProviderSettings();
+	const updatedProviders = {
+		...settings.providers,
+		[provider]: {
+			...settings.providers[provider],
+			...config,
+		},
+	};
+	setProviderSettings({ providers: updatedProviders });
 }
 
 /**
  * Resets a specific provider's configuration.
  */
 export function clearProviderConfig(provider: AIProvider): void {
-  setProviderConfig(provider, { ...EMPTY_CONFIG });
+	setProviderConfig(provider, { ...EMPTY_CONFIG });
 }
 
 /**
  * Updates thinking configuration for a specific provider.
  */
 export function setProviderThinking(
-  provider: AIProvider,
-  thinking: ThinkingConfig
+	provider: AIProvider,
+	thinking: ThinkingConfig,
 ): void {
-  const settings = getProviderSettings();
-  const updatedProviders = {
-    ...settings.providers,
-    [provider]: {
-      ...settings.providers[provider],
-      thinking: {
-        enabled: thinking.enabled,
-        effort: thinking.effort,
-      },
-    },
-  };
-  setProviderSettings({ providers: updatedProviders });
+	const settings = getProviderSettings();
+	const updatedProviders = {
+		...settings.providers,
+		[provider]: {
+			...settings.providers[provider],
+			thinking: {
+				enabled: thinking.enabled,
+				effort: thinking.effort,
+			},
+		},
+	};
+	setProviderSettings({ providers: updatedProviders });
 }
 
 /**
  * Masks an API key for safe display.
  */
 export function maskApiKey(key: string | undefined | null): string {
-  if (!key || key.length < 8) {
-    return '';
-  }
-  const suffix = key.slice(-4);
-  return `${key.slice(0, 6)}...${suffix}`;
+	if (!key || key.length < 8) {
+		return "";
+	}
+	const suffix = key.slice(-4);
+	return `${key.slice(0, 6)}...${suffix}`;
 }

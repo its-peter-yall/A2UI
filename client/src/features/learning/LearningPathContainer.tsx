@@ -635,7 +635,7 @@ export function LearningPathContainer({
 					console.error("Learning component crashed:", boundaryError);
 				}}
 			>
-				<div className="flex flex-col gap-6 p-4 max-w-4xl mx-auto">
+				<div className="flex flex-col gap-6 p-4 mx-auto w-full">
 					{/* Header */}
 					<header className="text-center">
 						<h1 className="text-2xl font-bold">{session.course_title}</h1>
@@ -750,32 +750,41 @@ export function LearningPathContainer({
 
 					{/* Loading overlay for mutations */}
 					{isAnyLoading && (
-						<div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2">
+						<div
+							className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2"
+							role="status"
+							aria-busy="true"
+							aria-label="Loading"
+						>
 							<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
 							<span className="text-sm text-muted-foreground">Updating...</span>
 						</div>
 					)}
-				</div>
-			</LearningErrorBoundary>
+							</div>
+						</motion.div>
+
+						{/* Chat Panel - slides in from right */}
+						<ChatPanel
+							isOpen={isChatOpen}
+							onClose={() => setIsChatOpen(false)}
+							sessionId={activeSessionId ?? ""}
+							nodeId={currentSlideNode?.id ?? ""}
+							selectedHeadingIds={selectedHeadingIds}
+							onClearHeadings={() => setSelectedHeadingIds([])}
+						/>
+					</div>
+				</LearningErrorBoundary>
 
 			{/* Chat FAB - bottom-right fixed */}
 			<button
 				onClick={() => setIsChatOpen(true)}
-				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[#FFD400] text-black shadow-lg hover:bg-[#FFD400]/90 transition-colors flex items-center justify-center"
+				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[var(--cyber-yellow)] text-black shadow-lg hover:bg-[var(--cyber-yellow)]/90 transition-colors flex items-center justify-center"
 				aria-label="Open concept chat"
+				aria-hidden={isChatOpen}
+				tabIndex={isChatOpen ? -1 : 0}
 			>
 				<MessageCircle className="h-6 w-6" />
 			</button>
-
-			{/* Chat Panel Drawer */}
-			<ChatPanel
-				isOpen={isChatOpen}
-				onClose={() => setIsChatOpen(false)}
-				sessionId={activeSessionId ?? ""}
-				nodeId={currentSlideNode?.id ?? ""}
-				selectedHeadingIds={selectedHeadingIds}
-				onClearHeadings={() => setSelectedHeadingIds([])}
-			/>
 
 			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
 		</>

@@ -132,9 +132,7 @@ describe("MarkdownRenderer", () => {
 		const h2Wrapper = document.querySelector(
 			'[data-heading-id="h-2-introduction"]',
 		);
-		const h3Wrapper = document.querySelector(
-			'[data-heading-id="h-3-details"]',
-		);
+		const h3Wrapper = document.querySelector('[data-heading-id="h-3-details"]');
 		expect(h2Wrapper).not.toBeNull();
 		expect(h3Wrapper).not.toBeNull();
 

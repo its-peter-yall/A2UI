@@ -88,7 +88,7 @@
 **Overall:** Feature-based modular monolith with agent pipeline backend
 
 **Key Characteristics:**
-- **Client:** Feature-sliced architecture with co-located tests, hooks, barrel exports
+- **Client:** Feature-sliced architecture with co-located tests, hooks, and barrel exports
 - **Server:** Router → Service → Agent layered architecture with Pydantic validation
 - **AI Pipeline:** Scatter-Gather pattern — serial planning, parallel content generation
 - **State Machine:** Server-authoritative node lifecycle (LOCKED → VIEWING_EXPLANATION → IN_QUIZ → SHOWING_FEEDBACK → COMPLETED)
@@ -98,43 +98,43 @@
 ## Layers
 
 **Presentation Layer (Client):**
-- React SPA with routing, data fetching, UI components
-- `client/src/`
+- Purpose: React SPA with routing, data fetching, and UI components
+- Location: `client/src/`
 - Contains: Components, hooks, providers, types, API clients
 - Depends on: FastAPI backend via REST API
 - Used by: End users via browser
 
 **API Layer (Routers):**
-- HTTP endpoint definitions with request validation, response models
-- `server/routers/`
+- Purpose: HTTP endpoint definitions with request validation and response models
+- Location: `server/routers/`
 - Contains: FastAPI APIRouter modules (learning, llm)
 - Depends on: Services, Database, Schemas
 - Used by: Client via Axios HTTP calls
 
 **Service Layer:**
-- Business logic orchestration, domain services
-- `server/services/`
+- Purpose: Business logic orchestration and domain services
+- Location: `server/services/`
 - Contains: CourseOrchestrator (Scatter-Gather), QuizRandomization
 - Depends on: Agents, Database, Schemas
 - Used by: Routers
 
 **Agent Layer:**
-- AI-powered content generation with structured output
-- `server/agents/`
+- Purpose: AI-powered content generation with structured output
+- Location: `server/agents/`
 - Contains: PlannerAgent, GeneratorAgent, QuizzerAgent (all extend BaseAgent)
 - Depends on: InstructorClient, Schemas (LLMContext, TopicNode)
 - Used by: CourseOrchestrator
 
 **Schema Layer:**
-- Pydantic v2 data contracts for validation and serialization
-- `server/schemas/`
+- Purpose: Pydantic v2 data contracts for validation and serialization
+- Location: `server/schemas/`
 - Contains: Domain models, request/response schemas, LLM output schemas
 - Depends on: pydantic
 - Used by: All server layers
 
 **Persistence Layer:**
-- SQLite database operations for learning data
-- `server/database/`
+- Purpose: SQLite database operations for learning data
+- Location: `server/database/`
 - Contains: LearningManager (sessions, nodes, quizzes, revisions)
 - Depends on: sqlite3, Schemas
 - Used by: Routers, Services
@@ -163,7 +163,7 @@
 4. **Mastery check** → If correct and not mastered, advances `current_index` in quiz set
 5. **State transition** → Node moves to `SHOWING_FEEDBACK`; if mastered, unlocks next node
 6. **Client updates** → React Query cache invalidated; `ConceptCard` shows feedback
-7. **Next action** → User retries (incorrect) or advances to next node (mastered)
+7. **Next action** → User either retries (incorrect) or advances to next node (mastered)
 
 ### Node State Machine
 
@@ -192,51 +192,51 @@ LOCKED ──→ VIEWING_EXPLANATION ──→ IN_QUIZ ──→ SHOWING_FEEDBAC
 ## Key Abstractions
 
 **BaseAgent (Abstract Base Class):**
-- Common interface for all AI agents with structured output generation
-- `server/agents/base.py`, `server/agents/planner.py`, `server/agents/generator.py`, `server/agents/quizzer.py`
-- Template Method — subclasses define `system_prompt`; base handles generation, retry, context formatting
+- Purpose: Common interface for all AI agents with structured output generation
+- Examples: `server/agents/base.py`, `server/agents/planner.py`, `server/agents/generator.py`, `server/agents/quizzer.py`
+- Pattern: Template Method — subclasses define `system_prompt`; base handles generation, retry, context formatting
 
 **InstructorClient (Singleton):**
-- Wraps Instructor library for Pydantic-validated LLM responses
-- `server/utils/instructor_client.py`
-- Strategy — role-based model config (`MODEL_CONFIGS` dict) selects model, temperature, max_tokens per agent role
+- Purpose: Wraps Instructor library for Pydantic-validated LLM responses
+- Examples: `server/utils/instructor_client.py`
+- Pattern: Strategy — role-based model config (`MODEL_CONFIGS` dict) selects model, temperature, max_tokens per agent role
 
 **LearningManager (Singleton):**
-- All SQLite operations for learning domain
-- `server/database/learning_persistence.py`
-- Repository — direct SQL with `sqlite3.Row` factory; no ORM
+- Purpose: All SQLite operations for learning domain
+- Examples: `server/database/learning_persistence.py`
+- Pattern: Repository — direct SQL with `sqlite3.Row` factory; no ORM
 
 **CourseOrchestrator (Singleton):**
-- Coordinates 3-agent pipeline with parallel execution
-- `server/services/course_orchestrator.py`
-- Scatter-Gather — serial planning → parallel content generation → gather with partial failure handling
+- Purpose: Coordinates the 3-agent pipeline with parallel execution
+- Examples: `server/services/course_orchestrator.py`
+- Pattern: Scatter-Gather — serial planning → parallel content generation → gather with partial failure handling
 
 **LLMContext (Request-scoped):**
-- Carries API key, provider, model override, thinking config per request
-- `server/schemas/llm.py`, `server/routers/learning.py`
-- Dependency Injection via FastAPI `Depends(get_llm_context)`
+- Purpose: Carries API key, provider, model override, thinking config per request
+- Examples: `server/schemas/llm.py`, `server/routers/learning.py`
+- Pattern: Dependency Injection via FastAPI `Depends(get_llm_context)`
 
 **QuizSet / QuizCard (Domain Models):**
-- Multi-quiz containers with secure randomization
-- `server/schemas/learning.py`
-- Dual-schema — `LLMQuizCard` (no option_id) for AI output; `QuizCard` (with UUID option_id) for storage/client
+- Purpose: Multi-quiz containers with secure randomization
+- Examples: `server/schemas/learning.py`
+- Pattern: Dual-schema — `LLMQuizCard` (no option_id) for AI output; `QuizCard` (with UUID option_id) for storage/client
 
 ## Entry Points
 
 **Server Entry:**
-- `server/main.py`
-- `python -m uvicorn server.main:app --reload --port 8000`
-- App creation, CORS, lifespan (DB init), router registration, file watcher for auto-reload
+- Location: `server/main.py`
+- Triggers: `python -m uvicorn server.main:app --reload --port 8000`
+- Responsibilities: App creation, CORS, lifespan (DB init), router registration, file watcher for auto-reload
 
 **Client Entry:**
-- `client/src/main.tsx`
-- Vite dev server (`npm run dev`) or production build
-- React root creation, provider wrapping (ThemeProvider → QueryProvider → App)
+- Location: `client/src/main.tsx`
+- Triggers: Vite dev server (`npm run dev`) or production build
+- Responsibilities: React root creation, provider wrapping (ThemeProvider → QueryProvider → App)
 
 **Router Entry:**
-- `server/routers/__init__.py`
-- Imported by `server/main.py`
-- Re-exports `learning_router` and `llm_router`
+- Location: `server/routers/__init__.py`
+- Triggers: Imported by `server/main.py`
+- Responsibilities: Re-exports `learning_router` and `llm_router`
 
 ## Architectural Constraints
 
@@ -250,27 +250,27 @@ LOCKED ──→ VIEWING_EXPLANATION ──→ IN_QUIZ ──→ SHOWING_FEEDBAC
 
 ### Direct DB Access in Routers
 
-**What:** Some router endpoints call `learning_manager._get_connection()` and `_get_node_by_id()` directly, bypassing the service layer.
-**Why wrong:** Mixes HTTP concerns with data access; harder to test; inconsistent layering.
-**Fix:** Route through service methods or add dedicated `get_node_by_id()` public method to `LearningManager`. See `server/routers/learning.py:718-722` and `server/routers/learning.py:817-826`.
+**What happens:** Some router endpoints call `learning_manager._get_connection()` and `_get_node_by_id()` directly, bypassing the service layer.
+**Why it's wrong:** Mixes HTTP concerns with data access; makes testing harder; inconsistent layering.
+**Do this instead:** Route through service methods or add dedicated `get_node_by_id()` public method to `LearningManager`. See `server/routers/learning.py:718-722` and `server/routers/learning.py:817-826`.
 
 ### LLM Output vs Storage Schema Duality
 
-**What:** Two parallel schema hierarchies — `LLMQuizCard` (no option_id) and `QuizCard` (with UUID option_id) — requiring conversion functions.
-**Why wrong:** Adds complexity and maintenance burden; conversion functions (`convert_llm_to_quiz_card`, etc.) are error-prone.
-**Fix:** Deliberate design choice (LLMs shouldn't generate UUIDs). Document the boundary clearly. Conversion functions live in `server/schemas/learning.py:415-490`.
+**What happens:** Two parallel schema hierarchies exist — `LLMQuizCard` (no option_id) and `QuizCard` (with UUID option_id) — requiring conversion functions.
+**Why it's wrong:** Adds complexity and maintenance burden; conversion functions (`convert_llm_to_quiz_card`, etc.) are error-prone.
+**Do this instead:** This is a deliberate design choice (LLMs shouldn't generate UUIDs). Document the boundary clearly. Conversion functions live in `server/schemas/learning.py:415-490`.
 
 ## Error Handling
 
 **Strategy:** Layered error handling with HTTP status codes and structured responses
 
-**Server:**
+**Server Patterns:**
 - Routers: `try/except` → log → `HTTPException` with appropriate status code
 - Re-raise `HTTPException` untouched; wrap only unexpected exceptions as 500
 - Agents: Retry via tenacity (3 attempts, exponential backoff) for transient failures
 - Orchestrator: Partial failure handling — failed topics become SkeletonCards with ERROR status
 
-**Client:**
+**Client Patterns:**
 - Axios interceptors log errors and re-throw
 - React Query `retry: 1` for automatic single retry
 - `useErrorToast` hook for transient error display
