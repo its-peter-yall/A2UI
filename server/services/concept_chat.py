@@ -1,0 +1,199 @@
+"""
+============================================================================
+FILE: concept_chat.py
+LOCATION: server/services/concept_chat.py
+============================================================================
+PURPOSE:
+    Provides ephemeral concept chat functionality using direct OpenAI-compatible
+    streaming. Supports context-aware Q&A with heading selection and server-side
+    history capping.
+ROLE IN PROJECT:
+    Backend service for the in-concept chatbot assistant.
+    - Resolves provider base URLs from model slug prefixes
+    - Constructs system prompts with concept content and heading context
+    - Streams SSE responses via openai.AsyncOpenAI (no Instructor)
+KEY COMPONENTS:
+    - resolve_chat_base_url(): Maps model slug to OpenAI-compatible base URL
+    - build_concept_chat_messages(): Constructs prompt with context
+    - stream_concept_chat(): Async generator yielding SSE frames
+DEPENDENCIES:
+    - External: openai
+    - Internal: server.schemas.learning, server.database.learning_persistence
+USAGE:
+    ```python
+    from server.services.concept_chat import stream_concept_chat
+    async for chunk in stream_concept_chat(...):
+        yield chunk
+    ```
+============================================================================
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import AsyncGenerator, List
+
+from openai import AsyncOpenAI
+
+from server.database.learning_persistence import learning_manager
+from server.schemas.learning import ConceptChatMessage
+
+logger = logging.getLogger(__name__)
+
+MAX_CHAT_HISTORY_MESSAGES = 10
+
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def resolve_chat_base_url(model_slug: str) -> str:
+    """Resolve the OpenAI-compatible base URL from the model slug prefix.
+
+    Args:
+        model_slug: Full model identifier (e.g. 'openai/gpt-4o-mini').
+
+    Returns:
+        Base URL for the provider's OpenAI-compatible API.
+    """
+    lower_slug = model_slug.lower()
+    if lower_slug.startswith("openai/") or lower_slug.startswith("gpt-"):
+        return OPENAI_BASE_URL
+    return OPENROUTER_BASE_URL
+
+
+def build_concept_chat_messages(
+    message: str,
+    history: List[ConceptChatMessage],
+    content_markdown: str,
+    selected_heading_ids: List[str],
+    node_title: str,
+) -> list[dict[str, str]]:
+    """Construct the full message list for the LLM chat request.
+
+    Builds a system prompt with concept content and heading context,
+    appends the last MAX_CHAT_HISTORY_MESSAGES from history, then
+    appends the current user message.
+
+    Args:
+        message: The current user message.
+        history: Ephemeral conversation history for this node.
+        content_markdown: The full concept content in markdown.
+        selected_heading_ids: User-selected heading identifiers.
+        node_title: Title of the concept node.
+
+    Returns:
+        List of message dicts ready for AsyncOpenAI chat completions.
+    """
+    if selected_heading_ids:
+        headings_text = "\n".join(f"- {h}" for h in selected_heading_ids)
+        system_prompt = (
+            "You are a helpful teaching assistant. The student is reading a "
+            "learning concept and has questions about it.\n\n"
+            f"CONCEPT: {node_title}\n\n"
+            "CONCEPT CONTENT:\n"
+            f"{content_markdown}\n\n"
+            "The student is specifically asking about the following sections:\n"
+            f"{headings_text}\n\n"
+            "Focus your answer on these sections, but use the full concept "
+            "content for context. If the student's question is about something "
+            "not covered in the selected sections, answer based on the full "
+            "concept content.\n\n"
+            "Keep answers concise, clear, and educational. Use examples when "
+            "helpful. If you don't know the answer based on the provided "
+            "content, say so."
+        )
+    else:
+        system_prompt = (
+            "You are a helpful teaching assistant. The student is reading a "
+            "learning concept and has questions about it.\n\n"
+            f"CONCEPT: {node_title}\n\n"
+            "CONCEPT CONTENT:\n"
+            f"{content_markdown}\n\n"
+            "Answer the student's question based on this content. Keep answers "
+            "concise, clear, and educational. Use examples when helpful. If "
+            "you don't know the answer based on the provided content, say so."
+        )
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+    ]
+
+    capped_history = history[-MAX_CHAT_HISTORY_MESSAGES:]
+    for h in capped_history:
+        messages.append({"role": h.role.value if hasattr(h.role, 'value') else h.role, "content": h.content})
+
+    messages.append({"role": "user", "content": message})
+
+    return messages
+
+
+async def stream_concept_chat(
+    api_key: str,
+    model_slug: str,
+    message: str,
+    history: List[ConceptChatMessage],
+    content_markdown: str,
+    selected_heading_ids: List[str],
+    node_title: str,
+) -> AsyncGenerator[str, None]:
+    """Stream chat completions as SSE frames.
+
+    Constructs messages with context, calls AsyncOpenAI with stream=True,
+    and yields SSE-formatted delta chunks terminated by [DONE].
+
+    Args:
+        api_key: Provider API key.
+        model_slug: Model identifier slug for the chat model.
+        message: Current user message.
+        history: Ephemeral conversation history.
+        content_markdown: Full concept content in markdown.
+        selected_heading_ids: User-selected heading identifiers.
+        node_title: Title of the concept node.
+
+    Yields:
+        SSE frame strings: 'data: {"delta":"...", ...}\\n\\n' per chunk,
+        and a terminal 'data: [DONE]\\n\\n'.
+    """
+    base_url = resolve_chat_base_url(model_slug)
+
+    client = AsyncOpenAI(
+        base_url=base_url,
+        api_key=api_key,
+        max_retries=0,
+    )
+
+    messages = build_concept_chat_messages(
+        message=message,
+        history=history,
+        content_markdown=content_markdown,
+        selected_heading_ids=selected_heading_ids,
+        node_title=node_title,
+    )
+
+    logger.info(
+        "Starting concept chat stream: model=%s, history_msgs=%d",
+        model_slug,
+        min(len(history), MAX_CHAT_HISTORY_MESSAGES),
+    )
+
+    try:
+        stream = await client.chat.completions.create(
+            model=model_slug,
+            messages=messages,
+            stream=True,
+        )
+
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    payload = json.dumps({"delta": delta.content})
+                    yield f"data: {payload}\n\n"
+
+    except Exception as e:
+        logger.error("Concept chat stream failed: %s", e)
+        error_payload = json.dumps({"error": str(e)})
+        yield f"data: {error_payload}\n\n"
+
+    yield "data: [DONE]\n\n"
