@@ -636,7 +636,7 @@ export function LearningPathContainer({
 					console.error("Learning component crashed:", boundaryError);
 				}}
 			>
-				<div className="flex w-full h-[100dvh] overflow-hidden">
+				<div className="flex w-full h-dvh overflow-hidden">
 					{/* Main content area - shrinks when chat is open */}
 					<motion.div
 						className="flex flex-col gap-6 p-4 overflow-y-auto"
@@ -794,7 +794,7 @@ export function LearningPathContainer({
 			{!isChatOpen && (
 			<button
 				onClick={() => setIsChatOpen(true)}
-				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[var(--cyber-yellow)] text-black shadow-lg hover:bg-[var(--cyber-yellow)]/90 transition-colors flex items-center justify-center"
+				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center"
 				aria-label="Open concept chat"
 			>
 				<MessageCircle className="h-6 w-6" />

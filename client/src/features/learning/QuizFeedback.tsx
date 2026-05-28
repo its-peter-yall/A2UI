@@ -70,6 +70,15 @@ export function QuizFeedback({
 		selected_explanation,
 	} = result;
 
+	const resultHeaderRef = useRef<HTMLDivElement>(null);
+
+	// Move focus to feedback header after answer submission
+	useEffect(() => {
+		if (result && resultHeaderRef.current) {
+			resultHeaderRef.current.focus();
+		}
+	}, [result]);
+
 	// Determine if we're dealing with a QuizSet and extract current quiz
 	const isQuizSet = "quizzes" in quiz;
 	const currentQuiz = isQuizSet
@@ -87,15 +96,6 @@ export function QuizFeedback({
 
 	const totalQuizzes = isQuizSet ? quiz.quizzes.length : 1;
 	const hasMoreQuizzes = currentQuizIndex < totalQuizzes - 1;
-
-	const resultHeaderRef = useRef<HTMLDivElement>(null);
-
-	// Move focus to feedback header after answer submission
-	useEffect(() => {
-		if (result && resultHeaderRef.current) {
-			resultHeaderRef.current.focus();
-		}
-	}, [result]);
 
 	// For wrong answers, correct_option_id is null (not revealed)
 	// Only show correct answer when user answered correctly

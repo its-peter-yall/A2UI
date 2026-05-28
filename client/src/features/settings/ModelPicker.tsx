@@ -146,12 +146,17 @@ export function ModelPicker({
 		[onSelect],
 	);
 
-	// Reset active index when dropdown opens or filter changes
-	useEffect(() => {
+	const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+	const [prevSearch, setPrevSearch] = useState(search);
+
+	// Reset active index when dropdown opens or filter changes (during render to avoid effect state cascade)
+	if (isOpen !== prevIsOpen || search !== prevSearch) {
+		setPrevIsOpen(isOpen);
+		setPrevSearch(search);
 		if (isOpen) {
 			setActiveIndex(-1);
 		}
-	}, [isOpen, search]);
+	}
 
 	// Focus the active option when activeIndex changes
 	useEffect(() => {

@@ -122,12 +122,15 @@ export function ThinkingModeToggle({
 		}
 	}, [activeEffortIndex]);
 
-	// Reset active index when dropdown closes
-	useEffect(() => {
+	const [prevShowEffortPicker, setPrevShowEffortPicker] = useState(showEffortPicker);
+
+	// Reset active index when dropdown closes (during render to avoid effect state cascade)
+	if (showEffortPicker !== prevShowEffortPicker) {
+		setPrevShowEffortPicker(showEffortPicker);
 		if (!showEffortPicker) {
 			setActiveEffortIndex(-1);
 		}
-	}, [showEffortPicker]);
+	}
 
 	const handleEffortKeyDown = useCallback(
 		(e: React.KeyboardEvent) => {

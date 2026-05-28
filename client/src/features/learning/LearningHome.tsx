@@ -574,7 +574,7 @@ function Step({ number, title, description }: StepProps) {
 				<span className="sr-only">Step {number}: </span>
 				{title}
 			</span>
-			<span className="text-xs text-muted-foreground text-center max-w-[80px]">
+			<span className="text-xs text-muted-foreground text-center max-w-20">
 				{description}
 			</span>
 		</li>

@@ -162,7 +162,7 @@ export function CourseCard({
 						"text-muted-foreground hover:text-red-500",
 						"opacity-0 group-hover:opacity-100",
 						"transition-all duration-200",
-						"focus:outline-none focus:ring-2 focus:ring-[var(--cyber-yellow)] focus:ring-offset-2 focus:ring-offset-background",
+						"focus:outline-none focus:ring-2 focus:ring-(--cyber-yellow) focus:ring-offset-2 focus:ring-offset-background",
 					)}
 					aria-label="Delete course"
 					data-testid="delete-course-button"
@@ -181,12 +181,12 @@ export function CourseCard({
 						"absolute inset-0 z-10 rounded-xl",
 						"bg-background/95 backdrop-blur-sm",
 						"flex flex-col items-center justify-center gap-4 p-5",
-						"border border-[var(--cyber-yellow)]/30",
+						"border border-(--cyber-yellow)/30",
 					)}
 					onClick={(e) => e.stopPropagation()}
 					onKeyDown={handleConfirmKeyDown}
 				>
-					<div className="flex items-center gap-2 text-[var(--cyber-yellow)]">
+					<div className="flex items-center gap-2 text-(--cyber-yellow)">
 						<AlertCircle className="h-5 w-5" aria-hidden="true" />
 						<span className="font-semibold" id="delete-dialog-title">
 							Delete Course?
@@ -266,7 +266,7 @@ export function CourseCard({
 					<div
 						className={cn(
 							"h-full rounded-full transition-all duration-500 ease-out",
-							isCompleted ? "bg-green-400" : "bg-[var(--cyber-yellow)]",
+							isCompleted ? "bg-green-400" : "bg-(--cyber-yellow)",
 						)}
 						style={{ width: `${progressPercent}%` }}
 						data-testid="progress-bar-fill"

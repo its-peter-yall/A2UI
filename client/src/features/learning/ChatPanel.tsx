@@ -73,10 +73,19 @@ export function ChatPanel({
 	} = useConceptChat(sessionId, nodeId);
 
 	const [input, setInput] = useState("");
+	const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const previousFocusRef = useRef<HTMLElement | null>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
+
+	// Reset input when panel closes (during render to avoid effect state cascade)
+	if (isOpen !== prevIsOpen) {
+		setPrevIsOpen(isOpen);
+		if (!isOpen) {
+			setInput("");
+		}
+	}
 
 	// Auto-scroll to bottom on new messages
 	useEffect(() => {
@@ -87,7 +96,6 @@ export function ChatPanel({
 	useEffect(() => {
 		if (!isOpen) {
 			resetChat();
-			setInput("");
 			// Return focus to the element that opened the panel
 			if (previousFocusRef.current) {
 				previousFocusRef.current.focus();
@@ -179,7 +187,7 @@ export function ChatPanel({
 					exit={{ width: 0, opacity: 0 }}
 					transition={{ type: "spring", damping: 30, stiffness: 300 }}
 					className={cn(
-						"flex-shrink-0 overflow-hidden h-full",
+						"shrink-0 overflow-hidden h-full",
 						"bg-background border-l border-border",
 						"flex flex-col",
 					)}
@@ -187,7 +195,7 @@ export function ChatPanel({
 					{/* Header */}
 					<div className="flex items-center justify-between px-4 py-3 border-b">
 						<div className="flex items-center gap-2">
-							<MessageCircle className="h-5 w-5 text-[var(--cyber-yellow)]" />
+							<MessageCircle className="h-5 w-5 text-(--cyber-yellow)" />
 							<h2 id="chat-panel-title" className="font-semibold text-sm">
 								Ask about this concept
 							</h2>
@@ -203,14 +211,14 @@ export function ChatPanel({
 
 					{/* Selected headings indicator */}
 					{selectedHeadingIds.length > 0 && (
-						<div className="px-4 py-2 border-b bg-[var(--cyber-yellow)]/5 flex items-center justify-between">
+						<div className="px-4 py-2 border-b bg-(--cyber-yellow)/5 flex items-center justify-between">
 							<span className="text-xs text-muted-foreground">
 								{selectedHeadingIds.length} heading
 								{selectedHeadingIds.length !== 1 ? "s" : ""} selected
 							</span>
 							<button
 								onClick={onClearHeadings}
-								className="text-xs text-[var(--cyber-yellow)] hover:underline"
+								className="text-xs text-(--cyber-yellow) hover:underline"
 							>
 								Clear selections
 							</button>
@@ -298,7 +306,7 @@ export function ChatPanel({
 									"bg-muted border border-border text-foreground",
 									"placeholder:text-muted-foreground",
 									"focus:outline-none focus:ring-2 focus:ring-primary/50",
-									"max-h-[120px]",
+									"max-h-30",
 								)}
 								disabled={isStreaming}
 							/>
@@ -320,7 +328,7 @@ export function ChatPanel({
 									className={cn(
 										"p-2.5 rounded-lg transition-colors",
 										canSend
-											? "bg-[var(--cyber-yellow)] text-black hover:bg-[var(--cyber-yellow)]/90"
+											? "bg-(--cyber-yellow) text-black hover:bg-(--cyber-yellow)/90"
 											: "bg-muted text-muted-foreground cursor-not-allowed",
 									)}
 									aria-label="Send message"
