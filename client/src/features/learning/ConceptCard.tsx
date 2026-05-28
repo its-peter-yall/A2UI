@@ -81,6 +81,8 @@ interface ConceptCardProps {
   canSkip?: boolean;
   canPrevious?: boolean;
   isTransitioning?: boolean;
+  selectedHeadingIds?: string[];
+  onToggleHeadingChat?: (headingId: string) => void;
 }
 
 export function ConceptCard({
@@ -100,6 +102,8 @@ export function ConceptCard({
   canPrevious = false,
   isTransitioning = false,
   quizResult,
+  selectedHeadingIds = [],
+  onToggleHeadingChat,
 }: ConceptCardProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
@@ -250,7 +254,12 @@ export function ConceptCard({
               {/* VIEWING_EXPLANATION state */}
               {node.status === 'VIEWING_EXPLANATION' && (
                 <div className="space-y-4">
-                  <MarkdownRenderer content={node.content_markdown} />
+                  <MarkdownRenderer
+                    content={node.content_markdown}
+                    selectedHeadingIds={selectedHeadingIds}
+                    onToggleHeadingChat={onToggleHeadingChat}
+                    enableHeadingChat
+                  />
                   <div className="flex justify-between items-center pt-4 border-t">
                     {renderPreviousButton()}
                     <button
@@ -409,7 +418,12 @@ export function ConceptCard({
                       Review explanation
                     </summary>
                     <div className="mt-4 pt-4 border-t">
-                      <MarkdownRenderer content={node.content_markdown} />
+                      <MarkdownRenderer
+                        content={node.content_markdown}
+                        selectedHeadingIds={selectedHeadingIds}
+                        onToggleHeadingChat={onToggleHeadingChat}
+                        enableHeadingChat
+                      />
                     </div>
                   </details>
                   <div className="flex justify-between items-center pt-4 border-t">
@@ -470,7 +484,12 @@ export function ConceptCard({
                         Show partial content (may be incomplete)
                       </summary>
                       <div className="mt-2 p-4 bg-muted/50 rounded border border-dashed">
-                        <MarkdownRenderer content={node.content_markdown} />
+                        <MarkdownRenderer
+                          content={node.content_markdown}
+                          selectedHeadingIds={selectedHeadingIds}
+                          onToggleHeadingChat={onToggleHeadingChat}
+                          enableHeadingChat
+                        />
                       </div>
                     </details>
                   )}
