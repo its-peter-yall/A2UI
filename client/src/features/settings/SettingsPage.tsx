@@ -28,16 +28,38 @@
  * ============================================================================
  */
 
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sun, Moon, Monitor, Check, ArrowLeft } from 'lucide-react';
+import { Sun, Moon, Monitor, Check, ArrowLeft, MessageCircle } from 'lucide-react';
 
 import { useTheme } from '@/hooks/useTheme';
 import { OpenRouterSettingsPanel } from './OpenRouterSettingsPanel';
+import { ModelPicker } from './ModelPicker';
+import {
+  getProviderSettings,
+  setProviderConfig,
+} from '@/lib/providerSettings';
+import type { AIProvider } from '@/types/provider';
 import { cn } from '@/lib/utils';
 
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const [settings, setSettings] = useState(() => getProviderSettings());
+
+  const handleChatModelSelect = useCallback(
+    (_provider: AIProvider, modelId: string, modelTitle: string) => {
+      const currentSettings = getProviderSettings();
+      setProviderConfig(currentSettings.activeProvider, {
+        chatModel: modelId,
+        chatModelTitle: modelTitle,
+      });
+      setSettings(getProviderSettings());
+    },
+    [],
+  );
+
+  const activeConfig = settings.providers[settings.activeProvider];
 
   const themes = [
     {
@@ -165,6 +187,33 @@ export function SettingsPage() {
             </p>
             {/* Always expanded multi-provider config panel */}
             <OpenRouterSettingsPanel />
+          </div>
+        </section>
+
+        {/* Section 3: Chat Assistant Model */}
+        <section className="space-y-4" aria-labelledby="chat-model-heading">
+          <h2 id="chat-model-heading" className="text-lg font-semibold tracking-tight border-b pb-2">
+            <span className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-[#FFD400]" />
+              Chat Assistant Model
+            </span>
+          </h2>
+          <div className="bg-card border border-border p-6 rounded-xl shadow-sm">
+            <p className="text-xs text-muted-foreground mb-4">
+              Select a separate model for the concept chat assistant. If not set, the main generation model is used.
+            </p>
+            <ModelPicker
+              openRouterKey={settings.providers.openrouter.apiKey}
+              generalComputeKey={settings.providers.generalcompute.apiKey}
+              activeProvider={settings.activeProvider}
+              activeModel={activeConfig.chatModel ?? ''}
+              onSelect={handleChatModelSelect}
+            />
+            {activeConfig.chatModelTitle && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Chat model: <span className="font-medium text-foreground">{activeConfig.chatModelTitle}</span>
+              </p>
+            )}
           </div>
         </section>
       </main>
