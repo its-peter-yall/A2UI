@@ -104,13 +104,12 @@ describe("ChatPanel", () => {
 		expect(onClose).toHaveBeenCalledOnce();
 	});
 
-	it("calls onClose when backdrop clicked", () => {
-		const onClose = vi.fn();
-		render(<ChatPanel {...defaultProps} onClose={onClose} />);
-		// Backdrop is the div with onClick={onClose}
+	it("renders inline panel without backdrop overlay", () => {
+		render(<ChatPanel {...defaultProps} />);
+		// Should not have a backdrop overlay (no fixed inset-0)
 		const backdrop = document.querySelector(".fixed.inset-0");
-		expect(backdrop).not.toBeNull();
-		fireEvent.click(backdrop!);
-		expect(onClose).toHaveBeenCalledOnce();
+		expect(backdrop).toBeNull();
+		// Panel should be visible inline
+		expect(screen.getByRole("dialog")).toBeDefined();
 	});
 });

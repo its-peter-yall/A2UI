@@ -79,6 +79,7 @@ import {
 } from "./ErrorStates";
 import { ToastContainer, useErrorToast } from "./useErrorToast";
 import { useLearningMutations } from "./useLearningMutations";
+import { cn } from "@/lib/utils";
 
 interface LearningPathContainerProps {
 	/** Existing session ID to load */
@@ -635,156 +636,170 @@ export function LearningPathContainer({
 					console.error("Learning component crashed:", boundaryError);
 				}}
 			>
-				<div className="flex flex-col gap-6 p-4 mx-auto w-full">
-					{/* Header */}
-					<header className="text-center">
-						<h1 className="text-2xl font-bold">{session.course_title}</h1>
-						<p className="text-muted-foreground mt-1">
-							{session.completed_nodes} of {session.total_nodes} completed
-						</p>
-					</header>
-
-					{/* Progress bar using specialized component */}
-					<ProgressBar
-						nodes={session.nodes}
-						currentNodeId={currentSlideNode?.id}
-						onNodeClick={(nodeId) => {
-							const index = session.nodes.findIndex((n) => n.id === nodeId);
-							if (index >= 0) {
-								goToSlide(index);
-							}
-						}}
-					/>
-
-					{/* Mastery celebration overlay */}
-					<MasteryCelebration
-						active={celebration.active}
-						topicTitle={celebration.topicTitle}
-						isCourseComplete={celebration.isCourseComplete}
-						onComplete={handleCelebrationComplete}
-					/>
-
-					{/* Carousel container with single ConceptCard */}
-					<div
-						className="relative"
-						role="region"
-						aria-roledescription="carousel"
-						aria-label="Learning path carousel"
+				<div className="flex w-full h-[100dvh] overflow-hidden">
+					{/* Main content area - shrinks when chat is open */}
+					<motion.div
+						className="flex flex-col gap-6 p-4 overflow-y-auto"
+						animate={{ flex: isChatOpen ? "1 1 0%" : "1 1 100%" }}
+						transition={{ type: "spring", damping: 30, stiffness: 300 }}
 					>
-						{/* Slide counter */}
-						<div className="flex justify-center mb-4 text-sm text-muted-foreground">
-							<span>
-								Topic {carouselState.currentIndex + 1} of {session.nodes.length}
-							</span>
-						</div>
+						<div className={cn("mx-auto w-full", isChatOpen ? "max-w-3xl" : "max-w-4xl")}>
+							{/* Header */}
+							<header className="text-center">
+								<h1 className="text-2xl font-bold">{session.course_title}</h1>
+								<p className="text-muted-foreground mt-1">
+									{session.completed_nodes} of {session.total_nodes} completed
+								</p>
+							</header>
 
-						{/* Single ConceptCard with direction-aware slide animation */}
-						<div className="relative overflow-hidden">
-							<AnimatePresence
-								mode="wait"
-								custom={carouselState.direction}
-								initial={false}
+							{/* Progress bar using specialized component */}
+							<ProgressBar
+								nodes={session.nodes}
+								currentNodeId={currentSlideNode?.id}
+								onNodeClick={(nodeId) => {
+									const index = session.nodes.findIndex((n) => n.id === nodeId);
+									if (index >= 0) {
+										goToSlide(index);
+									}
+								}}
+							/>
+
+							{/* Mastery celebration overlay */}
+							<MasteryCelebration
+								active={celebration.active}
+								topicTitle={celebration.topicTitle}
+								isCourseComplete={celebration.isCourseComplete}
+								onComplete={handleCelebrationComplete}
+							/>
+
+							{/* Carousel container with single ConceptCard */}
+							<div
+								className="relative"
+								role="region"
+								aria-roledescription="carousel"
+								aria-label="Learning path carousel"
 							>
-								{currentSlideNode && (
-									<motion.div
-										key={currentSlideNode.id}
-										id={`node-${currentSlideNode.id}`}
-										tabIndex={-1}
-										role="group"
-										aria-roledescription="slide"
-										aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
+								{/* Slide counter */}
+								<div className="flex justify-center mb-4 text-sm text-muted-foreground">
+									<span>
+										Topic {carouselState.currentIndex + 1} of{" "}
+										{session.nodes.length}
+									</span>
+								</div>
+
+								{/* Single ConceptCard with direction-aware slide animation */}
+								<div className="relative overflow-hidden">
+									<AnimatePresence
+										mode="wait"
 										custom={carouselState.direction}
-										variants={
-											prefersReducedMotion()
-												? carouselSlideReducedMotionVariants
-												: carouselSlideVariants
-										}
-										initial="enter"
-										animate="center"
-										exit="exit"
-										className="w-full relative"
+										initial={false}
 									>
-										{highlightNodeId === currentSlideNode.id && (
+										{currentSlideNode && (
 											<motion.div
-												className="absolute inset-0 rounded-xl pointer-events-none"
-												initial={{ boxShadow: "0 0 0px rgba(255, 212, 0, 0)" }}
-												animate={{
-													boxShadow: [
-														"0 0 20px rgba(255, 212, 0, 0.6)",
-														"0 0 0px rgba(255, 212, 0, 0)",
-													],
-												}}
-												transition={{ duration: 1.5, ease: "easeOut" }}
-												aria-hidden="true"
-											/>
-										)}
-										<ConceptCard
-											node={currentSlideNode}
-											isActive={currentSlideNode.id === activeNodeId}
-											quizResult={quizResults[currentSlideNode.id]}
-											onProceedToQuiz={proceedToQuiz}
-											onQuizSubmit={submitAnswer}
-											onRetryQuiz={retry}
-											onContinueToNext={handleContinueToNext}
-											onNextQuiz={() => advanceToNextQuiz(currentSlideNode.id)}
-											onPreviousQuiz={goToPreviousQuiz}
-											onRegenerate={regenerate}
-											isRegenerating={isRegenerating}
-											isTransitioning={isTransitioning}
-											canSkip={canGoNext}
-											onSkipNode={() => {
-												if (canGoNext) {
-													goToNext();
+												key={currentSlideNode.id}
+												id={`node-${currentSlideNode.id}`}
+												tabIndex={-1}
+												role="group"
+												aria-roledescription="slide"
+												aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
+												custom={carouselState.direction}
+												variants={
+													prefersReducedMotion()
+														? carouselSlideReducedMotionVariants
+														: carouselSlideVariants
 												}
-											}}
-											onPrevious={goToPrev}
-											canPrevious={canGoPrev}
-											selectedHeadingIds={selectedHeadingIds}
-											onToggleHeadingChat={handleToggleHeadingChat}
-										/>
-									</motion.div>
-								)}
-							</AnimatePresence>
-						</div>
-					</div>
-
-					{/* Loading overlay for mutations */}
-					{isAnyLoading && (
-						<div
-							className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2"
-							role="status"
-							aria-busy="true"
-							aria-label="Loading"
-						>
-							<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-							<span className="text-sm text-muted-foreground">Updating...</span>
-						</div>
-					)}
+												initial="enter"
+												animate="center"
+												exit="exit"
+												className="w-full relative"
+											>
+												{highlightNodeId === currentSlideNode.id && (
+													<motion.div
+														className="absolute inset-0 rounded-xl pointer-events-none"
+														initial={{
+															boxShadow: "0 0 0px rgba(255, 212, 0, 0)",
+														}}
+														animate={{
+															boxShadow: [
+																"0 0 20px rgba(255, 212, 0, 0.6)",
+																"0 0 0px rgba(255, 212, 0, 0)",
+															],
+														}}
+														transition={{ duration: 1.5, ease: "easeOut" }}
+														aria-hidden="true"
+													/>
+												)}
+												<ConceptCard
+													node={currentSlideNode}
+													isActive={currentSlideNode.id === activeNodeId}
+													quizResult={quizResults[currentSlideNode.id]}
+													onProceedToQuiz={proceedToQuiz}
+													onQuizSubmit={submitAnswer}
+													onRetryQuiz={retry}
+													onContinueToNext={handleContinueToNext}
+													onNextQuiz={() =>
+														advanceToNextQuiz(currentSlideNode.id)
+													}
+													onPreviousQuiz={goToPreviousQuiz}
+													onRegenerate={regenerate}
+													isRegenerating={isRegenerating}
+													isTransitioning={isTransitioning}
+													canSkip={canGoNext}
+													onSkipNode={() => {
+														if (canGoNext) {
+															goToNext();
+														}
+													}}
+													onPrevious={goToPrev}
+													canPrevious={canGoPrev}
+													selectedHeadingIds={selectedHeadingIds}
+													onToggleHeadingChat={handleToggleHeadingChat}
+												/>
+											</motion.div>
+										)}
+									</AnimatePresence>
+								</div>
 							</div>
-						</motion.div>
 
-						{/* Chat Panel - slides in from right */}
-						<ChatPanel
-							isOpen={isChatOpen}
-							onClose={() => setIsChatOpen(false)}
-							sessionId={activeSessionId ?? ""}
-							nodeId={currentSlideNode?.id ?? ""}
-							selectedHeadingIds={selectedHeadingIds}
-							onClearHeadings={() => setSelectedHeadingIds([])}
-						/>
-					</div>
-				</LearningErrorBoundary>
+							{/* Loading overlay for mutations */}
+							{isAnyLoading && (
+								<div
+									className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2"
+									role="status"
+									aria-busy="true"
+									aria-label="Loading"
+								>
+									<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+									<span className="text-sm text-muted-foreground">
+										Updating...
+									</span>
+								</div>
+							)}
+						</div>
+					</motion.div>
+
+					{/* Chat Panel - slides in from right */}
+					<ChatPanel
+						isOpen={isChatOpen}
+						onClose={() => setIsChatOpen(false)}
+						sessionId={activeSessionId ?? ""}
+						nodeId={currentSlideNode?.id ?? ""}
+						selectedHeadingIds={selectedHeadingIds}
+						onClearHeadings={() => setSelectedHeadingIds([])}
+					/>
+				</div>
+			</LearningErrorBoundary>
 
 			{/* Chat FAB - bottom-right fixed */}
+			{!isChatOpen && (
 			<button
 				onClick={() => setIsChatOpen(true)}
 				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[var(--cyber-yellow)] text-black shadow-lg hover:bg-[var(--cyber-yellow)]/90 transition-colors flex items-center justify-center"
 				aria-label="Open concept chat"
-				aria-hidden={isChatOpen}
-				tabIndex={isChatOpen ? -1 : 0}
 			>
 				<MessageCircle className="h-6 w-6" />
 			</button>
+			)}
 
 			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
 		</>

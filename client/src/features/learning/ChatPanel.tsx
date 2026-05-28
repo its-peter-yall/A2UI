@@ -179,7 +179,7 @@ export function ChatPanel({
 					exit={{ width: 0, opacity: 0 }}
 					transition={{ type: "spring", damping: 30, stiffness: 300 }}
 					className={cn(
-						"flex-shrink-0 overflow-hidden",
+						"flex-shrink-0 overflow-hidden h-full",
 						"bg-background border-l border-border",
 						"flex flex-col",
 					)}
