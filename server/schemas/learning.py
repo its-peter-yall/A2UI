@@ -1063,3 +1063,53 @@ def convert_legacy_to_quiz_set(legacy_quiz: dict) -> QuizSet:
     - Wraps legacy QuizCard in a QuizSet with single quiz
     """
     return QuizSet(quizzes=[convert_legacy_quiz_card(legacy_quiz)], current_index=0)
+
+
+# =============================================================================
+# CONCEPT CHAT SCHEMAS - Ephemeral in-node chat assistant
+# =============================================================================
+
+
+class ConceptChatMessage(BaseModel):
+    """A single chat message in concept chat history.
+
+    Represents one turn in the ephemeral conversation between user and
+    assistant. Role is constrained to 'user' or 'assistant'.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    role: Literal["user", "assistant"] = Field(
+        ...,
+        description="Role of the message sender",
+    )
+    content: str = Field(
+        ...,
+        description="Message content text",
+        min_length=1,
+    )
+
+
+class ConceptChatRequest(BaseModel):
+    """Request payload for the concept chat endpoint.
+
+    Sends the current user message along with conversation history
+    and optional heading context. History is ephemeral and managed
+    client-side; the server truncates to last 10 messages.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    message: str = Field(
+        ...,
+        description="Current user message to the chat assistant",
+        min_length=1,
+    )
+    history: List[ConceptChatMessage] = Field(
+        default_factory=list,
+        description="Ephemeral conversation history for this node",
+    )
+    selected_heading_ids: List[str] = Field(
+        default_factory=list,
+        description="Heading identifiers selected by the user for context",
+    )
