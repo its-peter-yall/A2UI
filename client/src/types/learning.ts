@@ -287,3 +287,23 @@ export interface RevisionListResponse {
   revisions: RevisionSessionResponse[];
   total_count: number;
 }
+
+// --- Concept Chat types ---
+
+export type ConceptChatRole = 'user' | 'assistant';
+
+export interface ConceptChatMessage {
+  role: ConceptChatRole;
+  content: string;
+}
+
+export interface ConceptChatRequest {
+  message: string;
+  history: ConceptChatMessage[];
+  selectedHeadingIds: string[];
+}
+
+export interface ConceptChatStreamChunk {
+  delta?: string;
+  error?: string;
+}

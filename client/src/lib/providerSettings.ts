@@ -39,6 +39,8 @@ export interface ProviderConfig {
   apiKey: string;
   model: string;
   modelTitle: string;
+  chatModel?: string;
+  chatModelTitle?: string;
   maxCompletionTokens?: number;
   thinking?: ThinkingConfig;
 }
@@ -74,6 +76,8 @@ export function getProviderSettings(): AIProviderSettings {
             apiKey: typeof parsed?.providers?.openrouter?.apiKey === 'string' ? parsed.providers.openrouter.apiKey : '',
             model: typeof parsed?.providers?.openrouter?.model === 'string' ? parsed.providers.openrouter.model : '',
             modelTitle: typeof parsed?.providers?.openrouter?.modelTitle === 'string' ? parsed.providers.openrouter.modelTitle : '',
+            chatModel: typeof parsed?.providers?.openrouter?.chatModel === 'string' ? parsed.providers.openrouter.chatModel : undefined,
+            chatModelTitle: typeof parsed?.providers?.openrouter?.chatModelTitle === 'string' ? parsed.providers.openrouter.chatModelTitle : undefined,
             maxCompletionTokens: parsed?.providers?.openrouter?.maxCompletionTokens ?? undefined,
             thinking: parsed?.providers?.openrouter?.thinking ?? { enabled: false, effort: 'high' },
           },
@@ -81,6 +85,8 @@ export function getProviderSettings(): AIProviderSettings {
             apiKey: typeof parsed?.providers?.generalcompute?.apiKey === 'string' ? parsed.providers.generalcompute.apiKey : '',
             model: typeof parsed?.providers?.generalcompute?.model === 'string' ? parsed.providers.generalcompute.model : '',
             modelTitle: typeof parsed?.providers?.generalcompute?.modelTitle === 'string' ? parsed.providers.generalcompute.modelTitle : '',
+            chatModel: typeof parsed?.providers?.generalcompute?.chatModel === 'string' ? parsed.providers.generalcompute.chatModel : undefined,
+            chatModelTitle: typeof parsed?.providers?.generalcompute?.chatModelTitle === 'string' ? parsed.providers.generalcompute.chatModelTitle : undefined,
             maxCompletionTokens: parsed?.providers?.generalcompute?.maxCompletionTokens ?? undefined,
             thinking: parsed?.providers?.generalcompute?.thinking ?? { enabled: false, effort: 'high' },
           },
