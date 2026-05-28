@@ -36,247 +36,249 @@
  * ============================================================================
  */
 
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, MessageCircle } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useConceptChat } from './useConceptChat';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, Send, MessageCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useConceptChat } from "./useConceptChat";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 
 interface ChatPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
-  sessionId: string;
-  nodeId: string;
-  selectedHeadingIds: string[];
-  onClearHeadings: () => void;
+	isOpen: boolean;
+	onClose: () => void;
+	sessionId: string;
+	nodeId: string;
+	selectedHeadingIds: string[];
+	onClearHeadings: () => void;
 }
 
 export function ChatPanel({
-  isOpen,
-  onClose,
-  sessionId,
-  nodeId,
-  selectedHeadingIds,
-  onClearHeadings,
+	isOpen,
+	onClose,
+	sessionId,
+	nodeId,
+	selectedHeadingIds,
+	onClearHeadings,
 }: ChatPanelProps) {
-  const {
-    messages,
-    isStreaming,
-    error,
-    sendMessage,
-    resetChat,
-    stopStreaming,
-  } = useConceptChat(sessionId, nodeId);
+	const {
+		messages,
+		isStreaming,
+		error,
+		sendMessage,
+		resetChat,
+		stopStreaming,
+	} = useConceptChat(sessionId, nodeId);
 
-  const [input, setInput] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const [input, setInput] = useState("");
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+	// Auto-scroll to bottom on new messages
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [messages]);
 
-  // Reset chat when panel closes
-  useEffect(() => {
-    if (!isOpen) {
-      resetChat();
-      setInput('');
-    }
-  }, [isOpen, resetChat]);
+	// Reset chat when panel closes
+	useEffect(() => {
+		if (!isOpen) {
+			resetChat();
+			setInput("");
+		}
+	}, [isOpen, resetChat]);
 
-  const handleSend = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || isStreaming) return;
-    setInput('');
-    await sendMessage(trimmed, selectedHeadingIds);
-  };
+	const handleSend = async () => {
+		const trimmed = input.trim();
+		if (!trimmed || isStreaming) return;
+		setInput("");
+		await sendMessage(trimmed, selectedHeadingIds);
+	};
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault();
+			handleSend();
+		}
+	};
 
-  // Auto-resize textarea
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    const el = e.target;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
-  };
+	// Auto-resize textarea
+	const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setInput(e.target.value);
+		const el = e.target;
+		el.style.height = "auto";
+		el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+	};
 
-  const canSend = input.trim().length > 0 && !isStreaming;
+	const canSend = input.trim().length > 0 && !isStreaming;
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/30 z-40"
-            onClick={onClose}
-            aria-hidden="true"
-          />
+	return (
+		<AnimatePresence>
+			{isOpen && (
+				<>
+					{/* Backdrop */}
+					<motion.div
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						className="fixed inset-0 bg-black/30 z-40"
+						onClick={onClose}
+						aria-hidden="true"
+					/>
 
-          {/* Drawer */}
-          <motion.div
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className={cn(
-              'fixed top-0 right-0 h-full z-50',
-              'w-full sm:w-[400px]',
-              'bg-background border-l border-border',
-              'flex flex-col shadow-2xl',
-            )}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b">
-              <div className="flex items-center gap-2">
-                <MessageCircle className="h-5 w-5 text-[#FFD400]" />
-                <h2 className="font-semibold text-sm">Ask about this concept</h2>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-md hover:bg-muted transition-colors"
-                aria-label="Close chat panel"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+					{/* Drawer */}
+					<motion.div
+						initial={{ x: "100%" }}
+						animate={{ x: 0 }}
+						exit={{ x: "100%" }}
+						transition={{ type: "spring", damping: 30, stiffness: 300 }}
+						className={cn(
+							"fixed top-0 right-0 h-full z-50",
+							"w-full sm:w-[400px]",
+							"bg-background border-l border-border",
+							"flex flex-col shadow-2xl",
+						)}
+					>
+						{/* Header */}
+						<div className="flex items-center justify-between px-4 py-3 border-b">
+							<div className="flex items-center gap-2">
+								<MessageCircle className="h-5 w-5 text-[#FFD400]" />
+								<h2 className="font-semibold text-sm">
+									Ask about this concept
+								</h2>
+							</div>
+							<button
+								onClick={onClose}
+								className="p-1.5 rounded-md hover:bg-muted transition-colors"
+								aria-label="Close concept chat"
+							>
+								<X className="h-4 w-4" />
+							</button>
+						</div>
 
-            {/* Selected headings indicator */}
-            {selectedHeadingIds.length > 0 && (
-              <div className="px-4 py-2 border-b bg-[#FFD400]/5 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {selectedHeadingIds.length} heading
-                  {selectedHeadingIds.length !== 1 ? 's' : ''} selected
-                </span>
-                <button
-                  onClick={onClearHeadings}
-                  className="text-xs text-[#FFD400] hover:underline"
-                >
-                  Clear selections
-                </button>
-              </div>
-            )}
+						{/* Selected headings indicator */}
+						{selectedHeadingIds.length > 0 && (
+							<div className="px-4 py-2 border-b bg-[#FFD400]/5 flex items-center justify-between">
+								<span className="text-xs text-muted-foreground">
+									{selectedHeadingIds.length} heading
+									{selectedHeadingIds.length !== 1 ? "s" : ""} selected
+								</span>
+								<button
+									onClick={onClearHeadings}
+									className="text-xs text-[#FFD400] hover:underline"
+								>
+									Clear selections
+								</button>
+							</div>
+						)}
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-              {messages.length === 0 && (
-                <div className="text-center text-sm text-muted-foreground py-12">
-                  <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>Ask a question about this concept.</p>
-                  {selectedHeadingIds.length > 0 && (
-                    <p className="mt-1 text-xs">
-                      Focused on {selectedHeadingIds.length} selected heading
-                      {selectedHeadingIds.length !== 1 ? 's' : ''}.
-                    </p>
-                  )}
-                </div>
-              )}
+						{/* Messages */}
+						<div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+							{messages.length === 0 && (
+								<div className="text-center text-sm text-muted-foreground py-12">
+									<MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
+									<p>Ask a question about this concept.</p>
+									{selectedHeadingIds.length > 0 && (
+										<p className="mt-1 text-xs">
+											Focused on {selectedHeadingIds.length} selected heading
+											{selectedHeadingIds.length !== 1 ? "s" : ""}.
+										</p>
+									)}
+								</div>
+							)}
 
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'flex',
-                    msg.role === 'user' ? 'justify-end' : 'justify-start',
-                  )}
-                >
-                  <div
-                    className={cn(
-                      'max-w-[85%] rounded-lg px-3 py-2 text-sm',
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted',
-                    )}
-                  >
-                    {msg.role === 'assistant' ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeRaw, rehypeSanitize]}
-                        >
-                          {msg.content || '...'}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <span>{msg.content}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+							{messages.map((msg, i) => (
+								<div
+									key={i}
+									className={cn(
+										"flex",
+										msg.role === "user" ? "justify-end" : "justify-start",
+									)}
+								>
+									<div
+										className={cn(
+											"max-w-[85%] rounded-lg px-3 py-2 text-sm",
+											msg.role === "user"
+												? "bg-primary text-primary-foreground"
+												: "bg-muted",
+										)}
+									>
+										{msg.role === "assistant" ? (
+											<div className="prose prose-sm dark:prose-invert max-w-none prose-p:text-foreground prose-headings:text-foreground prose-strong:text-foreground prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
+												<ReactMarkdown
+													remarkPlugins={[remarkGfm]}
+													rehypePlugins={[rehypeRaw, rehypeSanitize]}
+												>
+													{msg.content || "..."}
+												</ReactMarkdown>
+											</div>
+										) : (
+											<span>{msg.content}</span>
+										)}
+									</div>
+								</div>
+							))}
 
-              {error && (
-                <div className="text-center text-xs text-destructive py-2">
-                  {error}
-                </div>
-              )}
+							{error && (
+								<div className="text-center text-xs text-destructive py-2">
+									{error}
+								</div>
+							)}
 
-              <div ref={messagesEndRef} />
-            </div>
+							<div ref={messagesEndRef} />
+						</div>
 
-            {/* Input area */}
-            <div className="border-t px-4 py-3">
-              <div className="flex items-end gap-2">
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={handleInputChange}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask a question..."
-                  rows={1}
-                  className={cn(
-                    'flex-1 resize-none rounded-lg px-3 py-2 text-sm',
-                    'bg-muted border border-border text-foreground',
-                    'placeholder:text-muted-foreground',
-                    'focus:outline-none focus:ring-2 focus:ring-primary/50',
-                    'max-h-[120px]',
-                  )}
-                  disabled={isStreaming}
-                />
-                {isStreaming ? (
-                  <button
-                    onClick={stopStreaming}
-                    className={cn(
-                      'p-2.5 rounded-lg transition-colors',
-                      'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-                    )}
-                    aria-label="Stop streaming"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSend}
-                    disabled={!canSend}
-                    className={cn(
-                      'p-2.5 rounded-lg transition-colors',
-                      canSend
-                        ? 'bg-[#FFD400] text-black hover:bg-[#FFD400]/90'
-                        : 'bg-muted text-muted-foreground cursor-not-allowed',
-                    )}
-                    aria-label="Send message"
-                  >
-                    <Send className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
+						{/* Input area */}
+						<div className="border-t px-4 py-3">
+							<div className="flex items-end gap-2">
+								<textarea
+									ref={textareaRef}
+									value={input}
+									onChange={handleInputChange}
+									onKeyDown={handleKeyDown}
+									placeholder="Ask a question..."
+									rows={1}
+									className={cn(
+										"flex-1 resize-none rounded-lg px-3 py-2 text-sm",
+										"bg-muted border border-border text-foreground",
+										"placeholder:text-muted-foreground",
+										"focus:outline-none focus:ring-2 focus:ring-primary/50",
+										"max-h-[120px]",
+									)}
+									disabled={isStreaming}
+								/>
+								{isStreaming ? (
+									<button
+										onClick={stopStreaming}
+										className={cn(
+											"p-2.5 rounded-lg transition-colors",
+											"bg-destructive text-destructive-foreground hover:bg-destructive/90",
+										)}
+										aria-label="Stop streaming"
+									>
+										<X className="h-4 w-4" />
+									</button>
+								) : (
+									<button
+										onClick={handleSend}
+										disabled={!canSend}
+										className={cn(
+											"p-2.5 rounded-lg transition-colors",
+											canSend
+												? "bg-[#FFD400] text-black hover:bg-[#FFD400]/90"
+												: "bg-muted text-muted-foreground cursor-not-allowed",
+										)}
+										aria-label="Send message"
+									>
+										<Send className="h-4 w-4" />
+									</button>
+								)}
+							</div>
+						</div>
+					</motion.div>
+				</>
+			)}
+		</AnimatePresence>
+	);
 }

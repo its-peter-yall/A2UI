@@ -45,690 +45,739 @@
  * ============================================================================
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle } from 'lucide-react';
-import type { LearningSessionWithNodes, QuizSubmitResponse, GenerateCourseRequest } from '@/types/learning';
-import { generateCourse, getLearningSession, updateLastActiveNode } from '@/lib/learningApi';
-import { ConceptCard } from './ConceptCard';
-import { ChatPanel } from './ChatPanel';
-import { LearningErrorBoundary } from './LearningErrorBoundary';
-import { MasteryCelebration } from './animations/MasteryCelebration';
-import { ProgressBar } from './ProgressBar';
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { motion, AnimatePresence } from "framer-motion";
+import { MessageCircle } from "lucide-react";
+import type {
+	LearningSessionWithNodes,
+	QuizSubmitResponse,
+	GenerateCourseRequest,
+} from "@/types/learning";
 import {
-  carouselSlideVariants,
-  carouselSlideReducedMotionVariants,
-  prefersReducedMotion,
-} from './animations';
+	generateCourse,
+	getLearningSession,
+	updateLastActiveNode,
+} from "@/lib/learningApi";
+import { ConceptCard } from "./ConceptCard";
+import { ChatPanel } from "./ChatPanel";
+import { LearningErrorBoundary } from "./LearningErrorBoundary";
+import { MasteryCelebration } from "./animations/MasteryCelebration";
+import { ProgressBar } from "./ProgressBar";
 import {
-  EmptyState,
-  ErrorState,
-  GeneratingState,
-  LoadingState,
-  NotFoundState,
-} from './ErrorStates';
-import { ToastContainer, useErrorToast } from './useErrorToast';
-import { useLearningMutations } from './useLearningMutations';
+	carouselSlideVariants,
+	carouselSlideReducedMotionVariants,
+	prefersReducedMotion,
+} from "./animations";
+import {
+	EmptyState,
+	ErrorState,
+	GeneratingState,
+	LoadingState,
+	NotFoundState,
+} from "./ErrorStates";
+import { ToastContainer, useErrorToast } from "./useErrorToast";
+import { useLearningMutations } from "./useLearningMutations";
 
 interface LearningPathContainerProps {
-  /** Existing session ID to load */
-  sessionId?: string;
-  /** Pre-fetched session data (avoids duplicate fetching) */
-  session?: LearningSessionWithNodes;
-  /** Query to generate new course (if no sessionId) */
-  query?: string;
-  /** Optional user ID for new sessions */
-  userId?: string;
-  /** Initial node ID to scroll to on first load */
-  initialNodeId?: string;
-  /** Callback when course generation completes */
-  onCourseGenerated?: (session: LearningSessionWithNodes) => void;
+	/** Existing session ID to load */
+	sessionId?: string;
+	/** Pre-fetched session data (avoids duplicate fetching) */
+	session?: LearningSessionWithNodes;
+	/** Query to generate new course (if no sessionId) */
+	query?: string;
+	/** Optional user ID for new sessions */
+	userId?: string;
+	/** Initial node ID to scroll to on first load */
+	initialNodeId?: string;
+	/** Callback when course generation completes */
+	onCourseGenerated?: (session: LearningSessionWithNodes) => void;
 }
 
 type CelebrationState = {
-  active: boolean;
-  nodeId?: string;
-  topicTitle?: string;
-  isCourseComplete: boolean;
+	active: boolean;
+	nodeId?: string;
+	topicTitle?: string;
+	isCourseComplete: boolean;
 };
 
 export function LearningPathContainer({
-  sessionId,
-  session: sessionProp,
-  query,
-  userId,
-  initialNodeId,
-  onCourseGenerated,
+	sessionId,
+	session: sessionProp,
+	query,
+	userId,
+	initialNodeId,
+	onCourseGenerated,
 }: LearningPathContainerProps) {
-  const queryClient = useQueryClient();
-  const [generatedSessionId, setGeneratedSessionId] = useState<string | undefined>(
-    undefined
-  );
-  const activeSessionId = sessionId ?? generatedSessionId;
-  const activeSessionKey = activeSessionId ?? 'new';
-  const { toasts, showError, dismissToast } = useErrorToast();
+	const queryClient = useQueryClient();
+	const [generatedSessionId, setGeneratedSessionId] = useState<
+		string | undefined
+	>(undefined);
+	const activeSessionId = sessionId ?? generatedSessionId;
+	const activeSessionKey = activeSessionId ?? "new";
+	const { toasts, showError, dismissToast } = useErrorToast();
 
-  // Chat panel state
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
+	// Chat panel state
+	const [isChatOpen, setIsChatOpen] = useState(false);
+	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
 
-  const handleToggleHeadingChat = useCallback((headingId: string) => {
-    setSelectedHeadingIds((prev) =>
-      prev.includes(headingId)
-        ? prev.filter((id) => id !== headingId)
-        : [...prev, headingId],
-    );
-    setIsChatOpen(true);
-  }, []);
+	const handleToggleHeadingChat = useCallback((headingId: string) => {
+		setSelectedHeadingIds((prev) =>
+			prev.includes(headingId)
+				? prev.filter((id) => id !== headingId)
+				: [...prev, headingId],
+		);
+		setIsChatOpen(true);
+	}, []);
 
-  // Track quiz results for feedback display
-  const [quizResultsBySession, setQuizResultsBySession] = useState<
-    Record<string, Record<string, QuizSubmitResponse>>
-  >({});
-  const quizResults = quizResultsBySession[activeSessionKey] ?? {};
-  
-  // Track celebration state
-  const [celebrationBySession, setCelebrationBySession] = useState<
-    Record<string, CelebrationState>
-  >({});
-  const celebration = celebrationBySession[activeSessionKey] ?? {
-    active: false,
-    isCourseComplete: false,
-  };
+	// Track quiz results for feedback display
+	const [quizResultsBySession, setQuizResultsBySession] = useState<
+		Record<string, Record<string, QuizSubmitResponse>>
+	>({});
+	const quizResults = quizResultsBySession[activeSessionKey] ?? {};
 
-  // Carousel state: track current slide index and navigation direction
-  const [carouselStateBySession, setCarouselStateBySession] = useState<
-    Record<string, { currentIndex: number; direction: number }>
-  >({});
-  const carouselState = carouselStateBySession[activeSessionKey] ?? {
-    currentIndex: 0,
-    direction: 0,
-  };
+	// Track celebration state
+	const [celebrationBySession, setCelebrationBySession] = useState<
+		Record<string, CelebrationState>
+	>({});
+	const celebration = celebrationBySession[activeSessionKey] ?? {
+		active: false,
+		isCourseComplete: false,
+	};
 
-  // Track initialized sessions and previous active node to prevent aggressive auto-advancing
-  const initializedSessionsRef = useRef<Set<string>>(new Set());
-  const previousActiveNodeIndexRef = useRef<number>(-1);
+	// Carousel state: track current slide index and navigation direction
+	const [carouselStateBySession, setCarouselStateBySession] = useState<
+		Record<string, { currentIndex: number; direction: number }>
+	>({});
+	const carouselState = carouselStateBySession[activeSessionKey] ?? {
+		currentIndex: 0,
+		direction: 0,
+	};
 
-  // Highlight state for initial node glow effect
-  const [highlightNodeId, setHighlightNodeId] = useState<string | null>(null);
-  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// Track initialized sessions and previous active node to prevent aggressive auto-advancing
+	const initializedSessionsRef = useRef<Set<string>>(new Set());
+	const previousActiveNodeIndexRef = useRef<number>(-1);
 
-  // Debounced last-active tracking
-  const lastActiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingNodeIdRef = useRef<string | null>(null);
-  const lastFlushedNodeIdRef = useRef<string | null>(null);
+	// Highlight state for initial node glow effect
+	const [highlightNodeId, setHighlightNodeId] = useState<string | null>(null);
+	const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
 
-  // Fetch existing session (skip if provided via props)
-  const {
-    data: fetchedSession,
-    isLoading: isLoadingSession,
-    isError: isSessionError,
-    error: sessionError,
-    refetch: refetchSession,
-  } = useQuery({
-    queryKey: ['learningSession', activeSessionId],
-    queryFn: () => getLearningSession(activeSessionId ?? ''),
-    enabled: !!activeSessionId && !sessionProp,
-    retry: (failureCount, error) => {
-      if (axios.isAxiosError(error) && error.response?.status === 404) {
-        return false;
-      }
-      return failureCount < 2;
-    },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
-  });
+	// Debounced last-active tracking
+	const lastActiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const pendingNodeIdRef = useRef<string | null>(null);
+	const lastFlushedNodeIdRef = useRef<string | null>(null);
 
-  // Use provided session or fetched session
-  const session = sessionProp ?? fetchedSession;
+	// Fetch existing session (skip if provided via props)
+	const {
+		data: fetchedSession,
+		isLoading: isLoadingSession,
+		isError: isSessionError,
+		error: sessionError,
+		refetch: refetchSession,
+	} = useQuery({
+		queryKey: ["learningSession", activeSessionId],
+		queryFn: () => getLearningSession(activeSessionId ?? ""),
+		enabled: !!activeSessionId && !sessionProp,
+		retry: (failureCount, error) => {
+			if (axios.isAxiosError(error) && error.response?.status === 404) {
+				return false;
+			}
+			return failureCount < 2;
+		},
+		retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+	});
 
-  // Generate new course mutation
-  const generateMutation = useMutation({
-    mutationFn: (data: GenerateCourseRequest) => generateCourse(data),
-    onSuccess: (data) => {
-      setGeneratedSessionId(data.id);
-      queryClient.setQueryData(['learningSession', data.id], data);
-      onCourseGenerated?.(data);
-    },
-  });
+	// Use provided session or fetched session
+	const session = sessionProp ?? fetchedSession;
 
-  const handleQuizResult = (result: QuizSubmitResponse) => {
-    setQuizResultsBySession((prev) => ({
-      ...prev,
-      [activeSessionKey]: {
-        ...(prev[activeSessionKey] ?? {}),
-        [result.node_id]: result,
-      },
-    }));
-  };
+	// Generate new course mutation
+	const generateMutation = useMutation({
+		mutationFn: (data: GenerateCourseRequest) => generateCourse(data),
+		onSuccess: (data) => {
+			setGeneratedSessionId(data.id);
+			queryClient.setQueryData(["learningSession", data.id], data);
+			onCourseGenerated?.(data);
+		},
+	});
 
-  const handleRetryNeeded = (nodeId: string, result: QuizSubmitResponse) => {
-    setQuizResultsBySession((prev) => ({
-      ...prev,
-      [activeSessionKey]: {
-        ...(prev[activeSessionKey] ?? {}),
-        [nodeId]: result,
-      },
-    }));
-  };
+	const handleQuizResult = (result: QuizSubmitResponse) => {
+		setQuizResultsBySession((prev) => ({
+			...prev,
+			[activeSessionKey]: {
+				...(prev[activeSessionKey] ?? {}),
+				[result.node_id]: result,
+			},
+		}));
+	};
 
-  const handleMutationError = (error: Error, context: string) => {
-    console.error(`Mutation error (${context}):`, error);
-    // Extract server error message if available
-    const axiosError = error as { response?: { data?: { detail?: string } } };
-    const serverMessage = axiosError?.response?.data?.detail;
-    const displayMessage = serverMessage || `Failed to ${context}. Please try again.`;
-    showError(displayMessage);
-  };
+	const handleRetryNeeded = (nodeId: string, result: QuizSubmitResponse) => {
+		setQuizResultsBySession((prev) => ({
+			...prev,
+			[activeSessionKey]: {
+				...(prev[activeSessionKey] ?? {}),
+				[nodeId]: result,
+			},
+		}));
+	};
 
-  const {
-    proceedToQuiz,
-    submitAnswer,
-    retry,
-    continueToNext,
-    regenerate,
-    advanceToNextQuiz,
-    goToPreviousQuiz,
-    isAnyLoading,
-    isRegenerating,
-    isTransitioning,
-  } = useLearningMutations({
-    sessionId: activeSessionId ?? '',
-    onQuizResult: handleQuizResult,
-    onMasteryAchieved: (nodeId) => {
-      const node = session?.nodes.find((n) => n.id === nodeId);
-      const allOtherCompleted = session?.nodes
-        .filter((n) => n.id !== nodeId)
-        .every((n) => n.status === 'COMPLETED');
-      
-      setCelebrationBySession((prev) => ({
-        ...prev,
-        [activeSessionKey]: {
-          active: true,
-          nodeId,
-          topicTitle: node?.title,
-          isCourseComplete: allOtherCompleted || false,
-        },
-      }));
-    },
-    onRetryNeeded: handleRetryNeeded,
-    onError: handleMutationError,
-  });
+	const handleMutationError = (error: Error, context: string) => {
+		console.error(`Mutation error (${context}):`, error);
+		// Extract server error message if available
+		const axiosError = error as { response?: { data?: { detail?: string } } };
+		const serverMessage = axiosError?.response?.data?.detail;
+		const displayMessage =
+			serverMessage || `Failed to ${context}. Please try again.`;
+		showError(displayMessage);
+	};
 
-  // Find the index of the active node (first non-completed, non-locked)
-  const activeNodeIndex = session?.nodes.findIndex(
-    (n) => n.status !== 'LOCKED' && n.status !== 'COMPLETED'
-  ) ?? -1;
-  const activeNodeId = activeNodeIndex >= 0 ? session?.nodes[activeNodeIndex]?.id : undefined;
+	const {
+		proceedToQuiz,
+		submitAnswer,
+		retry,
+		continueToNext,
+		regenerate,
+		advanceToNextQuiz,
+		goToPreviousQuiz,
+		isAnyLoading,
+		isRegenerating,
+		isTransitioning,
+	} = useLearningMutations({
+		sessionId: activeSessionId ?? "",
+		onQuizResult: handleQuizResult,
+		onMasteryAchieved: (nodeId) => {
+			const node = session?.nodes.find((n) => n.id === nodeId);
+			const allOtherCompleted = session?.nodes
+				.filter((n) => n.id !== nodeId)
+				.every((n) => n.status === "COMPLETED");
 
-  // Initialize carousel index to active node when session loads/changes
-  // Also auto-advance when active node changes (e.g., after completing a topic)
-  useEffect(() => {
-    if (session && session.nodes.length > 0) {
-      const fallbackIndex = activeNodeIndex >= 0 ? activeNodeIndex : 0;
+			setCelebrationBySession((prev) => ({
+				...prev,
+				[activeSessionKey]: {
+					active: true,
+					nodeId,
+					topicTitle: node?.title,
+					isCourseComplete: allOtherCompleted || false,
+				},
+			}));
+		},
+		onRetryNeeded: handleRetryNeeded,
+		onError: handleMutationError,
+	});
 
-      // Check if we haven't initialized this session yet
-      if (!initializedSessionsRef.current.has(activeSessionKey)) {
-        initializedSessionsRef.current.add(activeSessionKey);
+	// Find the index of the active node (first non-completed, non-locked)
+	const activeNodeIndex =
+		session?.nodes.findIndex(
+			(n) => n.status !== "LOCKED" && n.status !== "COMPLETED",
+		) ?? -1;
+	const activeNodeId =
+		activeNodeIndex >= 0 ? session?.nodes[activeNodeIndex]?.id : undefined;
 
-        // Determine initial index: prefer initialNodeId if found
-        let startIndex = fallbackIndex;
-        if (initialNodeId) {
-          const foundIndex = session.nodes.findIndex((n) => n.id === initialNodeId);
-          if (foundIndex >= 0) {
-            startIndex = foundIndex;
-            // Trigger glow highlight on the initial node
-            queueMicrotask(() => setHighlightNodeId(initialNodeId));
-            if (highlightTimeoutRef.current) {
-              clearTimeout(highlightTimeoutRef.current);
-            }
-            highlightTimeoutRef.current = setTimeout(() => {
-              setHighlightNodeId(null);
-              highlightTimeoutRef.current = null;
-            }, 1500);
-          }
-          // If not found, fall back to activeNodeIndex (existing behavior)
-        }
+	// Initialize carousel index to active node when session loads/changes
+	// Also auto-advance when active node changes (e.g., after completing a topic)
+	useEffect(() => {
+		if (session && session.nodes.length > 0) {
+			const fallbackIndex = activeNodeIndex >= 0 ? activeNodeIndex : 0;
 
-        previousActiveNodeIndexRef.current = activeNodeIndex;
-        
-        // Schedule state update in a microtask to avoid synchronous setState in effect
-        queueMicrotask(() => {
-          setCarouselStateBySession((prev) => ({
-            ...prev,
-            [activeSessionKey]: { currentIndex: startIndex, direction: 0 },
-          }));
-        });
-      } else if (
-        activeNodeIndex >= 0 &&
-        activeNodeIndex !== previousActiveNodeIndexRef.current
-      ) {
-        // Only auto-advance if the active node index has ACTUALLY changed
-        // This prevents locking the user to the active node during manual navigation
-        previousActiveNodeIndexRef.current = activeNodeIndex;
-        
-        queueMicrotask(() => {
-          const direction = activeNodeIndex > carouselState.currentIndex ? 1 : -1;
-          setCarouselStateBySession((prev) => ({
-            ...prev,
-            [activeSessionKey]: { currentIndex: activeNodeIndex, direction },
-          }));
-        });
-      }
-    }
-  }, [session, activeNodeIndex, activeSessionKey, carouselState.currentIndex, initialNodeId]);
+			// Check if we haven't initialized this session yet
+			if (!initializedSessionsRef.current.has(activeSessionKey)) {
+				initializedSessionsRef.current.add(activeSessionKey);
 
-  useEffect(() => {
-    return () => {
-      if (highlightTimeoutRef.current) {
-        clearTimeout(highlightTimeoutRef.current);
-      }
-    };
-  }, []);
+				// Determine initial index: prefer initialNodeId if found
+				let startIndex = fallbackIndex;
+				if (initialNodeId) {
+					const foundIndex = session.nodes.findIndex(
+						(n) => n.id === initialNodeId,
+					);
+					if (foundIndex >= 0) {
+						startIndex = foundIndex;
+						// Trigger glow highlight on the initial node
+						queueMicrotask(() => setHighlightNodeId(initialNodeId));
+						if (highlightTimeoutRef.current) {
+							clearTimeout(highlightTimeoutRef.current);
+						}
+						highlightTimeoutRef.current = setTimeout(() => {
+							setHighlightNodeId(null);
+							highlightTimeoutRef.current = null;
+						}, 1500);
+					}
+					// If not found, fall back to activeNodeIndex (existing behavior)
+				}
 
-  // Flush pending last-active update to the server
-  const flushLastActive = useCallback(() => {
-    const nodeIdToFlush = pendingNodeIdRef.current;
-    if (nodeIdToFlush && activeSessionId) {
-      updateLastActiveNode(activeSessionId, nodeIdToFlush)
-        .then(() => {
-          lastFlushedNodeIdRef.current = nodeIdToFlush;
-        })
-        .catch((err) => console.error('Failed to update last active node:', err));
-      pendingNodeIdRef.current = null;
-    }
-    if (lastActiveTimeoutRef.current) {
-      clearTimeout(lastActiveTimeoutRef.current);
-      lastActiveTimeoutRef.current = null;
-    }
-  }, [activeSessionId]);
+				previousActiveNodeIndexRef.current = activeNodeIndex;
 
-  // Track carousel changes with debounce
-  const currentNodeId = session?.nodes[carouselState.currentIndex]?.id;
+				// Schedule state update in a microtask to avoid synchronous setState in effect
+				queueMicrotask(() => {
+					setCarouselStateBySession((prev) => ({
+						...prev,
+						[activeSessionKey]: { currentIndex: startIndex, direction: 0 },
+					}));
+				});
+			} else if (
+				activeNodeIndex >= 0 &&
+				activeNodeIndex !== previousActiveNodeIndexRef.current
+			) {
+				// Only auto-advance if the active node index has ACTUALLY changed
+				// This prevents locking the user to the active node during manual navigation
+				previousActiveNodeIndexRef.current = activeNodeIndex;
 
-  useEffect(() => {
-    if (!currentNodeId || !activeSessionId) return;
+				queueMicrotask(() => {
+					const direction =
+						activeNodeIndex > carouselState.currentIndex ? 1 : -1;
+					setCarouselStateBySession((prev) => ({
+						...prev,
+						[activeSessionKey]: { currentIndex: activeNodeIndex, direction },
+					}));
+				});
+			}
+		}
+	}, [
+		session,
+		activeNodeIndex,
+		activeSessionKey,
+		carouselState.currentIndex,
+		initialNodeId,
+	]);
 
-    // Don't track during initial mount
-    if (!initializedSessionsRef.current.has(activeSessionKey)) return;
-    // Avoid duplicate scheduling when periodic refetches replace session arrays.
-    if (
-      pendingNodeIdRef.current === currentNodeId &&
-      lastActiveTimeoutRef.current
-    ) {
-      return;
-    }
-    // Skip writes when this node is already persisted.
-    if (lastFlushedNodeIdRef.current === currentNodeId) return;
+	useEffect(() => {
+		return () => {
+			if (highlightTimeoutRef.current) {
+				clearTimeout(highlightTimeoutRef.current);
+			}
+		};
+	}, []);
 
-    pendingNodeIdRef.current = currentNodeId;
+	// Flush pending last-active update to the server
+	const flushLastActive = useCallback(() => {
+		const nodeIdToFlush = pendingNodeIdRef.current;
+		if (nodeIdToFlush && activeSessionId) {
+			updateLastActiveNode(activeSessionId, nodeIdToFlush)
+				.then(() => {
+					lastFlushedNodeIdRef.current = nodeIdToFlush;
+				})
+				.catch((err) =>
+					console.error("Failed to update last active node:", err),
+				);
+			pendingNodeIdRef.current = null;
+		}
+		if (lastActiveTimeoutRef.current) {
+			clearTimeout(lastActiveTimeoutRef.current);
+			lastActiveTimeoutRef.current = null;
+		}
+	}, [activeSessionId]);
 
-    if (lastActiveTimeoutRef.current) {
-      clearTimeout(lastActiveTimeoutRef.current);
-    }
+	// Track carousel changes with debounce
+	const currentNodeId = session?.nodes[carouselState.currentIndex]?.id;
 
-    lastActiveTimeoutRef.current = setTimeout(() => {
-      flushLastActive();
-    }, 2000);
-  }, [currentNodeId, activeSessionId, activeSessionKey, flushLastActive]);
+	useEffect(() => {
+		if (!currentNodeId || !activeSessionId) return;
 
-  // Flush on unmount
-  useEffect(() => {
-    return () => {
-      flushLastActive();
-    };
-  }, [flushLastActive]);
+		// Don't track during initial mount
+		if (!initializedSessionsRef.current.has(activeSessionKey)) return;
+		// Avoid duplicate scheduling when periodic refetches replace session arrays.
+		if (
+			pendingNodeIdRef.current === currentNodeId &&
+			lastActiveTimeoutRef.current
+		) {
+			return;
+		}
+		// Skip writes when this node is already persisted.
+		if (lastFlushedNodeIdRef.current === currentNodeId) return;
 
-  // Carousel navigation functions
-  const goToSlide = useCallback((index: number) => {
-    if (!session) return;
-    const clampedIndex = Math.max(0, Math.min(index, session.nodes.length - 1));
-    const currentIndex = carouselState.currentIndex;
-    const direction = clampedIndex > currentIndex ? 1 : clampedIndex < currentIndex ? -1 : 0;
+		pendingNodeIdRef.current = currentNodeId;
 
-    setCarouselStateBySession((prev) => ({
-      ...prev,
-      [activeSessionKey]: { currentIndex: clampedIndex, direction },
-    }));
-  }, [session, carouselState.currentIndex, activeSessionKey]);
+		if (lastActiveTimeoutRef.current) {
+			clearTimeout(lastActiveTimeoutRef.current);
+		}
 
-  const goToNext = useCallback(() => {
-    goToSlide(carouselState.currentIndex + 1);
-  }, [goToSlide, carouselState.currentIndex]);
+		lastActiveTimeoutRef.current = setTimeout(() => {
+			flushLastActive();
+		}, 2000);
+	}, [currentNodeId, activeSessionId, activeSessionKey, flushLastActive]);
 
-  const goToPrev = useCallback(() => {
-    goToSlide(carouselState.currentIndex - 1);
-  }, [goToSlide, carouselState.currentIndex]);
+	// Flush on unmount
+	useEffect(() => {
+		return () => {
+			flushLastActive();
+		};
+	}, [flushLastActive]);
 
-  // Keyboard navigation handler
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if user is typing in an input or textarea
-      const target = event.target as HTMLElement;
-      const isInput =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable;
-      
-      // Also ignore if modifier keys are pressed (e.g. Alt+Left for browser back)
-      if (isInput || event.altKey || event.ctrlKey || event.metaKey) {
-        return;
-      }
+	// Carousel navigation functions
+	const goToSlide = useCallback(
+		(index: number) => {
+			if (!session) return;
+			const clampedIndex = Math.max(
+				0,
+				Math.min(index, session.nodes.length - 1),
+			);
+			const currentIndex = carouselState.currentIndex;
+			const direction =
+				clampedIndex > currentIndex ? 1 : clampedIndex < currentIndex ? -1 : 0;
 
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        goToPrev();
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        goToNext();
-      }
-    };
+			setCarouselStateBySession((prev) => ({
+				...prev,
+				[activeSessionKey]: { currentIndex: clampedIndex, direction },
+			}));
+		},
+		[session, carouselState.currentIndex, activeSessionKey],
+	);
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNext, goToPrev]);
+	const goToNext = useCallback(() => {
+		goToSlide(carouselState.currentIndex + 1);
+	}, [goToSlide, carouselState.currentIndex]);
 
-  // Get current slide node
-  const currentSlideNode = session?.nodes[carouselState.currentIndex];
-  const canGoNext = session ? carouselState.currentIndex < session.nodes.length - 1 : false;
-  const canGoPrev = carouselState.currentIndex > 0;
+	const goToPrev = useCallback(() => {
+		goToSlide(carouselState.currentIndex - 1);
+	}, [goToSlide, carouselState.currentIndex]);
 
-  // Handle continue to next (manual button click, not auto-scroll)
-  const handleContinueToNext = useCallback((nodeId: string) => {
-    const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
-    const nextNode = session?.nodes[nodeIndex + 1];
-    
-    // Always call continueToNext to complete the current node
-    // Pass nextNode.id only if it exists
-    continueToNext(nodeId, nextNode?.id);
-  }, [session?.nodes, continueToNext]);
+	// Keyboard navigation handler
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			// Ignore if user is typing in an input or textarea
+			const target = event.target as HTMLElement;
+			const isInput =
+				target.tagName === "INPUT" ||
+				target.tagName === "TEXTAREA" ||
+				target.isContentEditable;
 
-  // Handle celebration completion
-  const handleCelebrationComplete = () => {
-    setCelebrationBySession((prev) => ({
-      ...prev,
-      [activeSessionKey]: { active: false, isCourseComplete: false },
-    }));
-    // Note: We do NOT auto-advance here. The user must click
-    // "Continue to Next Topic" in QuizFeedback to proceed.
-  };
+			// Also ignore if modifier keys are pressed (e.g. Alt+Left for browser back)
+			if (isInput || event.altKey || event.ctrlKey || event.metaKey) {
+				return;
+			}
 
-  // Auto-generate if query provided but no sessionId
-  const shouldGenerate = !activeSessionId && !!query;
-  const shouldAutoGenerate =
-    shouldGenerate &&
-    !generateMutation.isPending &&
-    !generateMutation.isError &&
-    !generateMutation.isSuccess;
+			if (event.key === "ArrowLeft") {
+				event.preventDefault();
+				goToPrev();
+			} else if (event.key === "ArrowRight") {
+				event.preventDefault();
+				goToNext();
+			}
+		};
 
-  useEffect(() => {
-    if (!shouldAutoGenerate || !query) {
-      return;
-    }
-    generateMutation.mutate({ query, user_id: userId });
-  }, [query, shouldAutoGenerate, userId, generateMutation]);
+		window.addEventListener("keydown", handleKeyDown);
+		return () => window.removeEventListener("keydown", handleKeyDown);
+	}, [goToNext, goToPrev]);
 
-  const isGenerating =
-    generateMutation.isPending ||
-    (shouldGenerate && !generateMutation.data && !generateMutation.isError);
+	// Get current slide node
+	const currentSlideNode = session?.nodes[carouselState.currentIndex];
+	const canGoNext = session
+		? carouselState.currentIndex < session.nodes.length - 1
+		: false;
+	const canGoPrev = carouselState.currentIndex > 0;
 
-  if (isGenerating) {
-    return (
-      <>
-        <GeneratingState />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
+	// Handle continue to next (manual button click, not auto-scroll)
+	const handleContinueToNext = useCallback(
+		(nodeId: string) => {
+			const nodeIndex = session?.nodes.findIndex((n) => n.id === nodeId) ?? -1;
+			const nextNode = session?.nodes[nodeIndex + 1];
 
-  if (!sessionProp && isLoadingSession) {
-    return (
-      <>
-        <LoadingState message="Loading your learning session..." />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
+			// Always call continueToNext to complete the current node
+			// Pass nextNode.id only if it exists
+			continueToNext(nodeId, nextNode?.id);
+		},
+		[session?.nodes, continueToNext],
+	);
 
-  const error = sessionError || generateMutation.error;
-  if (error) {
-    const isGenerateError = Boolean(generateMutation.error && !activeSessionId);
-    const isNotFound =
-      isSessionError &&
-      axios.isAxiosError(error) &&
-      error.response?.status === 404;
+	// Handle celebration completion
+	const handleCelebrationComplete = () => {
+		setCelebrationBySession((prev) => ({
+			...prev,
+			[activeSessionKey]: { active: false, isCourseComplete: false },
+		}));
+		// Note: We do NOT auto-advance here. The user must click
+		// "Continue to Next Topic" in QuizFeedback to proceed.
+	};
 
-    if (isNotFound) {
-      return (
-        <>
-          <NotFoundState type="session" />
-          <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-        </>
-      );
-    }
+	// Auto-generate if query provided but no sessionId
+	const shouldGenerate = !activeSessionId && !!query;
+	const shouldAutoGenerate =
+		shouldGenerate &&
+		!generateMutation.isPending &&
+		!generateMutation.isError &&
+		!generateMutation.isSuccess;
 
-    return (
-      <>
-        <ErrorState
-          title={isGenerateError ? 'Failed to generate course' : 'Failed to load session'}
-          message={
-            isGenerateError
-              ? "We couldn't generate your learning path. Please try again."
-              : "We couldn't load your learning session. Please try again."
-          }
-          onRetry={() => {
-            if (activeSessionId && refetchSession) {
-              refetchSession();
-              return;
-            }
-            if (query) {
-              generateMutation.mutate({ query, user_id: userId });
-            }
-          }}
-        />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
+	useEffect(() => {
+		if (!shouldAutoGenerate || !query) {
+			return;
+		}
+		generateMutation.mutate({ query, user_id: userId });
+	}, [query, shouldAutoGenerate, userId, generateMutation]);
 
-  if (!session) {
-    return (
-      <>
-        <NotFoundState type="session" />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
+	const isGenerating =
+		generateMutation.isPending ||
+		(shouldGenerate && !generateMutation.data && !generateMutation.isError);
 
-  if (session.nodes.length === 0) {
-    return (
-      <>
-        <EmptyState
-          title="No topics yet"
-          message="This learning path doesn't have any topics."
-          action={
-            query
-              ? {
-                  label: 'Generate Topics',
-                  onClick: () =>
-                    generateMutation.mutate({ query, user_id: userId }),
-                }
-              : undefined
-          }
-        />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
+	if (isGenerating) {
+		return (
+			<>
+				<GeneratingState />
+				<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+			</>
+		);
+	}
 
-  const allNodesError = session.nodes.every((node) => node.status === 'ERROR');
-  if (allNodesError) {
-    return (
-      <>
-        <ErrorState
-          title="Generation failed"
-          message="All topics failed to generate. Please try again."
-          onRetry={() => {
-            if (activeSessionId && refetchSession) {
-              refetchSession();
-              return;
-            }
-            if (query) {
-              generateMutation.mutate({ query, user_id: userId });
-            }
-          }}
-          showHomeLink
-        />
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-      </>
-    );
-  }
+	if (!sessionProp && isLoadingSession) {
+		return (
+			<>
+				<LoadingState message="Loading your learning session..." />
+				<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+			</>
+		);
+	}
 
-  // Render learning path
-  return (
-    <>
-      <LearningErrorBoundary
-        onError={(boundaryError: Error) => {
-          console.error('Learning component crashed:', boundaryError);
-        }}
-      >
-        <div className="flex flex-col gap-6 p-4 max-w-4xl mx-auto">
-          {/* Header */}
-          <header className="text-center">
-            <h1 className="text-2xl font-bold">{session.course_title}</h1>
-            <p className="text-muted-foreground mt-1">
-              {session.completed_nodes} of {session.total_nodes} completed
-            </p>
-          </header>
+	const error = sessionError || generateMutation.error;
+	if (error) {
+		const isGenerateError = Boolean(generateMutation.error && !activeSessionId);
+		const isNotFound =
+			isSessionError &&
+			axios.isAxiosError(error) &&
+			error.response?.status === 404;
 
-          {/* Progress bar using specialized component */}
-          <ProgressBar
-            nodes={session.nodes}
-            currentNodeId={currentSlideNode?.id}
-            onNodeClick={(nodeId) => {
-              const index = session.nodes.findIndex((n) => n.id === nodeId);
-              if (index >= 0) {
-                goToSlide(index);
-              }
-            }}
-          />
+		if (isNotFound) {
+			return (
+				<>
+					<NotFoundState type="session" />
+					<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+				</>
+			);
+		}
 
-          {/* Mastery celebration overlay */}
-          <MasteryCelebration
-            active={celebration.active}
-            topicTitle={celebration.topicTitle}
-            isCourseComplete={celebration.isCourseComplete}
-            onComplete={handleCelebrationComplete}
-          />
+		return (
+			<>
+				<ErrorState
+					title={
+						isGenerateError
+							? "Failed to generate course"
+							: "Failed to load session"
+					}
+					message={
+						isGenerateError
+							? "We couldn't generate your learning path. Please try again."
+							: "We couldn't load your learning session. Please try again."
+					}
+					onRetry={() => {
+						if (activeSessionId && refetchSession) {
+							refetchSession();
+							return;
+						}
+						if (query) {
+							generateMutation.mutate({ query, user_id: userId });
+						}
+					}}
+				/>
+				<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+			</>
+		);
+	}
 
-          {/* Carousel container with single ConceptCard */}
-          <div
-            className="relative"
-            role="region"
-            aria-roledescription="carousel"
-            aria-label="Learning path carousel"
-          >
-            {/* Slide counter */}
-            <div className="flex justify-center mb-4 text-sm text-muted-foreground">
-              <span>
-                Topic {carouselState.currentIndex + 1} of {session.nodes.length}
-              </span>
-            </div>
+	if (!session) {
+		return (
+			<>
+				<NotFoundState type="session" />
+				<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+			</>
+		);
+	}
 
-            {/* Single ConceptCard with direction-aware slide animation */}
-            <div className="relative overflow-hidden">
-              <AnimatePresence
-                mode="wait"
-                custom={carouselState.direction}
-                initial={false}
-              >
-                {currentSlideNode && (
-                  <motion.div
-                    key={currentSlideNode.id}
-                    id={`node-${currentSlideNode.id}`}
-                    tabIndex={-1}
-                    role="group"
-                    aria-roledescription="slide"
-                    aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
-                    custom={carouselState.direction}
-                    variants={prefersReducedMotion()
-                      ? carouselSlideReducedMotionVariants
-                      : carouselSlideVariants}
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                    className="w-full relative"
-                  >
-                    {highlightNodeId === currentSlideNode.id && (
-                      <motion.div
-                        className="absolute inset-0 rounded-xl pointer-events-none"
-                        initial={{ boxShadow: '0 0 0px rgba(255, 212, 0, 0)' }}
-                        animate={{ boxShadow: ['0 0 20px rgba(255, 212, 0, 0.6)', '0 0 0px rgba(255, 212, 0, 0)'] }}
-                        transition={{ duration: 1.5, ease: 'easeOut' }}
-                        aria-hidden="true"
-                      />
-                    )}
-                    <ConceptCard
-                      node={currentSlideNode}
-                      isActive={currentSlideNode.id === activeNodeId}
-                      quizResult={quizResults[currentSlideNode.id]}
-                      onProceedToQuiz={proceedToQuiz}
-                      onQuizSubmit={submitAnswer}
-                      onRetryQuiz={retry}
-                      onContinueToNext={handleContinueToNext}
-                      onNextQuiz={() => advanceToNextQuiz(currentSlideNode.id)}
-                      onPreviousQuiz={goToPreviousQuiz}
-                      onRegenerate={regenerate}
-                      isRegenerating={isRegenerating}
-                      isTransitioning={isTransitioning}
-                      canSkip={canGoNext}
-                      onSkipNode={() => {
-                        if (canGoNext) {
-                          goToNext();
-                        }
-                      }}
-                      onPrevious={goToPrev}
-                      canPrevious={canGoPrev}
-                      selectedHeadingIds={selectedHeadingIds}
-                      onToggleHeadingChat={handleToggleHeadingChat}
-                    />
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+	if (session.nodes.length === 0) {
+		return (
+			<>
+				<EmptyState
+					title="No topics yet"
+					message="This learning path doesn't have any topics."
+					action={
+						query
+							? {
+									label: "Generate Topics",
+									onClick: () =>
+										generateMutation.mutate({ query, user_id: userId }),
+								}
+							: undefined
+					}
+				/>
+				<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+			</>
+		);
+	}
 
-          {/* Loading overlay for mutations */}
-          {isAnyLoading && (
-            <div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-              <span className="text-sm text-muted-foreground">Updating...</span>
-            </div>
-          )}
-        </div>
-      </LearningErrorBoundary>
+	const allNodesError = session.nodes.every((node) => node.status === "ERROR");
+	if (allNodesError) {
+		return (
+			<>
+				<ErrorState
+					title="Generation failed"
+					message="All topics failed to generate. Please try again."
+					onRetry={() => {
+						if (activeSessionId && refetchSession) {
+							refetchSession();
+							return;
+						}
+						if (query) {
+							generateMutation.mutate({ query, user_id: userId });
+						}
+					}}
+					showHomeLink
+				/>
+				<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+			</>
+		);
+	}
 
-      {/* Chat FAB - bottom-right fixed */}
-      <button
-        onClick={() => setIsChatOpen(true)}
-        className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[#FFD400] text-black shadow-lg hover:bg-[#FFD400]/90 transition-colors flex items-center justify-center"
-        aria-label="Open chat"
-      >
-        <MessageCircle className="h-6 w-6" />
-      </button>
+	// Render learning path
+	return (
+		<>
+			<LearningErrorBoundary
+				onError={(boundaryError: Error) => {
+					console.error("Learning component crashed:", boundaryError);
+				}}
+			>
+				<div className="flex flex-col gap-6 p-4 max-w-4xl mx-auto">
+					{/* Header */}
+					<header className="text-center">
+						<h1 className="text-2xl font-bold">{session.course_title}</h1>
+						<p className="text-muted-foreground mt-1">
+							{session.completed_nodes} of {session.total_nodes} completed
+						</p>
+					</header>
 
-      {/* Chat Panel Drawer */}
-      <ChatPanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        sessionId={activeSessionId ?? ''}
-        nodeId={currentSlideNode?.id ?? ''}
-        selectedHeadingIds={selectedHeadingIds}
-        onClearHeadings={() => setSelectedHeadingIds([])}
-      />
+					{/* Progress bar using specialized component */}
+					<ProgressBar
+						nodes={session.nodes}
+						currentNodeId={currentSlideNode?.id}
+						onNodeClick={(nodeId) => {
+							const index = session.nodes.findIndex((n) => n.id === nodeId);
+							if (index >= 0) {
+								goToSlide(index);
+							}
+						}}
+					/>
 
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-    </>
-  );
+					{/* Mastery celebration overlay */}
+					<MasteryCelebration
+						active={celebration.active}
+						topicTitle={celebration.topicTitle}
+						isCourseComplete={celebration.isCourseComplete}
+						onComplete={handleCelebrationComplete}
+					/>
+
+					{/* Carousel container with single ConceptCard */}
+					<div
+						className="relative"
+						role="region"
+						aria-roledescription="carousel"
+						aria-label="Learning path carousel"
+					>
+						{/* Slide counter */}
+						<div className="flex justify-center mb-4 text-sm text-muted-foreground">
+							<span>
+								Topic {carouselState.currentIndex + 1} of {session.nodes.length}
+							</span>
+						</div>
+
+						{/* Single ConceptCard with direction-aware slide animation */}
+						<div className="relative overflow-hidden">
+							<AnimatePresence
+								mode="wait"
+								custom={carouselState.direction}
+								initial={false}
+							>
+								{currentSlideNode && (
+									<motion.div
+										key={currentSlideNode.id}
+										id={`node-${currentSlideNode.id}`}
+										tabIndex={-1}
+										role="group"
+										aria-roledescription="slide"
+										aria-label={`${currentSlideNode.title}, slide ${carouselState.currentIndex + 1} of ${session.nodes.length}`}
+										custom={carouselState.direction}
+										variants={
+											prefersReducedMotion()
+												? carouselSlideReducedMotionVariants
+												: carouselSlideVariants
+										}
+										initial="enter"
+										animate="center"
+										exit="exit"
+										className="w-full relative"
+									>
+										{highlightNodeId === currentSlideNode.id && (
+											<motion.div
+												className="absolute inset-0 rounded-xl pointer-events-none"
+												initial={{ boxShadow: "0 0 0px rgba(255, 212, 0, 0)" }}
+												animate={{
+													boxShadow: [
+														"0 0 20px rgba(255, 212, 0, 0.6)",
+														"0 0 0px rgba(255, 212, 0, 0)",
+													],
+												}}
+												transition={{ duration: 1.5, ease: "easeOut" }}
+												aria-hidden="true"
+											/>
+										)}
+										<ConceptCard
+											node={currentSlideNode}
+											isActive={currentSlideNode.id === activeNodeId}
+											quizResult={quizResults[currentSlideNode.id]}
+											onProceedToQuiz={proceedToQuiz}
+											onQuizSubmit={submitAnswer}
+											onRetryQuiz={retry}
+											onContinueToNext={handleContinueToNext}
+											onNextQuiz={() => advanceToNextQuiz(currentSlideNode.id)}
+											onPreviousQuiz={goToPreviousQuiz}
+											onRegenerate={regenerate}
+											isRegenerating={isRegenerating}
+											isTransitioning={isTransitioning}
+											canSkip={canGoNext}
+											onSkipNode={() => {
+												if (canGoNext) {
+													goToNext();
+												}
+											}}
+											onPrevious={goToPrev}
+											canPrevious={canGoPrev}
+											selectedHeadingIds={selectedHeadingIds}
+											onToggleHeadingChat={handleToggleHeadingChat}
+										/>
+									</motion.div>
+								)}
+							</AnimatePresence>
+						</div>
+					</div>
+
+					{/* Loading overlay for mutations */}
+					{isAnyLoading && (
+						<div className="fixed bottom-4 right-4 bg-background border rounded-lg shadow-lg p-3 flex items-center gap-2">
+							<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+							<span className="text-sm text-muted-foreground">Updating...</span>
+						</div>
+					)}
+				</div>
+			</LearningErrorBoundary>
+
+			{/* Chat FAB - bottom-right fixed */}
+			<button
+				onClick={() => setIsChatOpen(true)}
+				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-[#FFD400] text-black shadow-lg hover:bg-[#FFD400]/90 transition-colors flex items-center justify-center"
+				aria-label="Open concept chat"
+			>
+				<MessageCircle className="h-6 w-6" />
+			</button>
+
+			{/* Chat Panel Drawer */}
+			<ChatPanel
+				isOpen={isChatOpen}
+				onClose={() => setIsChatOpen(false)}
+				sessionId={activeSessionId ?? ""}
+				nodeId={currentSlideNode?.id ?? ""}
+				selectedHeadingIds={selectedHeadingIds}
+				onClearHeadings={() => setSelectedHeadingIds([])}
+			/>
+
+			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
+		</>
+	);
 }
