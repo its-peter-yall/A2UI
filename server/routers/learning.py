@@ -1048,7 +1048,7 @@ async def concept_chat(
     session_id: str,
     node_id: str,
     request_body: ConceptChatRequest,
-    x_provider_api_key: str = Header(..., alias="X-Provider-Api-Key"),
+    x_provider_api_key: Optional[str] = Header(None, alias="X-Provider-Api-Key"),
     x_model: str = Header(None, alias="X-Model"),
     x_chat_model: str = Header(None, alias="X-Chat-Model"),
 ) -> StreamingResponse:
