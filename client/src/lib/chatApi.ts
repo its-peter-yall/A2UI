@@ -35,20 +35,20 @@
  * ============================================================================
  */
 
-import { getProviderSettings } from './providerSettings';
-import { buildProviderHeaders } from './providerApi';
-import type { ConceptChatMessage } from '@/types/learning';
+import { getProviderSettings } from "./providerSettings";
+import { buildProviderHeaders } from "./providerApi";
+import type { ConceptChatMessage } from "@/types/learning";
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 interface StreamConceptChatParams {
-  sessionId: string;
-  nodeId: string;
-  message: string;
-  history: ConceptChatMessage[];
-  selectedHeadingIds: string[];
-  onDelta: (delta: string) => void;
-  signal?: AbortSignal;
+	sessionId: string;
+	nodeId: string;
+	message: string;
+	history: ConceptChatMessage[];
+	selectedHeadingIds: string[];
+	onDelta: (delta: string) => void;
+	signal?: AbortSignal;
 }
 
 /**
@@ -59,92 +59,100 @@ interface StreamConceptChatParams {
  * the server sends the `[DONE]` sentinel.
  */
 export async function streamConceptChat({
-  sessionId,
-  nodeId,
-  message,
-  history,
-  selectedHeadingIds,
-  onDelta,
-  signal,
+	sessionId,
+	nodeId,
+	message,
+	history,
+	selectedHeadingIds,
+	onDelta,
+	signal,
 }: StreamConceptChatParams): Promise<void> {
-  const settings = getProviderSettings();
-  const activeConfig = settings.providers[settings.activeProvider];
-  const providerHeaders = buildProviderHeaders(
-    settings.activeProvider,
-    activeConfig.apiKey,
-    activeConfig.model || undefined,
-    activeConfig.thinking,
-    activeConfig.maxCompletionTokens,
-  );
+	const settings = getProviderSettings();
+	const activeConfig = settings.providers[settings.activeProvider];
+	const providerHeaders = buildProviderHeaders(
+		settings.activeProvider,
+		activeConfig.apiKey,
+		activeConfig.model || undefined,
+		activeConfig.thinking,
+		activeConfig.maxCompletionTokens,
+	);
 
-  const chatModel = activeConfig.chatModel || activeConfig.model || '';
+	const chatModel = activeConfig.chatModel || activeConfig.model || "";
 
-  const url = `${BASE_URL}/learning/sessions/${sessionId}/nodes/${nodeId}/chat`;
+	const url = `${BASE_URL}/learning/sessions/${sessionId}/nodes/${nodeId}/chat`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...providerHeaders,
-      'X-Chat-Model': chatModel,
-    },
-    body: JSON.stringify({
-      message,
-      history,
-      selected_heading_ids: selectedHeadingIds,
-    }),
-    signal,
-  });
+	const response = await fetch(url, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			...providerHeaders,
+			"X-Provider-Api-Key": activeConfig.apiKey,
+			"X-Model": activeConfig.model || "",
+			"X-Chat-Model": chatModel,
+		},
+		body: JSON.stringify({
+			message,
+			history,
+			selected_heading_ids: selectedHeadingIds,
+		}),
+		signal,
+	});
 
-  if (!response.ok) {
-    throw new Error(
-      `Chat request failed: ${response.status} ${response.statusText}`,
-    );
-  }
+	if (!response.ok) {
+		throw new Error(
+			`Chat request failed: ${response.status} ${response.statusText}`,
+		);
+	}
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('Response body is not readable');
-  }
+	const reader = response.body?.getReader();
+	if (!reader) {
+		throw new Error("Response body is not readable");
+	}
 
-  const decoder = new TextDecoder();
-  let buffer = '';
+	const decoder = new TextDecoder();
+	let buffer = "";
 
-  try {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+	try {
+		// eslint-disable-next-line no-constant-condition
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      // Keep last incomplete line in buffer
-      buffer = lines.pop() ?? '';
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split("\n");
+			// Keep last incomplete line in buffer
+			buffer = lines.pop() ?? "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (!trimmed || !trimmed.startsWith("data: ")) continue;
 
-        const payload = trimmed.slice(6);
-        if (payload === '[DONE]') return;
+				const payload = trimmed.slice(6);
+				if (payload === "[DONE]") return;
 
-        try {
-          const parsed = JSON.parse(payload) as { delta?: string; error?: string };
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          }
-          if (parsed.delta) {
-            onDelta(parsed.delta);
-          }
-        } catch (e) {
-          // Re-throw streaming errors, skip malformed JSON
-          if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
-            throw e;
-          }
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
+				try {
+					const parsed = JSON.parse(payload) as {
+						delta?: string;
+						error?: string;
+					};
+					if (parsed.error) {
+						throw new Error(parsed.error);
+					}
+					if (parsed.delta) {
+						onDelta(parsed.delta);
+					}
+				} catch (e) {
+					// Re-throw streaming errors, skip malformed JSON
+					if (
+						e instanceof Error &&
+						e.message !== "Unexpected end of JSON input"
+					) {
+						throw e;
+					}
+				}
+			}
+		}
+	} finally {
+		reader.releaseLock();
+	}
 }
