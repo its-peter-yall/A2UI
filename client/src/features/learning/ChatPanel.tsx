@@ -275,7 +275,7 @@ export function ChatPanel({
 							>
 								<div
 									className={cn(
-										"max-w-[85%] rounded-lg px-3 py-2 text-sm",
+										"max-w-[85%] rounded-lg px-3 py-2 text-[15px]",
 										msg.role === "user"
 											? "bg-primary text-primary-foreground"
 											: "bg-muted",
@@ -285,7 +285,7 @@ export function ChatPanel({
 										msg.content ? (
 											<MarkdownRenderer
 												content={msg.content}
-												className="prose-sm text-[13.5px] leading-relaxed max-w-none"
+												className="text-[15px] leading-relaxed max-w-none"
 											/>
 										) : (
 											<TypingIndicator />

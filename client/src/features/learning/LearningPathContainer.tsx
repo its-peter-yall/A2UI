@@ -79,7 +79,6 @@ import {
 } from "./ErrorStates";
 import { ToastContainer, useErrorToast } from "./useErrorToast";
 import { useLearningMutations } from "./useLearningMutations";
-import { cn } from "@/lib/utils";
 
 interface LearningPathContainerProps {
 	/** Existing session ID to load */
@@ -423,6 +422,11 @@ export function LearningPathContainer({
 				...prev,
 				[activeSessionKey]: { currentIndex: clampedIndex, direction },
 			}));
+
+			// Close chat panel when navigating to a quiz node
+			if (session.nodes[clampedIndex]?.status === "IN_QUIZ") {
+				setIsChatOpen(false);
+			}
 		},
 		[session, carouselState.currentIndex, activeSessionKey],
 	);
@@ -637,13 +641,13 @@ export function LearningPathContainer({
 				}}
 			>
 				<div className="flex w-full h-full overflow-hidden">
-					{/* Main content area - shrinks when chat is open */}
-					<motion.div
-						className="flex flex-col gap-6 p-4 overflow-y-auto"
-						animate={{ flex: isChatOpen ? "1 1 0%" : "1 1 100%" }}
-						transition={{ type: "spring", damping: 30, stiffness: 300 }}
-					>
-						<div className={cn("mx-auto w-full", isChatOpen ? "max-w-5xl" : "max-w-6xl")}>
+				{/* Main content area - shrinks when chat is open */}
+				<motion.div
+					className={`flex flex-col gap-6 overflow-y-auto ${isChatOpen ? "py-4" : "p-4"}`}
+					animate={{ flex: isChatOpen ? "1 1 0%" : "1 1 100%" }}
+					transition={{ type: "spring", damping: 30, stiffness: 300 }}
+				>
+					<div className="w-full">
 							{/* Header */}
 							<header className="text-center">
 								<h1 className="text-2xl font-bold">{session.course_title}</h1>
@@ -795,9 +799,9 @@ export function LearningPathContainer({
 				</div>
 			</LearningErrorBoundary>
 
-			{/* Chat FAB - bottom-right fixed */}
-			{!isChatOpen && (
-			<button
+		{/* Chat FAB - bottom-right fixed (hidden during quizzes) */}
+		{!isChatOpen && currentSlideNode?.status !== "IN_QUIZ" && (
+		<button
 				onClick={() => setIsChatOpen(true)}
 				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center"
 				aria-label="Open concept chat"
