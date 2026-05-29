@@ -36,7 +36,7 @@
  * ============================================================================
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, MessageCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,8 @@ interface ChatPanelProps {
 	selectedHeadingIds: string[];
 	onClearHeadings: () => void;
 	isCourseComplete?: boolean;
+	/** Width of the panel in percentage (32-40) */
+	widthPercent?: number;
 }
 
 const TypingIndicator = () => (
@@ -69,6 +71,7 @@ export function ChatPanel({
 	selectedHeadingIds,
 	onClearHeadings,
 	isCourseComplete = false,
+	widthPercent = 25,
 }: ChatPanelProps) {
 	const {
 		messages,
@@ -81,10 +84,23 @@ export function ChatPanel({
 
 	const [input, setInput] = useState("");
 	const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+	const [containerHeight, setContainerHeight] = useState<number>(0);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const previousFocusRef = useRef<HTMLElement | null>(null);
 	const panelRef = useRef<HTMLDivElement>(null);
+	const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+	const prevCountRef = useRef(0);
+	const scrollToUserRef = useRef(false);
+
+	const setMessageRef = useCallback(
+		(index: number, el: HTMLDivElement | null) => {
+			if (el) messageRefs.current.set(index, el);
+			else messageRefs.current.delete(index);
+		},
+		[],
+	);
 
 	// Reset input when panel closes (during render to avoid effect state cascade)
 	if (isOpen !== prevIsOpen) {
@@ -94,10 +110,34 @@ export function ChatPanel({
 		}
 	}
 
-	// Auto-scroll to bottom on new messages
+	// Measure container height and handle scrolling user message to the top
 	useEffect(() => {
-		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [messages]);
+		if (scrollContainerRef.current) {
+			setContainerHeight(scrollContainerRef.current.clientHeight);
+		}
+
+		if (messages.length === 0) return;
+
+		prevCountRef.current = messages.length;
+
+		if (scrollToUserRef.current) {
+			scrollToUserRef.current = false;
+			// Find the index of the latest user message in the array
+			const lastUserIndex = [...messages]
+				.map((msg, index) => ({ msg, index }))
+				.filter((item) => item.msg.role === "user")
+				.pop()?.index;
+
+			if (lastUserIndex !== undefined) {
+				// Wait for DOM layout and spacer rendering to complete
+				setTimeout(() => {
+					messageRefs.current
+						.get(lastUserIndex)
+						?.scrollIntoView({ behavior: "smooth", block: "start" });
+				}, 100);
+			}
+		}
+	}, [messages, isStreaming, isOpen]);
 
 	// Stop streaming when panel closes and restore focus (but retain messages)
 	useEffect(() => {
@@ -161,6 +201,7 @@ export function ChatPanel({
 		const trimmed = input.trim();
 		if (!trimmed || isStreaming) return;
 		setInput("");
+		scrollToUserRef.current = true;
 		await sendMessage(trimmed, selectedHeadingIds);
 	};
 
@@ -179,26 +220,28 @@ export function ChatPanel({
 		el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
 	};
 
+	const lastMsg = messages[messages.length - 1];
+	const showSpacer = isStreaming || (lastMsg && lastMsg.role === "user");
 	const canSend = input.trim().length > 0 && !isStreaming;
 
 	return (
 		<AnimatePresence>
 			{isOpen && (
-				<motion.div
-					ref={panelRef}
-					role="dialog"
-					aria-modal="false"
-					aria-labelledby="chat-panel-title"
-					initial={{ width: 0, opacity: 0 }}
-					animate={{ width: 480, opacity: 1 }}
-					exit={{ width: 0, opacity: 0 }}
-					transition={{ type: "spring", damping: 30, stiffness: 300 }}
-					className={cn(
-						"shrink-0 overflow-hidden h-full",
-						"bg-background border-l border-border",
-						"flex flex-col",
-					)}
-				>
+			<motion.div
+				ref={panelRef}
+				role="dialog"
+				aria-modal="false"
+				aria-labelledby="chat-panel-title"
+				initial={{ width: 0, opacity: 0 }}
+				animate={{ width: `${widthPercent}%`, opacity: 1 }}
+				exit={{ width: 0, opacity: 0 }}
+				transition={{ type: "spring", damping: 30, stiffness: 300 }}
+				className={cn(
+					"shrink-0 overflow-hidden h-full",
+					"bg-background border-l border-border",
+					"flex flex-col",
+				)}
+			>
 					{/* Header */}
 					<div className="flex items-center justify-between px-4 py-3 border-b">
 						<div className="flex items-center gap-2">
@@ -244,14 +287,15 @@ export function ChatPanel({
 						</div>
 					)}
 
-					{/* Messages */}
-					<div
-						className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
-						role="log"
-						aria-live="polite"
-						aria-atomic="false"
-						aria-label="Chat messages"
-					>
+				{/* Messages */}
+				<div
+					ref={scrollContainerRef}
+					className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+					role="log"
+					aria-live="polite"
+					aria-atomic="false"
+					aria-label="Chat messages"
+				>
 						{messages.length === 0 && (
 							<div className="text-center text-sm text-muted-foreground py-12">
 								<MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-30" />
@@ -265,42 +309,48 @@ export function ChatPanel({
 							</div>
 						)}
 
-						{messages.map((msg, i) => (
-							<div
-								key={i}
-								className={cn(
-									"flex",
-									msg.role === "user" ? "justify-end" : "justify-start",
-								)}
-							>
+					{messages.map((msg, i) => (
+						<div
+							key={i}
+							ref={(el) => setMessageRef(i, el)}
+							className={cn(
+								"flex w-full",
+								msg.role === "user" ? "justify-end" : "justify-start"
+							)}
+						>
+							{msg.role === "user" ? (
 								<div
 									className={cn(
 										"max-w-[85%] rounded-lg px-3 py-2 text-[15px]",
-										msg.role === "user"
-											? "bg-primary text-primary-foreground"
-											: "bg-muted",
+										"bg-primary text-primary-foreground"
 									)}
 								>
-									{msg.role === "assistant" ? (
-										msg.content ? (
-											<MarkdownRenderer
-												content={msg.content}
-												className="text-[15px] leading-relaxed max-w-none"
-											/>
-										) : (
-											<TypingIndicator />
-										)
+									<span>{msg.content}</span>
+								</div>
+							) : (
+								<div className="w-full text-[15px] bg-muted rounded-lg px-4 py-3 border border-border/10">
+									{msg.content ? (
+										<MarkdownRenderer
+											content={msg.content}
+											className="text-[15px] leading-relaxed max-w-none"
+										/>
 									) : (
-										<span>{msg.content}</span>
+										<TypingIndicator />
 									)}
 								</div>
-							</div>
-						))}
+							)}
+						</div>
+					))}
 
 						{error && (
 							<div className="text-center text-xs text-destructive py-2">
 								{error}
 							</div>
+						)}
+
+						{/* Spacer at the bottom to allow scrolling the last user message to the top while streaming or waiting for response */}
+						{showSpacer && messages.length > 0 && (
+							<div style={{ height: containerHeight ? `${containerHeight - 80}px` : "70vh" }} />
 						)}
 
 						<div ref={messagesEndRef} />

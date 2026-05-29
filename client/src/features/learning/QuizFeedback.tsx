@@ -41,6 +41,7 @@
 import { useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import type { QuizCard, QuizSet, QuizSubmitResponse } from "@/types/learning";
+import { MarkdownRenderer, InlineMarkdown } from "./MarkdownRenderer";
 
 interface QuizFeedbackProps {
 	quiz: QuizCard | QuizSet;
@@ -162,7 +163,10 @@ export function QuizFeedback({
 
 			{/* Question */}
 			<div>
-				<p className="font-medium text-lg">{currentQuiz.question_text}</p>
+				<MarkdownRenderer
+					className="font-medium text-lg [&>div]:!mt-0"
+					content={currentQuiz.question_text}
+				/>
 			</div>
 
 			{/* Options with feedback */}
@@ -212,7 +216,7 @@ export function QuizFeedback({
 								{/* Option content */}
 								<div className="flex-1 space-y-2">
 									<div className="flex items-center gap-2">
-										<span className="font-medium">{option.text}</span>
+										<InlineMarkdown content={option.text} className="font-medium" />
 										{isSelected && (
 											<span className="text-xs text-muted-foreground">
 												(Your answer)
@@ -234,18 +238,20 @@ export function QuizFeedback({
 													<span className="text-xs text-green-600 dark:text-green-400 font-medium block mb-1">
 														✓ Correct answer
 													</span>
-													<p className="text-sm text-green-700 dark:text-green-300">
-														{explanation}
-													</p>
+													<MarkdownRenderer
+														className="text-sm text-green-700 dark:text-green-300 [&>div]:!mt-0"
+														content={explanation}
+													/>
 												</div>
 											) : (
 												<div>
 													<span className="text-xs text-muted-foreground font-medium block mb-1">
 														Why this is incorrect:
 													</span>
-													<p className="text-sm text-muted-foreground">
-														{option.explanation}
-													</p>
+													<MarkdownRenderer
+														className="text-sm text-muted-foreground [&>div]:!mt-0"
+														content={option.explanation}
+													/>
 												</div>
 											)}
 										</div>
@@ -259,9 +265,10 @@ export function QuizFeedback({
 												<span className="text-xs text-red-500 dark:text-red-400 font-medium block mb-1">
 													Why this is incorrect:
 												</span>
-												<p className="text-sm text-red-600 dark:text-red-300">
-													{selected_explanation}
-												</p>
+												<MarkdownRenderer
+													className="text-sm text-red-600 dark:text-red-300 [&>div]:!mt-0"
+													content={selected_explanation}
+												/>
 											</div>
 										)}
 								</div>

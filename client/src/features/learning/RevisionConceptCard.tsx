@@ -48,7 +48,7 @@ import type {
 	RevisionNodeStatus,
 	RevisionQuizResponse,
 } from "@/types/learning";
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import { MarkdownRenderer, InlineMarkdown } from "./MarkdownRenderer";
 
 interface RevisionConceptCardProps {
 	/** Original concept node with content and quiz data */
@@ -177,12 +177,12 @@ export function RevisionConceptCard({
 						Quiz {currentQuizIndex + 1} of {quizData.quizzes.length}
 					</div>
 				)}
-				<p
-					id={`revision-quiz-question-${node.id}`}
-					className="font-medium text-lg"
-				>
-					{currentQuiz.question_text}
-				</p>
+			<div id={`revision-quiz-question-${node.id}`}>
+				<MarkdownRenderer
+					className="font-medium text-lg [&>div]:!mt-0"
+					content={currentQuiz.question_text}
+				/>
+			</div>
 				<fieldset
 					className="space-y-2"
 					role="radiogroup"
@@ -234,7 +234,7 @@ export function RevisionConceptCard({
 									<span className="font-mono text-sm text-muted-foreground">
 										{option.display_label}.
 									</span>
-									<span>{option.text}</span>
+									<InlineMarkdown content={option.text} />
 								</label>
 
 								{/* Show explanation from quiz result */}
@@ -243,9 +243,10 @@ export function RevisionConceptCard({
 										<span className="text-xs text-green-600 dark:text-green-400 font-medium block mb-1">
 											✓ Correct answer
 										</span>
-										<p className="text-sm text-green-700 dark:text-green-300">
-											{quizResult?.explanation}
-										</p>
+										<MarkdownRenderer
+											className="text-sm text-green-700 dark:text-green-300 [&>div]:!mt-0"
+											content={quizResult?.explanation ?? ""}
+										/>
 									</div>
 								)}
 								{showFeedback &&
@@ -256,9 +257,10 @@ export function RevisionConceptCard({
 											<span className="text-xs text-red-500 dark:text-red-400 font-medium block mb-1">
 												Why this is incorrect:
 											</span>
-											<p className="text-sm text-red-600 dark:text-red-300">
-												{quizResult.selected_explanation}
-											</p>
+											<MarkdownRenderer
+												className="text-sm text-red-600 dark:text-red-300 [&>div]:!mt-0"
+												content={quizResult.selected_explanation}
+											/>
 										</div>
 									)}
 							</div>

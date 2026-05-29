@@ -47,6 +47,9 @@ vi.mock('./MarkdownRenderer', () => ({
   MarkdownRenderer: ({ content }: { content: string }) => (
     <div data-testid="markdown-content">{content}</div>
   ),
+  InlineMarkdown: ({ content }: { content: string }) => (
+    <span data-testid="inline-markdown">{content}</span>
+  ),
 }));
 
 const mockNode: ConceptNode = {
@@ -109,7 +112,7 @@ describe('RevisionConceptCard', () => {
       render(<RevisionConceptCard {...defaultProps} />);
 
       expect(screen.getByTestId('revision-full-review-content')).toBeInTheDocument();
-      expect(screen.getByTestId('markdown-content')).toBeInTheDocument();
+      expect(screen.getAllByTestId('markdown-content').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByTestId('mark-reviewed-button')).toBeInTheDocument();
       expect(screen.getByText('Mark as Reviewed')).toBeInTheDocument();
     });
@@ -172,7 +175,7 @@ describe('RevisionConceptCard', () => {
 
       expect(screen.getByTestId('revision-quiz-only-content')).toBeInTheDocument();
       expect(screen.queryByTestId('revision-full-review-content')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('markdown-content')).not.toBeInTheDocument();
+      expect(screen.queryByText('# Test Content')).not.toBeInTheDocument();
       expect(screen.getByText('What is the answer?')).toBeInTheDocument();
     });
 

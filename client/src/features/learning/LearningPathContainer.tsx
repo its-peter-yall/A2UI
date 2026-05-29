@@ -49,7 +49,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { MessageCircle, GripVertical } from "lucide-react";
 import type {
 	LearningSessionWithNodes,
 	QuizSubmitResponse,
@@ -121,6 +122,70 @@ export function LearningPathContainer({
 	// Chat panel state
 	const [isChatOpen, setIsChatOpen] = useState(false);
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
+
+	// Resizable chat panel state
+	const [chatWidthPercent, setChatWidthPercent] = useState(25); // Default = minimum
+	const isResizingRef = useRef(false);
+	const containerRef = useRef<HTMLDivElement>(null);
+
+	// Resize constraints (in percentage)
+	const CHAT_MIN_PERCENT = 25; // Minimum chat width
+	const CHAT_MAX_PERCENT = 38; // Maximum chat width
+
+	// Resize handlers
+	const handleResizeStart = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		isResizingRef.current = true;
+		document.body.style.cursor = "col-resize";
+		document.body.style.userSelect = "none";
+	}, []);
+
+	const handleResizeMove = useCallback(
+		(e: MouseEvent) => {
+			if (!isResizingRef.current || !containerRef.current) return;
+
+			const containerRect = containerRef.current.getBoundingClientRect();
+			const containerWidth = containerRect.width;
+			const mouseX = e.clientX - containerRect.left;
+
+			// Calculate new chat width percentage
+			const newChatPercent =
+				((containerWidth - mouseX) / containerWidth) * 100;
+
+			// Apply constraints
+			const clampedPercent = Math.max(
+				CHAT_MIN_PERCENT,
+				Math.min(CHAT_MAX_PERCENT, newChatPercent),
+			);
+
+			setChatWidthPercent(clampedPercent);
+		},
+		[],
+	);
+
+	const handleResizeEnd = useCallback(() => {
+		isResizingRef.current = false;
+		document.body.style.cursor = "";
+		document.body.style.userSelect = "";
+	}, []);
+
+	// Always listen for mouse move/up (handler checks ref internally)
+	useEffect(() => {
+		const onMouseMove = (e: MouseEvent) => {
+			if (isResizingRef.current) handleResizeMove(e);
+		};
+		const onMouseUp = () => {
+			if (isResizingRef.current) handleResizeEnd();
+		};
+
+		window.addEventListener("mousemove", onMouseMove);
+		window.addEventListener("mouseup", onMouseUp);
+
+		return () => {
+			window.removeEventListener("mousemove", onMouseMove);
+			window.removeEventListener("mouseup", onMouseUp);
+		};
+	}, [handleResizeMove, handleResizeEnd]);
 
 	const handleToggleHeadingChat = useCallback((headingId: string) => {
 		setSelectedHeadingIds((prev) =>
@@ -474,6 +539,15 @@ export function LearningPathContainer({
 		: false;
 	const canGoPrev = carouselState.currentIndex > 0;
 
+	// Close chat panel when proceeding to quiz (anti-cheat)
+	const handleProceedToQuiz = useCallback(
+		(nodeId: string) => {
+			setIsChatOpen(false);
+			proceedToQuiz(nodeId);
+		},
+		[proceedToQuiz],
+	);
+
 	// Handle continue to next (manual button click, not auto-scroll)
 	const handleContinueToNext = useCallback(
 		(nodeId: string) => {
@@ -640,14 +714,18 @@ export function LearningPathContainer({
 					console.error("Learning component crashed:", boundaryError);
 				}}
 			>
-				<div className="flex w-full h-full overflow-hidden">
+				<div ref={containerRef} className="flex w-full h-full overflow-hidden">
 				{/* Main content area - shrinks when chat is open */}
 				<motion.div
-					className={`flex flex-col gap-6 overflow-y-auto ${isChatOpen ? "py-4" : "p-4"}`}
-					animate={{ flex: isChatOpen ? "1 1 0%" : "1 1 100%" }}
+					className="flex flex-col gap-6 p-4 overflow-y-auto"
+					animate={{
+						flex: isChatOpen
+							? `0 0 ${100 - chatWidthPercent}%`
+							: "1 1 100%",
+					}}
 					transition={{ type: "spring", damping: 30, stiffness: 300 }}
 				>
-					<div className="w-full">
+					<div className={cn("mx-auto w-full", isChatOpen ? "max-w-5xl" : "max-w-6xl")}>
 							{/* Header */}
 							<header className="text-center">
 								<h1 className="text-2xl font-bold">{session.course_title}</h1>
@@ -737,7 +815,7 @@ export function LearningPathContainer({
 													node={currentSlideNode}
 													isActive={currentSlideNode.id === activeNodeId}
 													quizResult={quizResults[currentSlideNode.id]}
-													onProceedToQuiz={proceedToQuiz}
+													onProceedToQuiz={handleProceedToQuiz}
 													onQuizSubmit={submitAnswer}
 													onRetryQuiz={retry}
 													onContinueToNext={handleContinueToNext}
@@ -782,20 +860,49 @@ export function LearningPathContainer({
 						</div>
 					</motion.div>
 
-					{/* Chat Panel - slides in from right */}
-					<ChatPanel
-						isOpen={isChatOpen}
-						onClose={() => setIsChatOpen(false)}
-						sessionId={activeSessionId ?? ""}
-						nodeId={currentSlideNode?.id ?? ""}
-						selectedHeadingIds={selectedHeadingIds}
-						onClearHeadings={() => setSelectedHeadingIds([])}
-						isCourseComplete={
-							session?.nodes &&
-							session.nodes.length > 0 &&
-							session.nodes.every((n) => n.status === "COMPLETED")
-						}
-					/>
+				{/* Resize handle */}
+				{isChatOpen && (
+					<div
+						className="w-1 bg-border hover:bg-(--cyber-yellow) cursor-col-resize shrink-0 transition-colors relative group"
+						onMouseDown={handleResizeStart}
+						role="separator"
+						aria-orientation="vertical"
+						aria-label="Resize chat panel"
+						tabIndex={0}
+						onKeyDown={(e) => {
+							if (e.key === "ArrowLeft") {
+								setChatWidthPercent((prev) =>
+									Math.min(CHAT_MAX_PERCENT, prev + 2),
+								);
+							} else if (e.key === "ArrowRight") {
+								setChatWidthPercent((prev) =>
+									Math.max(CHAT_MIN_PERCENT, prev - 2),
+								);
+							}
+						}}
+					>
+						<div className="absolute inset-y-0 -left-1 -right-1" />
+						<div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+							<GripVertical className="h-4 w-4 text-muted-foreground" />
+						</div>
+					</div>
+				)}
+
+				{/* Chat Panel - slides in from right */}
+				<ChatPanel
+					isOpen={isChatOpen}
+					onClose={() => setIsChatOpen(false)}
+					sessionId={activeSessionId ?? ""}
+					nodeId={currentSlideNode?.id ?? ""}
+					selectedHeadingIds={selectedHeadingIds}
+					onClearHeadings={() => setSelectedHeadingIds([])}
+					isCourseComplete={
+						session?.nodes &&
+						session.nodes.length > 0 &&
+						session.nodes.every((n) => n.status === "COMPLETED")
+					}
+					widthPercent={chatWidthPercent}
+				/>
 				</div>
 			</LearningErrorBoundary>
 

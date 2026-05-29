@@ -66,6 +66,9 @@ vi.mock('./MarkdownRenderer', () => ({
   MarkdownRenderer: ({ content }: { content: string }) => (
     <div data-testid="markdown-content">{content}</div>
   ),
+  InlineMarkdown: ({ content }: { content: string }) => (
+    <span data-testid="inline-markdown">{content}</span>
+  ),
 }));
 
 // Mock framer-motion to avoid animation issues in tests

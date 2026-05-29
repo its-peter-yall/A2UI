@@ -207,11 +207,70 @@ function createHeadingComponent(
 								)}
 							/>
 						</button>
-					</>
+					</>,
 				)}
 			</div>
 		);
 	};
+}
+
+interface InlineMarkdownProps {
+	content: string;
+	className?: string;
+}
+
+export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
+	return (
+		<span className={cn("prose-inline", className)}>
+			<ReactMarkdown
+				remarkPlugins={[remarkGfm]}
+				rehypePlugins={[rehypeRaw, rehypeSanitize]}
+				allowedElements={[
+					"p",
+					"em",
+					"strong",
+					"code",
+					"a",
+					"br",
+					"del",
+					"span",
+				]}
+				unwrapDisallowed
+				components={{
+					p({ children }) {
+						return <>{children}</>;
+					},
+					code({
+						className: codeClassName,
+						children,
+						...props
+					}: React.HTMLAttributes<HTMLElement>) {
+						const isInline = !codeClassName;
+						if (isInline) {
+							return (
+								<code
+									className={cn(
+										"bg-primary/10 text-primary px-1 py-0.5 rounded font-mono text-[13px]",
+										codeClassName,
+									)}
+									{...props}
+								>
+									{children}
+								</code>
+							);
+						}
+						return (
+							<code className={codeClassName} {...props}>
+								{children}
+							</code>
+						);
+					},
+				}}
+			>
+				{content}
+			</ReactMarkdown>
+		</span>
+	);
 }
 
 export function MarkdownRenderer({
@@ -255,7 +314,7 @@ export function MarkdownRenderer({
 	return (
 		<div
 			className={cn(
-				"prose max-w-none text-[15px] leading-relaxed font-medium",
+				"prose max-w-none text-lg leading-relaxed font-medium",
 				"dark:prose-invert",
 				// Body Text
 				"prose-p:text-foreground",
@@ -283,6 +342,53 @@ export function MarkdownRenderer({
 					h4,
 					h5,
 					h6,
+					table({ children, ...props }) {
+						return (
+							<div 
+								className="w-full overflow-x-auto border border-foreground/15 rounded-xl max-w-full shadow-sm"
+								style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}
+							>
+								<table className="min-w-full divide-y divide-foreground/15 text-[14px] table-auto border-collapse m-0!" {...props}>
+									{children}
+								</table>
+							</div>
+						);
+					},
+					thead({ children, ...props }) {
+						return (
+							<thead className="bg-muted/40" {...props}>
+								{children}
+							</thead>
+						);
+					},
+					tbody({ children, ...props }) {
+						return (
+							<tbody className="divide-y divide-foreground/10" {...props}>
+								{children}
+							</tbody>
+						);
+					},
+					tr({ children, ...props }) {
+						return (
+							<tr className="hover:bg-muted/10 transition-colors" {...props}>
+								{children}
+							</tr>
+						);
+					},
+					th({ children, ...props }) {
+						return (
+							<th className="px-4 py-3 text-left font-bold text-primary border-b border-r border-foreground/20 last:border-r-0 uppercase tracking-wider text-[12px] whitespace-nowrap" {...props}>
+								{children}
+							</th>
+						);
+					},
+					td({ children, ...props }) {
+						return (
+							<td className="px-4 py-3 text-foreground/90 border-b border-r border-foreground/10 last:border-r-0 align-middle leading-relaxed" {...props}>
+								{children}
+							</td>
+						);
+					},
 					code({
 						className: codeClassName,
 						children,
@@ -291,7 +397,13 @@ export function MarkdownRenderer({
 						const isInline = !codeClassName;
 						if (isInline) {
 							return (
-								<code className={cn("bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono text-[14px]", codeClassName)} {...props}>
+								<code
+									className={cn(
+										"bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono text-[14px]",
+										codeClassName,
+									)}
+									{...props}
+								>
 									{children}
 								</code>
 							);

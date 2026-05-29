@@ -59,7 +59,7 @@ import type {
 	QuizCardHidden,
 } from "@/types/learning";
 import { getVisibleQuiz } from "@/types/learning";
-import { MarkdownRenderer } from "./MarkdownRenderer";
+import { MarkdownRenderer, InlineMarkdown } from "./MarkdownRenderer";
 import { QuizFeedback } from "./QuizFeedback";
 import { useQuizFeedback } from "./useQuizFeedback";
 import { ErrorState, LoadingState } from "./ErrorStates";
@@ -328,12 +328,12 @@ export function ConceptCard({
 													)}
 												</div>
 											)}
-											<p
-												id={`quiz-question-${node.id}`}
-												className="font-medium text-lg"
-											>
-												{currentQuiz.question_text}
-											</p>
+											<div id={`quiz-question-${node.id}`}>
+												<MarkdownRenderer
+													className="font-medium text-lg [&>div]:!mt-0"
+													content={currentQuiz.question_text}
+												/>
+											</div>
 											<fieldset
 												className="space-y-2"
 												role="radiogroup"
@@ -363,7 +363,7 @@ export function ConceptCard({
 														<span className="font-mono text-sm text-muted-foreground">
 															{option.display_label}.
 														</span>
-														<span>{option.text}</span>
+														<InlineMarkdown content={option.text} />
 													</label>
 												))}
 											</fieldset>
