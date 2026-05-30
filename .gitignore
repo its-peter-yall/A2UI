@@ -77,6 +77,14 @@ htmlcov/
 .parcel-cache/
 .eslintcache
 
+# Dev docs (root level)
+AGENTS.original.md
+accessibility-*.md
+issues.md
+openrouter_problem_statement.md
+Implementing Retrieval-Based Learning Feature.md
+
 # Misc
 *.pem
 *.mp4
+image.png
