@@ -304,7 +304,7 @@ async def generate_course(
         logger.error(f"Error generating course: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate course: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -367,7 +367,7 @@ def get_learning_sessions(
         logger.error(f"Error listing learning sessions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list learning sessions: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -396,7 +396,7 @@ def get_learning_session_progress(session_id: str) -> SessionProgress:
         logger.error(f"Error getting learning session progress: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get learning session progress: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -454,7 +454,7 @@ def get_learning_session(session_id: str) -> LearningSessionWithNodes:
         logger.error(f"Error getting learning session: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get learning session: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -490,7 +490,7 @@ def create_revision(
         logger.error(f"Error creating revision session: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create revision session: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -521,7 +521,7 @@ def get_revisions_for_session(
         logger.error(f"Error listing revision sessions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list revision sessions: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -547,7 +547,7 @@ def get_revision(revision_id: str) -> RevisionSessionWithProgress:
         logger.error(f"Error getting revision session: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get revision session: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -573,7 +573,7 @@ def delete_revision(revision_id: str) -> DeleteRevisionResponse:
         logger.error(f"Error deleting revision session: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete revision session: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -608,7 +608,7 @@ def delete_learning_session(session_id: str) -> DeleteLearningSessionResponse:
         logger.error(f"Error deleting learning session: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete learning session: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -643,7 +643,7 @@ def mark_revision_node_reviewed(
         logger.error(f"Error marking revision node reviewed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to mark revision node reviewed: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -681,7 +681,7 @@ def submit_revision_quiz(
         logger.error(f"Error submitting revision quiz: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit revision quiz: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -705,7 +705,7 @@ def get_revision_summary(revision_id: str) -> RevisionSummary:
         logger.error(f"Error getting revision summary: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get revision summary: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -738,7 +738,7 @@ def get_concept_node(node_id: str) -> ConceptNodeWithVisibility:
         logger.error(f"Error getting concept node: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get concept node: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -781,7 +781,7 @@ def transition_node(
         logger.error(f"Error transitioning node: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to transition node: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -800,7 +800,7 @@ def get_quiz_attempts(node_id: str) -> QuizAttemptHistory:
         logger.error(f"Error getting quiz attempts: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get quiz attempts: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -886,7 +886,7 @@ def submit_quiz(
         logger.error(f"Error submitting quiz: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to submit quiz: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -925,7 +925,7 @@ def retry_quiz(node_id: str) -> ConceptNodeResponse:
         logger.error(f"Error retrying quiz: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retry quiz: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -969,7 +969,7 @@ def previous_quiz(node_id: str) -> ConceptNodeResponse:
         logger.error(f"Error going to previous quiz: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to go to previous quiz: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -1032,7 +1032,7 @@ async def regenerate_node_endpoint(
         logger.error(f"Error regenerating node: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to regenerate node: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -1096,7 +1096,7 @@ async def concept_chat(
         logger.error(f"Error validating chat session/node: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate chat context: {str(e)}",
+            detail="Internal server error",
         )
     finally:
         conn.close()

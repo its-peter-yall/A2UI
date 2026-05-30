@@ -24,9 +24,12 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 import httpx
+import logging
 
 from server.config import settings
 from server.schemas.llm import AIProviderEnum, LLMContext, ModelResponse, get_llm_context
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
@@ -84,9 +87,10 @@ async def _fetch_openrouter_models(llm_context: LLMContext) -> List[ModelRespons
                 )
             return result
     except httpx.RequestError as e:
+        logger.error(f"Failed to connect to OpenRouter: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to connect to OpenRouter: {str(e)}",
+            detail="Failed to connect to OpenRouter",
         )
 
 
@@ -128,9 +132,10 @@ async def _fetch_generalcompute_models(llm_context: LLMContext) -> List[ModelRes
                 )
             return result
     except httpx.RequestError as e:
+        logger.error(f"Failed to connect to General Compute: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Failed to connect to General Compute: {str(e)}",
+            detail="Failed to connect to General Compute",
         )
 
 
@@ -157,7 +162,8 @@ async def list_models(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Unexpected error listing models: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"An unexpected error occurred: {str(e)}",
+            detail="Internal server error",
         )
