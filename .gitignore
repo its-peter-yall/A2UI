@@ -79,6 +79,7 @@ server/tests/
 .cache/
 .parcel-cache/
 .eslintcache
+.pi-lens/
 
 # Dev docs (root level)
 AGENTS.md
