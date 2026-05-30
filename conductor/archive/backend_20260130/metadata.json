@@ -1,8 +1,0 @@
-{
-  "track_id": "backend_20260130",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-01-30T19:45:00Z",
-  "updated_at": "2026-01-30T19:45:00Z",
-  "description": "Implement SQLite persistence, Session CRUD, and Vertex AI chat endpoints."
-}
