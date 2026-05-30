@@ -120,28 +120,26 @@ git clone <repository-url>
 cd A2UI
 ```
 
-### 2. Backend Setup
+### 2. Run Setup (Windows)
+```bash
+setup.bat
+```
+
+This creates the Python virtual environment, installs all dependencies, and verifies prerequisites.
+
+### 3. Manual Setup (macOS/Linux)
+
+**Backend:**
 ```bash
 cd server
-
-# Create virtual environment
 python -m venv .venv
-
-# Activate virtual environment
-# Windows:
-.\.venv\Scripts\activate
-# macOS/Linux:
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 3. Frontend Setup
+**Frontend:**
 ```bash
 cd client
-
-# Install dependencies
 npm install
 ```
 
@@ -163,6 +161,9 @@ VITE_API_URL=http://localhost:8000
 ```
 
 ## Running the Application
+
+### First Time?
+Run `setup.bat` (Windows) or follow the manual setup steps above.
 
 ### Option 1: Using the Batch Script (Windows)
 
