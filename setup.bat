@@ -16,6 +16,20 @@ if !errorlevel! neq 0 (
     exit /b 1
 )
 
+for /f "tokens=2" %%v in ('python --version 2^>^&1') do set PYVER=%%v
+for /f "tokens=1,2 delims=." %%a in ("%PYVER%") do (
+    if %%a LSS 3 (
+        echo ERROR: Python 3.10+ required, found %PYVER%
+        pause
+        exit /b 1
+    )
+    if %%a EQU 3 if %%b LSS 10 (
+        echo ERROR: Python 3.10+ required, found %PYVER%
+        pause
+        exit /b 1
+    )
+)
+
 where node >nul 2>&1
 if !errorlevel! neq 0 (
     echo ERROR: Node.js is not installed or not in PATH.
@@ -24,7 +38,7 @@ if !errorlevel! neq 0 (
     exit /b 1
 )
 
-echo   [OK] Python found
+echo   [OK] Python %PYVER% found
 echo   [OK] Node.js found
 echo.
 
