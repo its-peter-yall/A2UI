@@ -74,6 +74,10 @@ htmlcov/
 *.test.ts
 *.test.tsx
 server/tests/
+vitest.setup.ts
+
+# Dev tooling
+pyrightconfig.json
 
 # Cache
 .cache/
