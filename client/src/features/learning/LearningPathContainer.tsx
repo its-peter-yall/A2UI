@@ -543,11 +543,8 @@ export function LearningPathContainer({
 	// Close chat panel automatically when switching to or entering a quiz/feedback node (anti-cheat)
 	const isQuizNode = currentSlideNode?.status === "IN_QUIZ" || currentSlideNode?.status === "SHOWING_FEEDBACK";
 
-	useEffect(() => {
-		if (isQuizNode) {
-			setIsChatOpen(false);
-		}
-	}, [isQuizNode]);
+	// Derive effective chat state — always closed during quiz/feedback
+	const effectiveIsChatOpen = isChatOpen && !isQuizNode;
 
 	// Close chat panel when proceeding to quiz (anti-cheat)
 	const handleProceedToQuiz = useCallback(
@@ -729,13 +726,13 @@ export function LearningPathContainer({
 				<motion.div
 					className="flex flex-col gap-6 p-4 overflow-y-auto"
 					animate={{
-						flex: isChatOpen
+						flex: effectiveIsChatOpen
 							? `0 0 ${100 - chatWidthPercent}%`
 							: "1 1 100%",
 					}}
 					transition={{ type: "spring", damping: 30, stiffness: 300 }}
 				>
-					<div className={cn("mx-auto w-full", isChatOpen ? "max-w-5xl" : "max-w-6xl")}>
+					<div className={cn("mx-auto w-full", effectiveIsChatOpen ? "max-w-5xl" : "max-w-6xl")}>
 							{/* Header */}
 							<header className="text-center">
 								<h1 className="text-2xl font-bold">{session.course_title}</h1>
@@ -871,7 +868,7 @@ export function LearningPathContainer({
 					</motion.div>
 
 				{/* Resize handle */}
-				{isChatOpen && (
+				{effectiveIsChatOpen && (
 					<div
 						className="w-1 bg-border hover:bg-(--cyber-yellow) cursor-col-resize shrink-0 transition-colors relative group"
 						onMouseDown={handleResizeStart}
@@ -900,7 +897,7 @@ export function LearningPathContainer({
 
 				{/* Chat Panel - slides in from right */}
 				<ChatPanel
-					isOpen={isChatOpen}
+					isOpen={effectiveIsChatOpen}
 					onClose={() => setIsChatOpen(false)}
 					sessionId={activeSessionId ?? ""}
 					nodeId={currentSlideNode?.id ?? ""}
@@ -917,7 +914,7 @@ export function LearningPathContainer({
 			</LearningErrorBoundary>
 
 		{/* Chat FAB - bottom-right fixed (hidden during quizzes/feedback) */}
-		{!isChatOpen && !isQuizNode && (
+		{!effectiveIsChatOpen && !isQuizNode && (
 		<button
 				onClick={() => setIsChatOpen(true)}
 				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center"
