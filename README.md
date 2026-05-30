@@ -103,13 +103,7 @@ A2UI/
 │   │   └── instructor_client.py  # Instructor integration
 │   └── tests/                  # Python unit tests (15 files)
 │
-├── conductor/                   # Product documentation
-├── .planning/                   # Development planning
-│   ├── codebase/              # Architecture docs (7 files)
-│   ├── PROJECT.md             # Project scope
-│   └── ROADMAP.md             # Feature roadmap
-├── research/                    # Research notes
-├── plans/                       # Implementation plans
+├── AGENTS.md                    # AI agent coding instructions
 └── run.bat                      # Windows startup script
 ```
 
@@ -329,28 +323,19 @@ python -m unittest server.tests.test_learning.TestLearningSessions.test_create_s
 
 ## Contributing
 
-1. Follow the code style guidelines in `.planning/codebase/CONVENTIONS.md`
-2. Write tests for new functionality (target >80% coverage)
-3. Run linting and tests before committing
-4. Update relevant documentation
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Write tests for new functionality (target >80% coverage)
+4. Run linting and tests before committing:
+   - `cd client && npm run lint && npm run test -- --run`
+   - `cd server && python -m unittest`
+5. Submit a pull request with a clear description
 
-## Documentation
-
-Additional documentation available in:
-- `.planning/codebase/ARCHITECTURE.md` - Technical architecture and patterns
-- `.planning/codebase/STACK.md` - Technology stack and dependencies
-- `.planning/codebase/STRUCTURE.md` - Directory layout and organization
-- `.planning/codebase/CONVENTIONS.md` - Coding conventions
-- `.planning/codebase/TESTING.md` - Testing patterns and practices
-- `.planning/codebase/INTEGRATIONS.md` - External service integrations
-- `.planning/codebase/CONCERNS.md` - Known tech debt and issues
-- `.planning/PROJECT.md` - Project scope and requirements
-- `.planning/ROADMAP.md` - Feature roadmap and milestones
-- `conductor/product-guidelines.md` - UX/UI standards
+See `AGENTS.md` for detailed coding conventions and patterns.
 
 ## License
 
-[License information to be added]
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
