@@ -10,7 +10,7 @@ Follow the commands and style rules below; match local patterns when editing.
 | Document | Purpose |
 |----------|---------|
 | `.planning/codebase/ARCHITECTURE.md` | Vision, purpose, target audience, core capabilities, technical architecture |
-| `conductor/product-guidelines.md` | Visual identity (Cyber Yellow #FFD400), UX principles, component standards |
+| `conductor/product-guidelines.md` | Visual identity (Cyber Yellow #ffb74d), UX principles, component standards |
 | `.planning/codebase/STACK.md` | Technology choices: React 19, FastAPI, OpenRouter, SQLite, Tailwind 4.x |
 | `.planning/codebase/TESTING.md` | TDD workflow, quality gates, testing patterns, definition of done |
 | `.planning/codebase/CONVENTIONS.md` | Coding conventions for TypeScript, Python, and HTML/CSS |
@@ -416,7 +416,7 @@ USAGE:
 - **Tone**: Academic/professional communication
 
 ### Visual Identity (per `conductor/product-guidelines.md`)
-- **Cyber Yellow (`#FFD400`)**: Primary actions, accents, brand
+- **Cyber Yellow (`#ffb74d`)**: Primary actions, accents, brand
 - **Dark Backgrounds**: Deep grays/blacks for reduced eye strain
 - **Typography**: Inter (UI), JetBrains Mono (code)
 - **Glassmorphism**: Light usage for cards/panels

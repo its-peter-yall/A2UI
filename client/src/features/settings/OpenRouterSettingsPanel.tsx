@@ -261,7 +261,7 @@ export function OpenRouterSettingsPanel() {
             <div className="flex items-center gap-2">
               <Globe className={cn(
                 'h-4 w-4 transition-colors',
-                isORActive ? 'text-[#FFD400]/80' : 'text-muted-foreground group-hover:text-foreground/80'
+                isORActive ? 'text-[#ffb74d]/80' : 'text-muted-foreground group-hover:text-foreground/80'
               )} />
               <h3 className="text-sm font-bold tracking-wide text-foreground">
                 OpenRouter Credentials
@@ -394,7 +394,7 @@ export function OpenRouterSettingsPanel() {
             <div className="flex items-center gap-2">
               <Cpu className={cn(
                 'h-4 w-4 transition-colors',
-                isGCActive ? 'text-[#FFD400]/80' : 'text-muted-foreground group-hover:text-foreground/80'
+                isGCActive ? 'text-[#ffb74d]/80' : 'text-muted-foreground group-hover:text-foreground/80'
               )} />
               <h3 className="text-sm font-bold tracking-wide text-foreground">
                 General Compute Credentials

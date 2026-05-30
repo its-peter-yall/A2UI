@@ -72,8 +72,8 @@ export function SettingsPage() {
 			description: "Clean, high-contrast crisp look.",
 			icon: Sun,
 			color:
-				"text-[#FFD400] bg-[#FFD400]/10 dark:text-[#FFD400]/90 dark:bg-[#FFD400]/5",
-			glow: "shadow-[#FFD400]/10 hover:border-[#FFD400]/50",
+				"text-[#ffb74d] bg-[#ffb74d]/10 dark:text-[#ffb74d]/90 dark:bg-[#ffb74d]/5",
+			glow: "shadow-[#ffb74d]/10 hover:border-[#ffb74d]/50",
 		},
 		{
 			id: "dark" as const,
@@ -160,9 +160,9 @@ export function SettingsPage() {
 										"relative text-left p-4 rounded-xl border flex flex-col justify-between transition-all duration-200 shadow-sm cursor-pointer h-full min-h-[140px]",
 										"bg-card border-border backdrop-blur-md",
 										isSelected
-											? "border-[#FFD400] ring-1 ring-[#FFD400] shadow-md shadow-[#FFD400]/5 bg-[#FFD400]/5"
+											? "border-[#ffb74d] ring-1 ring-[#ffb74d] shadow-md shadow-[#ffb74d]/5 bg-[#ffb74d]/5"
 											: t.glow,
-										"focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFD400]",
+										"focus:outline-none focus-visible:ring-2 focus-visible:ring-[#ffb74d]",
 									)}
 								>
 									<div className="flex items-start justify-between w-full mb-3">
@@ -173,7 +173,7 @@ export function SettingsPage() {
 											<motion.div
 												initial={{ scale: 0 }}
 												animate={{ scale: 1 }}
-												className="h-5 w-5 rounded-full bg-[#FFD400] flex items-center justify-center text-black shrink-0"
+												className="h-5 w-5 rounded-full bg-[#ffb74d] flex items-center justify-center text-black shrink-0"
 											>
 												<Check className="h-3 w-3 stroke-[3]" />
 											</motion.div>
@@ -217,7 +217,7 @@ export function SettingsPage() {
 						className="text-lg font-semibold tracking-tight border-b pb-2"
 					>
 						<span className="flex items-center gap-2">
-							<MessageCircle className="h-5 w-5 text-[#FFD400]" />
+							<MessageCircle className="h-5 w-5 text-[#ffb74d]" />
 							Chat Assistant Model
 						</span>
 					</h2>

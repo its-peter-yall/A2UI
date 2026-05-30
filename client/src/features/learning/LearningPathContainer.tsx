@@ -488,8 +488,9 @@ export function LearningPathContainer({
 				[activeSessionKey]: { currentIndex: clampedIndex, direction },
 			}));
 
-			// Close chat panel when navigating to a quiz node
-			if (session.nodes[clampedIndex]?.status === "IN_QUIZ") {
+			// Close chat panel when navigating to a quiz node or feedback node (anti-cheat)
+			const targetStatus = session.nodes[clampedIndex]?.status;
+			if (targetStatus === "IN_QUIZ" || targetStatus === "SHOWING_FEEDBACK") {
 				setIsChatOpen(false);
 			}
 		},
@@ -538,6 +539,15 @@ export function LearningPathContainer({
 		? carouselState.currentIndex < session.nodes.length - 1
 		: false;
 	const canGoPrev = carouselState.currentIndex > 0;
+
+	// Close chat panel automatically when switching to or entering a quiz/feedback node (anti-cheat)
+	const isQuizNode = currentSlideNode?.status === "IN_QUIZ" || currentSlideNode?.status === "SHOWING_FEEDBACK";
+
+	useEffect(() => {
+		if (isQuizNode) {
+			setIsChatOpen(false);
+		}
+	}, [isQuizNode]);
 
 	// Close chat panel when proceeding to quiz (anti-cheat)
 	const handleProceedToQuiz = useCallback(
@@ -906,8 +916,8 @@ export function LearningPathContainer({
 				</div>
 			</LearningErrorBoundary>
 
-		{/* Chat FAB - bottom-right fixed (hidden during quizzes) */}
-		{!isChatOpen && currentSlideNode?.status !== "IN_QUIZ" && (
+		{/* Chat FAB - bottom-right fixed (hidden during quizzes/feedback) */}
+		{!isChatOpen && !isQuizNode && (
 		<button
 				onClick={() => setIsChatOpen(true)}
 				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center"

@@ -50,7 +50,7 @@ export function SettingsButton() {
       onClick={handleClick}
       className={cn(
         'inline-flex items-center justify-center rounded-md p-2 text-sm font-medium transition-colors',
-        'hover:bg-accent/50 text-muted-foreground hover:text-[#FFD400] dark:hover:text-[#FFD400] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer'
+        'hover:bg-accent/50 text-muted-foreground hover:text-[#ffb74d] dark:hover:text-[#ffb74d] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer'
       )}
       title="System preferences & settings"
     >

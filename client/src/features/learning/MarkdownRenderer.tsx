@@ -181,7 +181,7 @@ function createHeadingComponent(
 							props.className,
 							"group inline-block w-fit relative pr-7",
 							isSelected &&
-								"border-l-3 border-[#FFD400] pl-3 bg-[#FFD400]/5 rounded-r",
+								"border-l-3 border-[#ffb74d] pl-3 bg-[#ffb74d]/5 rounded-r",
 						),
 					},
 					<>
@@ -195,7 +195,7 @@ function createHeadingComponent(
 							className={cn(
 								"absolute right-0 top-1/2 -translate-y-1/2 p-1 rounded-md inline-flex items-center justify-center cursor-pointer",
 								"opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-								"hover:bg-[#FFD400]/20",
+								"hover:bg-[#ffb74d]/20",
 								isSelected && "opacity-100",
 							)}
 							aria-label={`Chat about "${text}"`}
@@ -203,7 +203,7 @@ function createHeadingComponent(
 							<MessageCircle
 								className={cn(
 									"h-4 w-4",
-									isSelected ? "text-[#FFD400]" : "text-muted-foreground",
+									isSelected ? "text-[#ffb74d]" : "text-muted-foreground",
 								)}
 							/>
 						</button>

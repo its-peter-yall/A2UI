@@ -310,7 +310,7 @@ python -m unittest server.tests.test_learning.TestLearningSessions.test_create_s
 ### Colors
 | Name | Value | Usage |
 |------|-------|-------|
-| Primary (Cyber Yellow) | `#FFD400` | Accent, buttons, highlights |
+| Primary (Cyber Yellow) | `#ffb74d` | Accent, buttons, highlights |
 | Background | `hsl(240, 10%, 3.9%)` | Main background |
 | Foreground | `hsl(0, 0%, 98%)` | Text |
 

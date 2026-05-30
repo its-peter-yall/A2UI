@@ -100,7 +100,7 @@ describe("MarkdownRenderer", () => {
 
 		// The h2 inside should have yellow border class
 		const h2 = headingWrapper?.querySelector("h2");
-		expect(h2?.className).toContain("border-[#FFD400]");
+		expect(h2?.className).toContain("border-[#ffb74d]");
 	});
 
 	it("calls onToggleHeadingChat with heading ID when icon clicked", () => {
@@ -138,8 +138,8 @@ describe("MarkdownRenderer", () => {
 
 		const h2 = h2Wrapper?.querySelector("h2");
 		const h3 = h3Wrapper?.querySelector("h3");
-		expect(h2?.className).toContain("border-[#FFD400]");
-		expect(h3?.className).toContain("border-[#FFD400]");
+		expect(h2?.className).toContain("border-[#ffb74d]");
+		expect(h3?.className).toContain("border-[#ffb74d]");
 	});
 
 	it("toggle-off: clicking a selected heading removes only that heading", () => {
@@ -156,13 +156,13 @@ describe("MarkdownRenderer", () => {
 		const h2 = document
 			.querySelector('[data-heading-id="h-2-introduction"]')
 			?.querySelector("h2");
-		expect(h2?.className).toContain("border-[#FFD400]");
+		expect(h2?.className).toContain("border-[#ffb74d]");
 
 		// h-4-subsection is NOT selected, should NOT have yellow border
 		const h4 = document
 			.querySelector('[data-heading-id="h-4-subsection"]')
 			?.querySelector("h4");
-		expect(h4?.className).not.toContain("border-[#FFD400]");
+		expect(h4?.className).not.toContain("border-[#ffb74d]");
 	});
 
 	it("generates correct heading IDs from text", () => {

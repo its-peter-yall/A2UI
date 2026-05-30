@@ -35,7 +35,7 @@
  * - client/vite.config.ts - Build configuration
  * 
  * NOTES:
- * - Cyber Yellow (#FFD400) accent is defined in CSS variables
+ * - Cyber Yellow (#ffb74d) accent is defined in CSS variables
  * - Dark mode support via Tailwind's dark: variant
  * ============================================================================
  */

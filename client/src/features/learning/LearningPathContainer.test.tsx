@@ -324,3 +324,43 @@ describe('initialNodeId and resume navigation', () => {
     }
   });
 });
+
+describe('concept chat accessibility and anti-cheat restrictions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hides chat FAB and forces chat closed when node is in IN_QUIZ status', async () => {
+    const session = createSessionWithNodes(2);
+    session.nodes[0].status = 'IN_QUIZ';
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+    render(
+      <LearningPathContainer sessionId="session-1" />,
+      { wrapper: createWrapper() }
+    );
+
+    // Chat FAB should be hidden when current node status is IN_QUIZ
+    await waitFor(() => {
+      expect(screen.getByText('Topic 1')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('Open concept chat')).toBeNull();
+  });
+
+  it('hides chat FAB and forces chat closed when node is in SHOWING_FEEDBACK status', async () => {
+    const session = createSessionWithNodes(2);
+    session.nodes[0].status = 'SHOWING_FEEDBACK';
+    (api.getLearningSession as ReturnType<typeof vi.fn>).mockResolvedValue(session);
+
+    render(
+      <LearningPathContainer sessionId="session-1" />,
+      { wrapper: createWrapper() }
+    );
+
+    // Chat FAB should be hidden when current node status is SHOWING_FEEDBACK
+    await waitFor(() => {
+      expect(screen.getByText('Topic 1')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('Open concept chat')).toBeNull();
+  });
+});
