@@ -71,6 +71,9 @@ yarn-error.log*
 coverage/
 .nyc_output/
 htmlcov/
+*.test.ts
+*.test.tsx
+server/tests/
 
 # Cache
 .cache/
@@ -78,11 +81,13 @@ htmlcov/
 .eslintcache
 
 # Dev docs (root level)
+AGENTS.md
 AGENTS.original.md
 accessibility-*.md
 issues.md
 openrouter_problem_statement.md
 Implementing Retrieval-Based Learning Feature.md
+client/README.md
 
 # Misc
 *.pem
