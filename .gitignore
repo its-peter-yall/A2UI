@@ -3,11 +3,32 @@ node_modules/
 .pnp
 .pnp.js
 
-# Production builds
-dist/
-dist-ssr/
-build/
-*.tsbuildinfo
+# Databases
+*.db
+*.sqlite3
+server/data/*.db
+
+# Dev planning & docs
+.planning/
+conductor/
+.prompts/
+plans/
+research/
+
+# AI tool configs (dev only)
+.claude/settings.local.json
+.gemini/
+.kilo/
+.antigravitycli/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+!.env.example
 
 # Python
 __pycache__/
@@ -17,24 +38,19 @@ __pycache__/
 .Python
 .venv/
 venv/
-ENV/
-env/
-.venv/
 *.egg-info/
-dist/
 *.egg
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
 
-# Environment files
-.env
-.env.local
-.env.*.local
-.env.development
-.env.test
-.env.production
+# Build output
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
 
-# IDE
-.claude/
-.gemini/
+# IDE & Editor
 .vscode/
 .idea/
 *.swp
@@ -42,6 +58,7 @@ dist/
 *~
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 logs/
@@ -49,26 +66,17 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-# Testing
+# Testing & Coverage
 coverage/
 .nyc_output/
+htmlcov/
 
 # Cache
 .cache/
 .parcel-cache/
-.ruff_cache/
-.mypy_cache/
-.pytest_cache/
+.eslintcache
 
 # Misc
 *.pem
-.eslintcache
-.stylelintcache
-
-# Local workspace artifacts
-.kilo/
-A2UI.mp4
-server/data/a2ui.db
+*.mp4
