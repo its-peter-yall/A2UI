@@ -45,17 +45,21 @@ MAX_CHAT_HISTORY_MESSAGES = 10
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+GENERALCOMPUTE_BASE_URL = "https://api.generalcompute.com/v1"
 
 
-def resolve_chat_base_url(model_slug: str) -> str:
-    """Resolve the OpenAI-compatible base URL from the model slug prefix.
+def resolve_chat_base_url(model_slug: str, provider: str = "openrouter") -> str:
+    """Resolve the OpenAI-compatible base URL from the provider and model slug.
 
     Args:
         model_slug: Full model identifier (e.g. 'openai/gpt-4o-mini').
+        provider: AI provider identifier ('openrouter' or 'generalcompute').
 
     Returns:
         Base URL for the provider's OpenAI-compatible API.
     """
+    if provider == "generalcompute":
+        return GENERALCOMPUTE_BASE_URL
     lower_slug = model_slug.lower()
     if lower_slug.startswith("openai/") or lower_slug.startswith("gpt-"):
         return OPENAI_BASE_URL
@@ -136,6 +140,7 @@ async def stream_concept_chat(
     content_markdown: str,
     selected_heading_ids: List[str],
     node_title: str,
+    provider: str = "openrouter",
 ) -> AsyncGenerator[str, None]:
     """Stream chat completions as SSE frames.
 
@@ -150,12 +155,13 @@ async def stream_concept_chat(
         content_markdown: Full concept content in markdown.
         selected_heading_ids: User-selected heading identifiers.
         node_title: Title of the concept node.
+        provider: AI provider identifier ('openrouter' or 'generalcompute').
 
     Yields:
         SSE frame strings: 'data: {"delta":"...", ...}\\n\\n' per chunk,
         and a terminal 'data: [DONE]\\n\\n'.
     """
-    base_url = resolve_chat_base_url(model_slug)
+    base_url = resolve_chat_base_url(model_slug, provider)
 
     client = AsyncOpenAI(
         base_url=base_url,
