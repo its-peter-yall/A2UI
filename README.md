@@ -1,4 +1,4 @@
-# A2UI - Agent-Generated User Interface
+# A2UI - Agent to User Interface (UI)
 
 A modern adaptive learning platform that transforms user-submitted topics into structured, AI-generated courses with mastery-based progression. Built with React 19, FastAPI, and OpenRouter for universal LLM access.
 
@@ -54,9 +54,9 @@ A2UI implements **retrieval-based learning** - a pedagogical approach where acti
 | Tenacity | Retry logic with exponential backoff |
 
 ### AI/ML Architecture
-- **Planner Agent** (Gemini 2.5 Pro via OpenRouter): Decomposes topics into structured course outlines
-- **Generator Agent** (Gemini 2.5 Flash via OpenRouter): Creates educational content using 5E model
-- **Quizzer Agent** (Gemini 2.5 Flash via OpenRouter): Generates assessments with plausible distractors
+- **Planner Agent** (LLM via OpenRouter/General-Compute): Decomposes topics into structured course outlines
+- **Generator Agent** (LLM via OpenRouter/General-Compute): Creates educational content using 5E model
+- **Quizzer Agent** (LLM via OpenRouter/General-Compute): Generates assessments with plausible distractors
 - **Scatter-Gather Pattern**: Parallel generation with partial failure handling
 - **Model Flexibility**: Swap to Claude, GPT-4o, DeepSeek, or 300+ other models via OpenRouter
 
@@ -101,9 +101,8 @@ A2UI/
 │   │   └── learning_persistence.py  # All CRUD operations
 │   ├── utils/                  # Shared utilities
 │   │   └── instructor_client.py  # Instructor integration
-│   └── tests/                  # Python unit tests (15 files)
 │
-├── AGENTS.md                    # AI agent coding instructions
+|   setup.bat                    # installs python and node dependencies
 └── run.bat                      # Windows startup script
 ```
 
@@ -145,10 +144,10 @@ npm install
 
 ### 4. OpenRouter Setup
 
-1. Create a free account at [openrouter.ai](https://openrouter.ai)
+1. Create a free account at [openrouter.ai](https://openrouter.ai) or [generalcompute.com](https://generalcompute.com)
 2. Generate an API key from your dashboard
 3. When you first launch the app, paste your key into the **Settings** panel in the UI
-4. Pick a model (defaults to Gemini 2.5 Flash -- no billing required for free-tier models)
+4. Pick a model 
 
 No backend `.env` configuration is needed. The server receives your key per-request via the `X-OpenRouter-Key` header.
 
@@ -320,7 +319,7 @@ python -m unittest server.tests.test_learning.TestLearningSessions.test_create_s
 - **No Authentication** - Currently uses a placeholder user
 - **No RAG** - Designed for AI-generated content without document retrieval
 - **Local Database** - SQLite for simplicity; not suitable for multi-user deployment
-- **OpenRouter Key Required** - Users must supply their own API key via the UI settings panel
+- **OpenRouter/General-Compute Key Required** - Users must supply their own API key via the UI settings panel
 
 ## Contributing
 
@@ -332,7 +331,6 @@ python -m unittest server.tests.test_learning.TestLearningSessions.test_create_s
    - `cd server && python -m unittest`
 5. Submit a pull request with a clear description
 
-See `AGENTS.md` for detailed coding conventions and patterns.
 
 ## License
 
