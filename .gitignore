@@ -8,8 +8,7 @@ node_modules/
 *.sqlite3
 server/data/*.db
 
-# Dev planning & docs
-.planning/
+# Dev planning & docs (allow .planning on dev)
 conductor/
 .prompts/
 plans/

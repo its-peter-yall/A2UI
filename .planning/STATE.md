@@ -1,0 +1,125 @@
+---
+gsd_state_version: 1.0
+milestone: v1.4
+milestone_name: AI-Powered Assistance & Accessibility
+current_plan: 3 of 3
+status: completed
+stopped_at: "Phase 25 complete — Concept Chatbot shipped"
+last_updated: "2026-05-28T00:00:00.000Z"
+last_activity: 2026-05-28
+progress:
+  total_phases: 26
+  completed_phases: 25
+  total_plans: 3
+  completed_plans: 3
+  percent: 96
+---
+
+# Project State
+
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-02-17)
+
+**Core value:** Users can learn any topic through AI-generated retrieval-based learning paths with gated progression that reinforces understanding through active recall.
+**Current focus:** v1.4 AI-Powered Assistance & Accessibility — Phase 25 (Concept Chatbot) COMPLETE
+
+## Current Position
+
+**Phase:** 25 of 26 (Concept Chatbot)
+**Current Plan:** 3 of 3
+**Total Plans in Phase:** 3
+**Status:** v1.4 in progress — Phase 25 complete
+**Last Activity:** 2026-05-28
+
+**Progress:** [████████████████████░░] 96% (25/26 phases)
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 44 (v1.0: 20, v1.1: 14, v1.2: 7, v1.3: 4, v1.4: 3)
+- Average duration: 4.5 min
+- Total execution time: 31 min
+
+**By Phase (v1.2):**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 16. Schema Foundation | 1/2 | 5min | 5min |
+| 17. Quizzer Multi-Quiz | 2/2 | 5min | 2.5min |
+| 18. Planner Complexity | 2/2 | 6min | 3min |
+| 19. Orchestrator Integration | 2/2 | 0min | 0min |
+| 20. Frontend Verification | 2/2 | 15min | 7.5min |
+
+**By Phase (v1.4):**
+
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 25. Concept Chatbot | 3/3 | Complete |
+
+## Accumulated Context
+
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- [v1.2 init]: Quiz count range 1-5 (not 1-3) per REQUIREMENTS.md
+- [v1.2 init]: Batch generation (single LLM call per QuizSet) to avoid scatter-gather explosion
+- [v1.2 init]: Bloom's taxonomy for difficulty gradient (Recall → Application → Synthesis)
+- [v1.2 init]: Schema defaults (complexity="Intermediate", quiz_count=1) for backward compat
+- [16-01]: Pydantic Literal + Field(ge/le) sufficient for TopicNode validation -- no custom validators needed
+- [Phase 17]: Kept shared QUIZZER_SYSTEM_PROMPT unchanged and encoded multi-quiz constraints in a batch-only user message path
+- [Phase 17]: Used backward-compatible delegation: quiz_count<=1 calls generate_quiz and wraps in QuizSet, quiz_count>1 uses single response_model=QuizSet batch call
+- [18-01]: Prompt extension pattern — add sections + update example/output spec, never rewrite existing prompt content
+- [18-01]: Quiz count mapping uses ranges (Intermediate: 2-3, Advanced: 3-5) for LLM flexibility
+- [18-02]: Skew threshold >=80% (not >80%) for boundary correctness in validation
+- [18-02]: Pure function pattern for post-generation validation (not a method)
+- [18-02]: Quiz count bands: Basic=1, Intermediate flexible, Advanced=3-5
+- [Phase 17]: Kept difficulty validation in QuizzerAgent instead of QuizSet schema to preserve backward compatibility
+- [Phase 17]: Used warning + stable reorder behavior instead of failing generation on invalid gradients
+- [20-01]: Use DEFAULT 'Intermediate' for complexity column migration to prevent constraint violations
+- [20-01]: Make complexity Optional in ConceptNodeResponse and TypeScript for backward compatibility
+- [20-01]: Wire complexity through orchestrator only (router uses Pydantic auto-mapping)
+- [20-02]: Reuse retry-quiz endpoint for advanceToNextQuiz mutation (server already advanced current_index)
+- [20-02]: Use feedbackResult.quiz_index as primary source for currentQuizIndex (node.current_index points to NEXT quiz)
+- [20-02]: Make complexity/difficulty badges conditional for backward compatibility with existing nodes
+
+### Research Context
+
+- Research confidence: HIGH across all areas
+- ~70% of multi-quiz infrastructure already exists but is untested
+- 4 backend files to modify: TopicNode schema, PlannerAgent, QuizzerAgent, CourseOrchestrator
+- Single config change: max_output_tokens 1024 → 4096 for Quizzer
+- Frontend ConceptCard already has "Quiz X of Y" code — needs verification not rewrite
+- onNextQuiz handler is confirmed no-op — needs actual implementation
+- Feature spec: .planning/codebase/features/dynamic-quiz-generation.md
+
+### Pending Todos
+
+None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 2 | Debug multi-quiz submission: option ID mismatch in QuizSet validation | 2026-02-17 | 388f662 | [2-debug-multi-quiz-submission-option-id-mi](./quick/2-debug-multi-quiz-submission-option-id-mi/) |
+| 3 | Refactor quiz generation to remove option_id from LLM output | 2026-02-17 | 92740bb | [3-refactor-quiz-generation-remove-option-i](./quick/3-refactor-quiz-generation-remove-option-i/) |
+| 4 | Improve quiz navigation: disable prev on first quiz, support multi-quiz back nav | 2026-02-17 | [pending] | [4-quiz-navigation-improvements](./quick/4-quiz-navigation-improvements/) |
+| 5 | Upgrade server virtual environment to Python 3.14.3 | 2026-02-23 | 7e363bf | [5-upgrade-server-venv-to-python-3-14-3-ver](./quick/5-upgrade-server-venv-to-python-3-14-3-ver/) |
+| 6 | Implementation Plan: Dark and Light Mode Toggle | 2026-03-07 | a289b72 | [6-implementation-plan-dark-and-light-mode-](./quick/6-implementation-plan-dark-and-light-mode-/) |
+| 7 | Verify test files compatibility with current implementation | 2026-03-08 | N/A (verification) | [7-verify-test-files-compatibility-with-cur](./quick/7-verify-test-files-compatibility-with-cur/) |
+| 8 | Show skeleton cards during backend startup in LearningHome | 2026-03-08 | 1f3bc99 | [8-add-an-temporary-animation-of-loading-gh](./quick/8-add-an-temporary-animation-of-loading-gh/) |
+
+### Blockers/Concerns
+
+- ~~Planner prompt drift risk~~ — addressed in 18-01: explicit criteria + VARIED emphasis + example
+- ~~onNextQuiz is a no-op~~ — resolved in 20-02: real advanceToNextQuiz mutation implemented
+- ~~State machine desync risk between node state and current_index for multi-quiz~~ — resolved in 20-02: feedbackResult.quiz_index as primary source
+- Regeneration must produce QuizSet when original had quiz_count > 1 (pending verification)
+
+## Session Continuity
+
+**Last session:** 2026-05-28
+**Stopped at:** Phase 25 complete — Concept Chatbot (3/3 plans shipped)
+**Resume file:** None
