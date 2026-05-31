@@ -1051,6 +1051,7 @@ async def concept_chat(
     x_provider_api_key: Optional[str] = Header(None, alias="X-Provider-Api-Key"),
     x_model: str = Header(None, alias="X-Model"),
     x_chat_model: str = Header(None, alias="X-Chat-Model"),
+    x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
 ) -> StreamingResponse:
     """Stream a context-aware chat response for a concept node."""
     if not x_provider_api_key or not x_provider_api_key.strip():
@@ -1110,6 +1111,7 @@ async def concept_chat(
             content_markdown=node["content_markdown"],
             selected_heading_ids=request_body.selected_heading_ids,
             node_title=node["title"],
+            provider=(x_ai_provider or "openrouter").strip(),
         ),
         media_type="text/event-stream",
     )
