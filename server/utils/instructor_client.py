@@ -226,6 +226,10 @@ class InstructorClient:
                 **kwargs,
             )
 
+            logger.info(
+                f"LLM call completed: role={role}, model={model_slug}, "
+                f"thinking={'enabled' if reasoning_params else 'disabled'}"
+            )
             logger.debug(f"Generated structured response for role: {role}")
             return response
 

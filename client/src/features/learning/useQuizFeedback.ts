@@ -87,27 +87,28 @@ export function useQuizFeedback({
     !hasLatestResult && history && history.attempts.length > 0 && quiz
       ? (() => {
           const lastAttempt = history.attempts[history.attempts.length - 1];
-          const correctOption = quiz.options.find((option) => option.is_correct);
+          const correctOptions = quiz.options.filter((option) => option.is_correct);
           const selectedOption = quiz.options.find(
             (option) => option.option_id === lastAttempt.selected_option_id
           );
-          if (!correctOption || !selectedOption) {
+          if (correctOptions.length === 0 || !selectedOption) {
             return undefined;
           }
+          const correctOptionIds = correctOptions.map((opt) => opt.option_id);
           const isCorrect = lastAttempt.is_correct ?? selectedOption.is_correct;
           const scorePercent =
             lastAttempt.score_percent ?? (isCorrect ? 100 : 0);
           const isMastered = history.is_mastered ?? isCorrect;
-          // Only reveal correct answer if the last attempt was correct
-          // For wrong answers, don't reveal the correct option to maintain learning
+          // Only reveal correct answers if the last attempt was correct
+          // For wrong answers, don't reveal correct options to maintain learning
           return {
             node_id: nodeId,
             attempt_number: lastAttempt.attempt_number,
             is_correct: isCorrect,
             score_percent: scorePercent,
-            correct_option_id: isCorrect ? correctOption.option_id : null,
-            selected_option_id: lastAttempt.selected_option_id,
-            explanation: isCorrect ? correctOption.explanation : "",
+            correct_option_ids: isCorrect ? correctOptionIds : [],
+            selected_option_ids: [lastAttempt.selected_option_id],
+            explanation: isCorrect ? correctOptions[0].explanation : "",
             selected_explanation: isCorrect ? undefined : selectedOption.explanation,
             is_mastered: isMastered,
             next_node_unlocked: isMastered,

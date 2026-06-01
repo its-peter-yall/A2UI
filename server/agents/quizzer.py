@@ -111,6 +111,25 @@ Before generating the quiz, mentally follow these steps:
   - "Why does X lead to Y?" or "How do A and B relate?"
   - Requires connecting multiple concepts or reasoning through implications
 
+## Question Types
+
+Use two question types strategically:
+
+### Single Choice (pick one correct answer)
+- Default question type for most assessments
+- Exactly 1 correct option out of 4
+- Use for: recall, understanding, application
+
+### Multiple Choice (select all that apply)
+- Use when a concept has multiple valid aspects that should be tested together
+- 2-3 correct options out of 4 (never all 4)
+- Use for: comparing/contrasting, identifying multiple properties, recognizing patterns
+- Each correct option should test a distinct aspect of understanding
+- Distractors should be plausible but clearly wrong to a prepared learner
+- Example: "Which of the following are properties of X?" where X has 2-3 defining properties
+
+Choose question_type based on what best tests the concept. A topic's quiz set should include a mix when appropriate.
+
 ## Explanation Requirements (MANDATORY)
 
 EVERY option MUST have an explanation:
@@ -133,14 +152,16 @@ Your output MUST follow this exact structure in JSON format:
 1. **question_text**: Clear, unambiguous question text
    - Should be answerable with the provided content
    - Avoid "all of the above" or "none of the above"
-   
-2. **options**: EXACTLY 4 options with:
+
+2. **question_type**: "single_choice" or "multiple_choice"
+
+3. **options**: EXACTLY 4 options with:
     - **display_label**: "A", "B", "C", or "D" (user-facing label)
     - **text**: The option text
-    - **is_correct**: true for exactly ONE option, false for others
-    - **explanation**: Required explanation (see above)
-   
-3. **difficulty**: One of "easy", "medium", or "hard"
+    - **is_correct**: true for exactly ONE option (single_choice) or 2-3 options (multiple_choice)
+    - **explanation**: Required explanation for every option
+
+4. **difficulty**: One of "easy", "medium", or "hard"
 
 The response will be validated as JSON against a strict schema. Invalid output will be rejected.
 
@@ -338,7 +359,7 @@ class QuizzerAgent(BaseAgent):
 2. Use this exact difficulty sequence: {sequence_text}
 3. Keep the sequence ordered from easier to harder
 4. For each quiz, generate EXACTLY 4 options (A, B, C, D)
-5. For each quiz, ensure EXACTLY 1 option is correct
+5. For single_choice: ensure EXACTLY 1 option is correct. For multiple_choice: ensure 2-3 options are correct
 6. For each quiz, each distractor MUST target a specific misconception
 7. For each quiz, EVERY option MUST have an explanation"""
 
@@ -475,7 +496,7 @@ class QuizzerAgent(BaseAgent):
 ## Requirements
 1. Create a question that tests understanding of the key concepts
 2. Generate EXACTLY 4 options (A, B, C, D)
-3. Ensure EXACTLY 1 option is correct
+3. For single_choice: ensure EXACTLY 1 option is correct. For multiple_choice: ensure 2-3 options are correct
 4. Each distractor MUST target a specific misconception
 5. EVERY option MUST have an explanation
 6. Choose appropriate difficulty based on content complexity"""

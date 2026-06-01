@@ -65,8 +65,8 @@ export function QuizFeedback({
 	const {
 		is_correct,
 		is_mastered,
-		selected_option_id,
-		correct_option_id,
+		selected_option_ids,
+		correct_option_ids,
 		explanation,
 		selected_explanation,
 	} = result;
@@ -98,9 +98,13 @@ export function QuizFeedback({
 	const totalQuizzes = isQuizSet ? quiz.quizzes.length : 1;
 	const hasMoreQuizzes = currentQuizIndex < totalQuizzes - 1;
 
-	// For wrong answers, correct_option_id is null (not revealed)
-	// Only show correct answer when user answered correctly
-	const showCorrectAnswer = is_correct && correct_option_id !== null;
+	// For wrong answers, correct_option_ids is empty (not revealed)
+	// Only show correct answers when user answered correctly
+	const showCorrectAnswer = is_correct && correct_option_ids.length > 0;
+
+	// Build sets for efficient lookup
+	const selectedSet = new Set(selected_option_ids);
+	const correctSet = new Set(correct_option_ids);
 
 	// Difficulty label styles
 	const difficultyStyles = {
@@ -172,8 +176,8 @@ export function QuizFeedback({
 			{/* Options with feedback */}
 			<div className="space-y-3">
 				{currentQuiz.options.map((option) => {
-					const isSelected = option.option_id === selected_option_id;
-					const isCorrectOption = option.option_id === correct_option_id;
+					const isSelected = selectedSet.has(option.option_id);
+					const isCorrectOption = correctSet.has(option.option_id);
 
 					return (
 						<div

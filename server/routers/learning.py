@@ -129,10 +129,10 @@ class QuizSubmitRequest(BaseModel):
     across shuffles, while display_label (A, B, C, D) may change position.
     """
 
-    selected_option_id: str = Field(
+    selected_option_ids: List[str] = Field(
         ...,
-        description="Selected option UUID (stable ID from option.option_id)",
         min_length=1,
+        description="Selected option UUID(s) (stable IDs from option.option_id)",
     )
     quiz_index: int = Field(
         default=0,
@@ -663,7 +663,7 @@ def submit_revision_quiz(
         result = learning_manager.submit_revision_quiz(
             revision_id=revision_id,
             node_id=node_id,
-            selected_option_id=request.selected_option_id,
+            selected_option_ids=request.selected_option_ids,
             quiz_index=request.quiz_index,
         )
         return RevisionQuizSubmissionResult(**result)
@@ -831,7 +831,7 @@ def submit_quiz(
         # Create the quiz attempt
         result = learning_manager.create_quiz_attempt(
             node_id=node_id,
-            selected_option_id=request.selected_option_id,
+            selected_option_ids=request.selected_option_ids,
             quiz_index=request.quiz_index,
         )
 

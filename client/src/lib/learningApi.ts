@@ -26,7 +26,7 @@
  * USAGE:
  *    ```tsx
  *    const session = await generateCourse({ query: 'Quantum computing' });
- *    const result = await submitQuiz('node-uuid', 'option-uuid', 0);
+ *    const result = await submitQuiz('node-uuid', ['option-uuid-1', 'option-uuid-2'], 0);
  *    ```
  * ============================================================================
  */
@@ -176,11 +176,11 @@ export const transitionNode = async (
 
 export const submitQuiz = async (
   nodeId: string,
-  selectedOptionId: string,
+  selectedOptionIds: string[],
   quizIndex?: number
 ): Promise<QuizSubmitResponse> => {
   const data: QuizSubmitRequest = {
-    selected_option_id: selectedOptionId,
+    selected_option_ids: selectedOptionIds,
     quiz_index: quizIndex ?? 0,  // Default to 0 for single quizzes
   };
   const response = await api.post<QuizSubmitResponse>(
@@ -282,12 +282,12 @@ export const markNodeReviewed = async (
 export const submitRevisionQuiz = async (
   revisionId: string,
   nodeId: string,
-  selectedOptionId: string,
+  selectedOptionIds: string[],
   quizIndex?: number
 ): Promise<RevisionQuizResponse> => {
   const response = await api.post<RevisionQuizResponse>(
     `/learning/revisions/${revisionId}/nodes/${nodeId}/submit-quiz`,
-    { selected_option_id: selectedOptionId, quiz_index: quizIndex ?? 0 }
+    { selected_option_ids: selectedOptionIds, quiz_index: quizIndex ?? 0 }
   );
   return response.data;
 };

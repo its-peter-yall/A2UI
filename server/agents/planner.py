@@ -65,7 +65,12 @@ When breaking down a user's query into sub-concepts:
 
 3. **Atomic Focus**: Each topic should cover ONE key idea. If a topic has multiple sub-components, it should be split.
 
-4. **Minimum 5 Topics, No Upper Limit**: Generate at least 5 sub-concepts. Complex domains may require 15-20 topics for proper depth. Do not artificially limit breadth.
+4. **Adaptive Topic Scaling**: Scale topic count to the complexity and breadth of the query:
+   - **Simple/focused topics** (e.g., "Photosynthesis basics", "What is gravity?"): 5-7 topics
+   - **Moderate domains** (e.g., "Newtonian Laws", "Cell biology"): 8-15 topics
+   - **Advanced/expansive domains** (e.g., "Quantum computing architecture", "Machine learning from scratch"): 15-30+ topics
+
+   The core objective is to produce a COMPLETE and THOROUGH course. A learner should finish the course as a near-expert with no remaining foundational gaps. It is always better to have more focused, atomic topics than fewer overloaded ones. When in doubt, add more topics.
 
 5. **Summary for Context**: The `summary_for_context` field is CRITICAL. This summary will be injected into prompts for:
    - The Generator Agent (to write explanations that connect to prior topics)
@@ -112,50 +117,177 @@ Each TopicNode must include:
 - `complexity`: Complexity rating (Basic, Intermediate, or Advanced) based on the assessment criteria above
 - `quiz_count`: Number of quizzes (1-5) based on the quiz count mapping above
 
-## Example Decomposition
+## Example: Simple Query Decomposition
 
-User Query: "Newtonian Laws"
+User Query: "Photosynthesis"
 
-Course Title: "Understanding Newton's Laws of Motion"
+Course Title: "Understanding Photosynthesis"
 
-Topics:
-1. **Index 0 - "Forces and Motion Fundamentals"**
-   - Summary: "Introduces the concept of forces as interactions that cause changes in motion, establishing vocabulary for subsequent laws."
-   - Key Terms: ["force", "motion", "vector", "Newton"]
+Topics (6):
+1. **Index 0 - "What is Photosynthesis?"**
+   - Summary: "Introduces photosynthesis as the process by which plants convert light energy into chemical energy, establishing foundational vocabulary."
+   - Key Terms: ["photosynthesis", "chlorophyll", "glucose", "carbon dioxide"]
    - Complexity: "Basic"
    - Quiz Count: 1
 
-2. **Index 1 - "Newton's First Law: Inertia"**
-   - Summary: "Explains the principle of inertia—objects at rest stay at rest, and objects in motion stay in motion unless acted upon by an external force."
-   - Key Terms: ["inertia", "equilibrium", "net force", "reference frame"]
+2. **Index 1 - "Light-Dependent Reactions"**
+   - Summary: "Explains how light energy is captured and converted into ATP and NADPH in the thylakoid membrane."
+   - Key Terms: ["ATP", "NADPH", "thylakoid", "electron transport chain"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+3. **Index 2 - "The Calvin Cycle"**
+   - Summary: "Describes the light-independent reactions where CO2 is fixed into glucose using ATP and NADPH."
+   - Key Terms: ["Calvin cycle", "RuBisCO", "G3P", "carbon fixation"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+4. **Index 3 - "Chloroplast Structure and Function"**
+   - Summary: "Maps the physical structure of chloroplasts to their functional roles in photosynthesis."
+   - Key Terms: ["chloroplast", "stroma", "grana", "double membrane"]
    - Complexity: "Basic"
    - Quiz Count: 1
 
-3. **Index 2 - "Newton's Second Law: F=ma"**
-   - Summary: "Quantifies the relationship between force, mass, and acceleration. Builds on inertia by showing how force overcomes it."
-   - Key Terms: ["acceleration", "mass", "F=ma", "proportionality"]
+5. **Index 4 - "Factors Affecting Photosynthesis"**
+   - Summary: "Analyzes how light intensity, CO2 concentration, and temperature affect the rate of photosynthesis."
+   - Key Terms: ["limiting factor", "light intensity", "compensation point", "saturation"]
    - Complexity: "Intermediate"
    - Quiz Count: 2
 
-4. **Index 3 - "Newton's Third Law: Action-Reaction"**
-   - Summary: "Describes how forces come in pairs—every action has an equal and opposite reaction."
-   - Key Terms: ["action-reaction", "force pairs", "interaction", "symmetry"]
-   - Complexity: "Intermediate"
-   - Quiz Count: 2
-
-5. **Index 4 - "Free Body Diagrams"**
-   - Summary: "Visual tool for analyzing forces acting on objects. Applies all three laws to solve mechanics problems."
-   - Key Terms: ["free body diagram", "normal force", "friction", "tension"]
+6. **Index 5 - "Photosynthesis in the Global Carbon Cycle"**
+   - Summary: "Connects photosynthesis to global carbon cycling, climate, and ecosystem energy flow."
+   - Key Terms: ["carbon cycle", "primary producer", "biomass", "ecosystem"]
    - Complexity: "Advanced"
    - Quiz Count: 3
 
-6. **Index 5 - "Real-World Applications"**
-   - Summary: "Connects Newton's laws to everyday phenomena: vehicles, sports, space travel. Synthesizes prior concepts."
-   - Key Terms: ["momentum", "collision", "rocket propulsion", "friction"]
-   - Complexity: "Advanced"
-   - Quiz Count: 4
+## Example: Complex Query Decomposition
 
-Remember: Your output directly determines the quality of the entire learning experience. Be precise, be pedagogically sound, and always prioritize learner comprehension."""
+User Query: "Quantum Computing"
+
+Course Title: "Quantum Computing: From Fundamentals to Architecture"
+
+Topics (20):
+1. **Index 0 - "Classical Bits vs Quantum Bits"**
+   - Summary: "Contrasts classical binary computing with quantum computing fundamentals."
+   - Key Terms: ["bit", "qubit", "binary", "quantum state"]
+   - Complexity: "Basic"
+   - Quiz Count: 1
+
+2. **Index 1 - "Qubits and Superposition"**
+   - Summary: "Explains how qubits can exist in multiple states simultaneously through superposition."
+   - Key Terms: ["superposition", "probability amplitude", "Bloch sphere", "basis state"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+3. **Index 2 - "Quantum Entanglement"**
+   - Summary: "Describes how qubits can be correlated in ways that have no classical equivalent."
+   - Key Terms: ["entanglement", "Bell state", "non-locality", "correlation"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+4. **Index 3 - "Dirac Notation and Quantum States"**
+   - Summary: "Introduces the mathematical formalism used to represent quantum states."
+   - Key Terms: ["ket", "bra", "inner product", "state vector"]
+   - Complexity: "Basic"
+   - Quiz Count: 1
+
+5. **Index 4 - "Single-Qubit Gates"**
+   - Summary: "Covers the fundamental quantum gates that operate on individual qubits."
+   - Key Terms: ["Pauli-X", "Hadamard", "rotation gate", "unitary"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+6. **Index 5 - "Multi-Qubit Gates"**
+   - Summary: "Explains CNOT, Toffoli, and other gates that create entanglement between qubits."
+   - Key Terms: ["CNOT", "Toffoli", "controlled gate", "entangling gate"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+7. **Index 6 - "Quantum Circuits and Diagrams"**
+   - Summary: "Teaches how to read and construct quantum circuit diagrams."
+   - Key Terms: ["quantum circuit", "wire", "measurement", "circuit depth"]
+   - Complexity: "Intermediate"
+   - Quiz Count: 2
+
+8. **Index 7 - "Measurement and Probability"**
+   - Summary: "Explains how quantum measurement collapses superposition to classical outcomes."
+   - Key Terms: ["measurement", "collapse", "Born rule", "probability"]
+   - Complexity: "Basic"
+   - Quiz Count: 1
+
+9. **Index 8 - "No-Cloning Theorem"**
+   - Summary: "Proves why quantum states cannot be perfectly copied and its implications."
+   - Key Terms: ["no-cloning", "unitarity", "quantum cryptography", "copy"]
+   - Complexity: "Advanced"
+   - Quiz Count: 3
+
+10. **Index 9 - "Quantum Interference"**
+    - Summary: "Shows how interference enables quantum algorithms to amplify correct answers."
+    - Key Terms: ["interference", "constructive", "destructive", "amplitude amplification"]
+    - Complexity: "Advanced"
+    - Quiz Count: 3
+
+11. **Index 10 - "Deutsch-Jozsa Algorithm"**
+    - Summary: "Presents the first quantum algorithm demonstrating exponential speedup over classical."
+    - Key Terms: ["Deutsch-Jozsa", "oracle", "exponential speedup", "balanced function"]
+    - Complexity: "Advanced"
+    - Quiz Count: 3
+
+12. **Index 11 - "Grover's Search Algorithm"**
+    - Summary: "Explains quadratic speedup for unstructured search using amplitude amplification."
+    - Key Terms: ["Grover's algorithm", "oracle", "diffusion operator", "quadratic speedup"]
+    - Complexity: "Advanced"
+    - Quiz Count: 4
+
+13. **Index 12 - "Shor's Factoring Algorithm"**
+    - Summary: "Describes the quantum algorithm for integer factorization with exponential speedup."
+    - Key Terms: ["Shor's algorithm", "period finding", "quantum Fourier transform", "RSA"]
+    - Complexity: "Advanced"
+    - Quiz Count: 4
+
+14. **Index 13 - "Quantum Error Correction"**
+    - Summary: "Introduces the need for error correction and the principles behind quantum error correcting codes."
+    - Key Terms: ["quantum error correction", "syndrome", "logical qubit", "noise"]
+    - Complexity: "Advanced"
+    - Quiz Count: 3
+
+15. **Index 14 - "Surface Codes and Logical Qubits"**
+    - Summary: "Explains the leading error correction approach using surface codes."
+    - Key Terms: ["surface code", "topological", "threshold theorem", "stabilizer"]
+    - Complexity: "Advanced"
+    - Quiz Count: 4
+
+16. **Index 15 - "Quantum Noise and Decoherence"**
+    - Summary: "Describes how environmental interactions cause quantum information to degrade."
+    - Key Terms: ["decoherence", "T1", "T2", "noise channel"]
+    - Complexity: "Intermediate"
+    - Quiz Count: 2
+
+17. **Index 16 - "NISQ Devices and Limitations"**
+    - Summary: "Covers the current state of noisy intermediate-scale quantum computers."
+    - Key Terms: ["NISQ", "noise", "limited depth", "variational algorithm"]
+    - Complexity: "Advanced"
+    - Quiz Count: 3
+
+18. **Index 17 - "Quantum Supremacy vs Advantage"**
+    - Summary: "Distinguishes between quantum supremacy and practical quantum advantage."
+    - Key Terms: ["quantum supremacy", "quantum advantage", "benchmark", "practical utility"]
+    - Complexity: "Advanced"
+    - Quiz Count: 3
+
+19. **Index 18 - "Topological Quantum Computing"**
+    - Summary: "Explores an alternative approach using topological states for inherently protected qubits."
+    - Key Terms: ["topological", "anyon", "braiding", "fault-tolerant"]
+    - Complexity: "Advanced"
+    - Quiz Count: 4
+
+20. **Index 19 - "Quantum Computing Applications"**
+    - Summary: "Surveys real-world applications: cryptography, drug discovery, optimization, machine learning."
+    - Key Terms: ["cryptography", "optimization", "drug discovery", "machine learning"]
+    - Complexity: "Advanced"
+    - Quiz Count: 3
+
+Remember: Your output directly determines the quality of the entire learning experience. Be precise, be pedagogically sound, and always prioritize learner comprehension. When in doubt, decompose further — more focused topics always beat fewer overloaded ones."""
 
 
 class PlannerAgent(BaseAgent):

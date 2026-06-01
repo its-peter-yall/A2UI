@@ -75,12 +75,14 @@ export interface QuizCard {
 	question_text: string;
 	options: QuizOption[];
 	difficulty: QuizDifficulty;
+	question_type: "single_choice" | "multiple_choice";
 }
 
 export interface QuizCardHidden {
 	question_text: string;
 	options: QuizOptionHidden[];
 	difficulty: QuizDifficulty;
+	question_type: "single_choice" | "multiple_choice";
 }
 
 export interface QuizSet {
@@ -176,7 +178,7 @@ export interface GenerateCourseRequest {
 }
 
 export interface QuizSubmitRequest {
-	selected_option_id: string;
+	selected_option_ids: string[];
 	quiz_index?: number;
 }
 
@@ -185,8 +187,8 @@ export interface QuizSubmitResponse {
 	attempt_number: number;
 	is_correct: boolean;
 	score_percent: number;
-	correct_option_id: string | null; // null when answer is incorrect (not revealed)
-	selected_option_id: string;
+	correct_option_ids: string[]; // empty when answer is incorrect (not revealed)
+	selected_option_ids: string[];
 	explanation: string; // Explanation for the correct answer (empty when answer is incorrect)
 	selected_explanation?: string; // Explanation for the selected answer (only when incorrect)
 	quiz_index?: number; // Index of quiz in set (for multi-quiz nodes)
@@ -280,10 +282,10 @@ export interface RevisionQuizResponse {
 	id: string;
 	node_id: string;
 	attempt_number: number;
-	selected_option_id: string;
+	selected_option_ids: string[];
 	is_correct: boolean;
 	score_percent: number;
-	correct_option_id: string;
+	correct_option_ids: string[];
 	explanation: string; // Explanation for the correct answer
 	selected_explanation?: string; // Explanation for the selected answer (only when incorrect)
 	revision_node_status: RevisionNodeStatus;

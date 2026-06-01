@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 class GeneratedContent(BaseModel):
     """Output model for generated educational content."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="allow")
 
     content_markdown: str = Field(
         ...,
@@ -59,6 +59,10 @@ class GeneratedContent(BaseModel):
         min_length=3,
         max_length=5,
     )
+    thinking_content: Optional[str] = Field(
+        default=None,
+        description="Thinking/reasoning content from models that support it (e.g., Claude)",
+    )
 
 
 GENERATOR_SYSTEM_PROMPT = """You are an expert educational content creator specializing in engaging, learner-centered explanations.
@@ -68,11 +72,14 @@ Your goal is to create concise, targeted explanations that maximize comprehensio
 
 ## Content Guidelines
 
-### Length and Focus
-- Target **2-3 minutes of reading time** (approximately 300-500 words)
-- Be **concise and focused**: every sentence should serve the learning objective
-- Avoid unnecessary tangents or overly academic language
-- Write for an engaged learner, not a passive reader
+### Depth and Thoroughness
+- There is NO word limit. Adjust depth naturally based on topic complexity
+- Simple concepts may need 2-3 paragraphs. Complex topics may need multiple pages
+- Complex topics require meticulous explanation with trivial, real-world examples
+- Use multiple examples and analogies — one example is rarely enough for complex ideas
+- Address common misconceptions explicitly — this prevents lingering doubts
+- The learner should finish each topic with ZERO remaining confusion
+- The goal is expert-level understanding, not surface-level overview
 
 ### Pedagogical Framework (5E Model)
 Structure your explanations using this proven educational approach:
@@ -118,6 +125,27 @@ Structure your content for readability:
 - Avoid jargon unless defining it as a key term
 - Be precise but approachable—like a knowledgeable friend explaining
 
+## Topic Summary and Curiosity Spark
+
+After the main content and key takeaways, end each topic with:
+
+1. **Summary**: A brief recap of what was covered — the 3-5 most important ideas restated concisely. This reinforces learning and gives the learner a quick reference.
+
+2. **Curiosity Spark**: End with 2-3 open-ended, thought-provoking questions that:
+   - Connect the topic to the learner's real world
+   - Hint at deeper complexities not yet covered
+   - Create genuine wonder and desire to explore further
+   - These questions should be phrased naturally, as if a curious learner would ask them
+
+Example ending:
+> ### Summary
+> In this topic, you learned how neural networks adjust weights through backpropagation. The key ideas were: (1) the chain rule enables gradient computation, (2) gradients flow backward from output to input, (3) learning rate controls step size, and (4) vanishing gradients are a real challenge for deep networks.
+>
+> ### Curious to explore more?
+> - How do neural networks decide which weights to adjust first?
+> - What happens when a network gets stuck in a local minimum?
+> - Can backpropagation work with non-differentiable functions?
+
 ## Key Takeaways Generation
 After generating content, extract **3-5 key takeaways**:
 - Each should be a single, memorable sentence
@@ -151,10 +179,16 @@ After generating content, extract **3-5 key takeaways**:
 - [Bullet point 2]
 - [Bullet point 3]
 
-[Closing that foreshadows next topic]
+### Summary
+[Brief recap of the 3-5 most important ideas from this topic]
+
+### Curious to explore more?
+- [Open-ended question 1 that sparks deeper interest]
+- [Open-ended question 2 connecting to real-world applications]
+- [Open-ended question 3 hinting at advanced concepts]
 ```
 
-Remember: Your content will be read by learners eager to understand. Make every word count, and leave them feeling more capable and curious than before."""
+Remember: Your content will be read by learners eager to understand. Leave them feeling like an expert on this topic — with zero remaining doubts and genuine curiosity to explore further."""
 
 
 class GeneratorAgent(BaseAgent):

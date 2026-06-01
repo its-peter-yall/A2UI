@@ -104,6 +104,15 @@ class CourseOrchestrator:
         """
         total_start = time.perf_counter()
 
+        # Log model and thinking configuration at course generation start
+        model_used = llm_context.model if llm_context else None
+        thinking_enabled = llm_context.thinking_enabled if llm_context else False
+        thinking_effort = llm_context.thinking_effort if llm_context else None
+        logger.info(
+            f"Course generation started | Model: {model_used or 'default'} "
+            f"| Thinking enabled: {thinking_enabled} | Thinking effort: {thinking_effort or 'N/A'}"
+        )
+
         # 1. SERIAL: Planner generates course outline
         planner_start = time.perf_counter()
         outline: CourseOutline = await planner_agent.plan(
@@ -282,6 +291,18 @@ class CourseOrchestrator:
         success = False
         error_message = None
         node: Optional[Dict[str, Any]] = None
+        model_used = llm_context.model if llm_context else None
+        thinking_enabled = llm_context.thinking_enabled if llm_context else False
+        thinking_effort = llm_context.thinking_effort if llm_context else None
+
+        # Log model and thinking configuration for this content generation
+        logger.info(
+            f"Generating content for topic {sequence_index}: '{topic.title}' "
+            f"| Model: {model_used or 'default'} "
+            f"| Thinking enabled: {thinking_enabled} "
+            f"| Thinking effort: {thinking_effort or 'N/A'}"
+        )
+
         try:
             # Generate educational content
             content: GeneratedContent = await generator_agent.generate_explanation(
@@ -289,6 +310,13 @@ class CourseOrchestrator:
                 prev_summary=prev_summary if prev_summary != "Start" else None,
                 next_summary=next_summary if next_summary != "End" else None,
                 llm_context=llm_context,
+            )
+
+            # Log thinking configuration for this generation
+            logger.info(
+                f"Generator completed for topic {sequence_index}: '{topic.title}' "
+                f"| Model: {model_used or 'default'} "
+                f"| Thinking requested: {thinking_enabled}"
             )
 
             # Generate quiz for the content
@@ -299,11 +327,10 @@ class CourseOrchestrator:
                 llm_context=llm_context,
             )
 
-            logger.debug(
-                "Generated quiz set with %s quizzes for topic '%s' (quiz_count=%s)",
-                len(quiz_set.quizzes),
-                topic.title,
-                topic.quiz_count,
+            logger.info(
+                f"Quizzer completed for topic {sequence_index}: '{topic.title}' "
+                f"| Model: {model_used or 'default'} "
+                f"| Quizzes generated: {len(quiz_set.quizzes)}"
             )
 
             # Determine initial status (first node is VIEWING_EXPLANATION, rest are LOCKED)

@@ -53,6 +53,10 @@ interface ChatPanelProps {
 	isCourseComplete?: boolean;
 	/** Width of the panel in percentage (32-40) */
 	widthPercent?: number;
+	/** When set, paste this value into the input and focus the textarea */
+	prefillMessage?: string;
+	/** Called after the prefillMessage has been applied to the input */
+	onPrefillConsumed?: () => void;
 }
 
 const TypingIndicator = () => (
@@ -72,6 +76,8 @@ export function ChatPanel({
 	onClearHeadings,
 	isCourseComplete = false,
 	widthPercent = 25,
+	prefillMessage,
+	onPrefillConsumed,
 }: ChatPanelProps) {
 	const {
 		messages,
@@ -158,6 +164,18 @@ export function ChatPanel({
 			textareaRef.current.focus();
 		}
 	}, [isOpen]);
+
+	// Apply prefill message from curiosity questions (or other callers)
+	useEffect(() => {
+		if (prefillMessage) {
+			setInput(prefillMessage);
+			onPrefillConsumed?.();
+			// Focus the textarea after a brief delay so the panel animation completes
+			setTimeout(() => {
+				textareaRef.current?.focus();
+			}, 300);
+		}
+	}, [prefillMessage, onPrefillConsumed]);
 
 	// Escape key handler and focus trap
 	useEffect(() => {

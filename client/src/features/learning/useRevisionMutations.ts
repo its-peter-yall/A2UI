@@ -116,13 +116,13 @@ export function useRevisionMutations({
   const submitQuizMutation = useMutation({
     mutationFn: ({
       nodeId,
-      selectedOptionId,
+      selectedOptionIds,
       quizIndex,
     }: {
       nodeId: string;
-      selectedOptionId: string;
+      selectedOptionIds: string[];
       quizIndex?: number;
-    }) => submitRevisionQuiz(revisionId, nodeId, selectedOptionId, quizIndex),
+    }) => submitRevisionQuiz(revisionId, nodeId, selectedOptionIds, quizIndex),
 
     onMutate: async ({ nodeId }) => {
       await queryClient.cancelQueries({ queryKey });
@@ -150,10 +150,10 @@ export function useRevisionMutations({
     markReviewedMutation.mutate(nodeId);
   };
 
-  const submitAnswer = (nodeId: string, optionId: string, quizIndex?: number) => {
+  const submitAnswer = (nodeId: string, optionIds: string[], quizIndex?: number) => {
     submitQuizMutation.mutate({
       nodeId,
-      selectedOptionId: optionId,
+      selectedOptionIds: optionIds,
       quizIndex,
     });
   };

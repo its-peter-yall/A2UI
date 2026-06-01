@@ -1027,7 +1027,7 @@ class LearningManager:
         self,
         revision_id: str,
         node_id: str,
-        selected_option_id: str,
+        selected_option_ids: List[str],
         quiz_index: int = 0,
     ) -> Dict[str, Any]:
         """Submit quiz answer for a revision node and track progress."""
@@ -1061,7 +1061,7 @@ class LearningManager:
 
             quiz_result = self.create_quiz_attempt(
                 node_id=node_id,
-                selected_option_id=selected_option_id,
+                selected_option_ids=selected_option_ids,
                 quiz_index=quiz_index,
                 revision_session_id=revision_id,
                 conn=conn,
@@ -1090,7 +1090,7 @@ class LearningManager:
             conn.commit()
             return {
                 "is_correct": bool(quiz_result["is_correct"]),
-                "correct_option_id": quiz_result.get("correct_option_id"),
+                "correct_option_ids": quiz_result.get("correct_option_ids", []),
                 "explanation": quiz_result.get("explanation"),
                 "selected_explanation": quiz_result.get("selected_explanation"),
                 "revision_node_status": next_status,
@@ -2225,7 +2225,7 @@ class LearningManager:
     def create_quiz_attempt(
         self,
         node_id: str,
-        selected_option_id: str,
+        selected_option_ids: List[str],
         quiz_index: int = 0,
         revision_session_id: Optional[str] = None,
         conn: Optional[sqlite3.Connection] = None,
@@ -2237,7 +2237,7 @@ class LearningManager:
 
         Args:
             node_id: The concept node identifier
-            selected_option_id: The selected option UUID (stable ID)
+            selected_option_ids: The selected option UUID(s) (stable IDs)
             quiz_index: Index of quiz in set (0-based, default 0)
             revision_session_id: Optional revision session identifier
             conn: Optional database connection for transactional
@@ -2246,7 +2246,7 @@ class LearningManager:
 
         Returns:
             Dict with attempt details including is_correct, score_percent,
-            correct_option_id, explanation, and is_mastered
+            correct_option_ids, explanation, and is_mastered
 
         Raises:
             ValueError: If node_id not found, has no quiz, or quiz_index invalid
@@ -2281,31 +2281,39 @@ class LearningManager:
             available_option_ids = [opt.option_id for opt in quiz.options]
             logger.debug(
                 "Validating quiz submission: node_id=%s, quiz_index=%s, "
-                "selected_option_id=%s, available_options=%s",
+                "selected_option_ids=%s, available_options=%s",
                 node_id,
                 quiz_index,
-                selected_option_id,
+                selected_option_ids,
                 available_option_ids,
             )
 
-            # Find correct option and selected option details
-            correct_option = None
-            selected_option = None
-            for opt in quiz.options:
-                if opt.is_correct:
-                    correct_option = opt
-                if opt.option_id == selected_option_id:
-                    selected_option = opt
+            # Determine question_type from quiz data
+            question_type = getattr(quiz, 'question_type', 'single_choice')
 
-            if selected_option is None:
-                logger.error(
-                    "Invalid option_id submitted: %s not in available options: %s",
-                    selected_option_id,
-                    available_option_ids,
-                )
-                raise ValueError(f"Invalid option id: {selected_option_id}")
+            # Find all correct options and validate selected options
+            correct_options = [opt for opt in quiz.options if opt.is_correct]
+            correct_option_ids_set = {opt.option_id for opt in correct_options}
 
-            is_correct = selected_option.is_correct
+            selected_options = []
+            for opt_id in selected_option_ids:
+                found = False
+                for opt in quiz.options:
+                    if opt.option_id == opt_id:
+                        selected_options.append(opt)
+                        found = True
+                        break
+                if not found:
+                    raise ValueError(f"Invalid option id: {opt_id}")
+
+            selected_option_id_set = set(selected_option_ids)
+
+            if question_type == "single_choice":
+                is_correct = len(selected_options) == 1 and selected_options[0].is_correct
+            else:  # multiple_choice
+                # Must select ALL correct options and NO incorrect ones
+                is_correct = (correct_option_ids_set == selected_option_id_set)
+
             score_percent = 100 if is_correct else 0
 
             # Get next attempt number
@@ -2322,6 +2330,8 @@ class LearningManager:
             # Insert attempt record
             attempt_id = str(uuid.uuid4())
             now = datetime.now(timezone.utc).isoformat()
+            # Store as JSON array string for multi-select, or plain string for single
+            selected_option_id_str = json.dumps(selected_option_ids) if len(selected_option_ids) > 1 else selected_option_ids[0]
             cursor.execute(
                 """
                 INSERT INTO quiz_attempts (
@@ -2335,7 +2345,7 @@ class LearningManager:
                     node_id,
                     attempt_number,
                     quiz_index,
-                    selected_option_id,
+                    selected_option_id_str,
                     revision_session_id,
                     1 if is_correct else 0,
                     score_percent,
@@ -2377,18 +2387,18 @@ class LearningManager:
                 "node_id": node_id,
                 "attempt_number": attempt_number,
                 "quiz_index": quiz_index,
-                "selected_option_id": selected_option_id,
+                "selected_option_ids": selected_option_ids,
                 "is_correct": is_correct,
                 "score_percent": score_percent,
-                # Only reveal correct answer when user answered correctly
-                "correct_option_id": correct_option.option_id
-                if correct_option and is_correct
-                else None,
-                "explanation": correct_option.explanation
-                if correct_option and is_correct
+                # Only reveal correct answers when user answered correctly
+                "correct_option_ids": list(correct_option_ids_set)
+                if is_correct
+                else [],
+                "explanation": correct_options[0].explanation
+                if correct_options and is_correct
                 else "",
-                "selected_explanation": selected_option.explanation
-                if not is_correct
+                "selected_explanation": selected_options[0].explanation
+                if not is_correct and selected_options
                 else None,
                 "is_mastered": is_mastered,
                 "created_at": now,
@@ -2497,21 +2507,28 @@ class LearningManager:
                 if score > best_score:
                     best_score = score
 
-                correct_option_id = ""
+                correct_option_ids = []
                 explanation = ""
                 quiz_index = row["quiz_index"]
-                selected_option_id = row["selected_option_id"]
+                selected_option_id_raw = row["selected_option_id"]
+
+                # Parse stored value: JSON array for multi-select, plain string for single
+                try:
+                    selected_option_ids = json.loads(selected_option_id_raw)
+                    if not isinstance(selected_option_ids, list):
+                        selected_option_ids = [selected_option_id_raw]
+                except (json.JSONDecodeError, TypeError):
+                    selected_option_ids = [selected_option_id_raw]
 
                 if quiz_set and quiz_index < len(quiz_set.quizzes):
                     quiz = quiz_set.quizzes[quiz_index]
 
                     for option in quiz.options:
                         if option.is_correct:
-                            correct_option_id = option.option_id
-                            break
+                            correct_option_ids.append(option.option_id)
 
                     for option in quiz.options:
-                        if option.option_id == selected_option_id:
+                        if option.option_id in selected_option_ids:
                             explanation = option.explanation
                             break
 
@@ -2527,11 +2544,11 @@ class LearningManager:
                         "node_id": row["node_id"],
                         "attempt_number": row["attempt_number"],
                         "quiz_index": quiz_index,
-                        "selected_option_id": selected_option_id,
+                        "selected_option_ids": selected_option_ids,
                         "is_correct": bool(row["is_correct"]),
                         "score_percent": score,
                         "created_at": row["created_at"],
-                        "correct_option_id": correct_option_id,
+                        "correct_option_ids": correct_option_ids,
                         "explanation": explanation,
                         "is_mastered": score >= 100,
                     }

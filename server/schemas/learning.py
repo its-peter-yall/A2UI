@@ -32,9 +32,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Literal, Optional, Union
+from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from server.schemas.common import ResponseBase, TimestampMixin
 
@@ -156,31 +156,50 @@ class QuizCard(BaseModel):
     difficulty: str = Field(
         default="medium", description="Difficulty for the quiz (easy, medium, hard)"
     )
+    question_type: str = Field(
+        default="single_choice",
+        description="Type of quiz question: 'single_choice' or 'multiple_choice'",
+    )
 
-    @field_validator("options")
+    @model_validator(mode='before')
     @classmethod
-    def validate_options(cls, options: List[QuizOption]) -> List[QuizOption]:
+    def validate_question_type_and_options(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            question_type = data.get("question_type", "single_choice")
+            options = data.get("options", [])
+        else:
+            question_type = getattr(data, "question_type", "single_choice")
+            options = getattr(data, "options", [])
+
         if len(options) != 4:
             raise ValueError("QuizCard requires exactly 4 options")
 
-        correct_count = sum(1 for opt in options if opt.is_correct)
-        if correct_count != 1:
-            raise ValueError(
-                f"QuizCard requires exactly one correct option, found {correct_count}"
-            )
+        correct_count = sum(1 for opt in options if getattr(opt, "is_correct", opt.get("is_correct", False) if isinstance(opt, dict) else False))
+        if question_type == "single_choice":
+            if correct_count != 1:
+                raise ValueError(
+                    f"single_choice QuizCard requires exactly one correct option, found {correct_count}"
+                )
+        elif question_type == "multiple_choice":
+            if correct_count < 2 or correct_count > 3:
+                raise ValueError(
+                    f"multiple_choice QuizCard requires 2-3 correct options, found {correct_count}"
+                )
+        else:
+            raise ValueError(f"Unknown question_type: {question_type}")
 
-        unique_labels = {opt.display_label for opt in options}
+        unique_labels = {opt.display_label if hasattr(opt, 'display_label') else opt.get('display_label') for opt in options}
         if unique_labels != {"A", "B", "C", "D"}:
             raise ValueError(
                 "QuizCard options must have display_labels A, B, C, D. "
                 f"Found: {sorted(unique_labels)}"
             )
 
-        unique_option_ids = {opt.option_id for opt in options}
+        unique_option_ids = {opt.option_id if hasattr(opt, 'option_id') else opt.get('option_id') for opt in options}
         if len(unique_option_ids) != 4:
             raise ValueError("QuizCard option_ids must be unique")
 
-        return options
+        return data
 
 
 class QuizCardHidden(BaseModel):
@@ -200,6 +219,10 @@ class QuizCardHidden(BaseModel):
     )
     difficulty: str = Field(
         default="medium", description="Difficulty for the quiz (easy, medium, hard)"
+    )
+    question_type: str = Field(
+        default="single_choice",
+        description="Type of quiz question: 'single_choice' or 'multiple_choice'",
     )
 
     @field_validator("options")
@@ -350,18 +373,16 @@ class LLMQuizCard(BaseModel):
     difficulty: str = Field(
         default="medium", description="Difficulty for the quiz (easy, medium, hard)"
     )
+    question_type: str = Field(
+        default="single_choice",
+        description="Type of quiz question: 'single_choice' or 'multiple_choice'",
+    )
 
     @field_validator("options")
     @classmethod
     def validate_options(cls, options: List[LLMQuizOption]) -> List[LLMQuizOption]:
         if len(options) != 4:
             raise ValueError("LLMQuizCard requires exactly 4 options")
-
-        correct_count = sum(1 for opt in options if opt.is_correct)
-        if correct_count != 1:
-            raise ValueError(
-                f"LLMQuizCard requires exactly one correct option, found {correct_count}"
-            )
 
         unique_labels = {opt.display_label for opt in options}
         if unique_labels != {"A", "B", "C", "D"}:
@@ -371,6 +392,32 @@ class LLMQuizCard(BaseModel):
             )
 
         return options
+
+    @model_validator(mode='before')
+    @classmethod
+    def validate_question_type_and_options(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            question_type = data.get("question_type", "single_choice")
+            options = data.get("options", [])
+        else:
+            question_type = getattr(data, "question_type", "single_choice")
+            options = getattr(data, "options", [])
+
+        correct_count = sum(1 for opt in options if getattr(opt, "is_correct", opt.get("is_correct", False) if isinstance(opt, dict) else False))
+        if question_type == "single_choice":
+            if correct_count != 1:
+                raise ValueError(
+                    f"single_choice LLMQuizCard requires exactly one correct option, found {correct_count}"
+                )
+        elif question_type == "multiple_choice":
+            if correct_count < 2 or correct_count > 3:
+                raise ValueError(
+                    f"multiple_choice LLMQuizCard requires 2-3 correct options, found {correct_count}"
+                )
+        else:
+            raise ValueError(f"Unknown question_type: {question_type}")
+
+        return data
 
 
 class LLMQuizSet(BaseModel):
@@ -452,6 +499,7 @@ def convert_llm_to_quiz_card(llm_card: LLMQuizCard) -> QuizCard:
         question_text=llm_card.question_text,
         options=options,
         difficulty=llm_card.difficulty,
+        question_type=llm_card.question_type,
     )
 
 
@@ -480,6 +528,7 @@ def convert_llm_to_quiz_set(llm_set: LLMQuizSet) -> QuizSet:
                 question_text=llm_card.question_text,
                 options=options,
                 difficulty=llm_card.difficulty,
+                question_type=llm_card.question_type,
             )
         )
 
@@ -865,9 +914,9 @@ class RevisionQuizSubmissionResult(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     is_correct: bool = Field(..., description="Whether selected option is correct")
-    correct_option_id: Optional[str] = Field(
-        default=None,
-        description="Correct option identifier",
+    correct_option_ids: List[str] = Field(
+        default_factory=list,
+        description="Correct option identifier(s)",
     )
     explanation: Optional[str] = Field(
         default=None,
@@ -889,9 +938,10 @@ class QuizSubmission(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     node_id: str = Field(..., description="Concept node identifier")
-    selected_option_id: str = Field(
+    selected_option_ids: List[str] = Field(
         ...,
-        description="Selected option ID (stable UUID from option_id field)",
+        min_length=1,
+        description="Selected option ID(s) (stable UUIDs from option_id field)",
     )
     quiz_index: Optional[int] = Field(
         default=0,
@@ -907,8 +957,11 @@ class QuizResult(BaseModel):
 
     node_id: str = Field(..., description="Concept node identifier")
     is_correct: bool = Field(..., description="Whether the answer was correct")
-    correct_option_id: Optional[str] = Field(
-        default=None, description="Correct option identifier (stable UUID)"
+    correct_option_ids: List[str] = Field(
+        default_factory=list, description="Correct option identifier(s) (stable UUIDs)"
+    )
+    selected_option_ids: List[str] = Field(
+        default_factory=list, description="Selected option identifier(s) (stable UUIDs)"
     )
     explanation: Optional[str] = Field(
         default=None, description="Explanation for the selected answer"
@@ -925,9 +978,10 @@ class QuizAttemptBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     node_id: str = Field(..., description="Concept node identifier")
-    selected_option_id: str = Field(
+    selected_option_ids: List[str] = Field(
         ...,
-        description="Selected option ID (stable UUID)",
+        min_length=1,
+        description="Selected option ID(s) (stable UUIDs)",
     )
     quiz_index: int = Field(
         default=0,
@@ -953,9 +1007,13 @@ class QuizAttemptResponse(ResponseBase, TimestampMixin, QuizAttemptBase):
         ge=0,
         le=100,
     )
-    correct_option_id: Optional[str] = Field(
-        default=None,
-        description="The correct option identifier (only revealed when answer is correct)",
+    correct_option_ids: List[str] = Field(
+        default_factory=list,
+        description="The correct option identifier(s) (only revealed when answer is correct)",
+    )
+    selected_option_ids: List[str] = Field(
+        default_factory=list,
+        description="The selected option identifier(s)",
     )
     explanation: str = Field(
         default="",

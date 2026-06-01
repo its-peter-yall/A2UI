@@ -60,7 +60,7 @@ interface RevisionConceptCardProps {
 	/** Callback when user marks node as reviewed (full_review only) */
 	onMarkReviewed: (nodeId: string) => void;
 	/** Callback when user submits a quiz answer */
-	onQuizSubmit: (nodeId: string, optionId: string, quizIndex?: number) => void;
+	onQuizSubmit: (nodeId: string, optionIds: string[], quizIndex?: number) => void;
 	/** Whether the mark-reviewed mutation is loading */
 	isMarkingReviewed?: boolean;
 	/** Whether the quiz submit mutation is loading */
@@ -110,7 +110,7 @@ export function RevisionConceptCard({
 	isSubmitting = false,
 	quizResult,
 }: RevisionConceptCardProps) {
-	const [selectedOption, setSelectedOption] = useState<string | null>(null);
+	const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
 
 	const badge = statusBadges[revisionProgress.status];
 
@@ -129,9 +129,9 @@ export function RevisionConceptCard({
 	})();
 
 	const handleQuizSubmit = (quizIndex: number) => {
-		if (selectedOption) {
-			onQuizSubmit(node.id, selectedOption, quizIndex);
-			setSelectedOption(null);
+		if (selectedOptions.size > 0) {
+			onQuizSubmit(node.id, Array.from(selectedOptions), quizIndex);
+			setSelectedOptions(new Set());
 		}
 	};
 
@@ -161,6 +161,15 @@ export function RevisionConceptCard({
 		const currentQuiz = quizData.quizzes[currentQuizIndex];
 		if (!currentQuiz) return null;
 
+		const isMultipleChoice =
+			"question_type" in currentQuiz &&
+			(currentQuiz as { question_type?: string }).question_type ===
+				"multiple_choice";
+
+		// Build sets for efficient lookup
+		const feedbackSelectedSet = new Set(quizResult?.selected_option_ids ?? []);
+		const feedbackCorrectSet = new Set(quizResult?.correct_option_ids ?? []);
+
 		// Show feedback if quiz has been submitted
 		const showFeedback =
 			quizResult &&
@@ -183,59 +192,73 @@ export function RevisionConceptCard({
 					content={currentQuiz.question_text}
 				/>
 			</div>
-				<fieldset
-					className="space-y-2"
-					role="radiogroup"
-					aria-describedby={`revision-quiz-question-${node.id}`}
-				>
-					<legend className="sr-only">Quiz options</legend>
-					{currentQuiz.options.map((option) => {
-						const isSelected =
-							showFeedback &&
-							option.option_id === quizResult?.selected_option_id;
-						const isCorrectOption =
-							showFeedback &&
-							option.option_id === quizResult?.correct_option_id;
+			<fieldset
+				className="space-y-2"
+				role={isMultipleChoice ? "group" : "radiogroup"}
+				aria-describedby={`revision-quiz-question-${node.id}`}
+			>
+				<legend className="sr-only">Quiz options</legend>
+				{currentQuiz.options.map((option) => {
+					const isSelected =
+						showFeedback &&
+						feedbackSelectedSet.has(option.option_id);
+					const isCorrectOption =
+						showFeedback &&
+						feedbackCorrectSet.has(option.option_id);
 
-						return (
-							<div
-								key={option.option_id}
-								className={cn(
-									"p-3 rounded-md border transition-colors",
-									showFeedback &&
-										isCorrectOption &&
-										"border-green-500 bg-green-50 dark:bg-green-900/20",
-									showFeedback &&
-										isSelected &&
-										!isCorrectOption &&
-										"border-red-500 bg-red-50 dark:bg-red-900/20",
-									showFeedback &&
-										!isSelected &&
-										!isCorrectOption &&
-										"border-muted bg-muted/30",
-									!showFeedback &&
-										selectedOption === option.option_id &&
-										"border-primary bg-primary/10",
-									!showFeedback &&
-										selectedOption !== option.option_id &&
-										"border-muted hover:border-primary/50",
-								)}
-							>
-								<label className="flex items-center gap-3 cursor-pointer">
-									<input
-										type="radio"
-										name={`revision-quiz-${node.id}`}
-										value={option.option_id}
-										checked={selectedOption === option.option_id}
-										onChange={() => setSelectedOption(option.option_id)}
-										disabled={showFeedback}
-										className="w-4 h-4"
-									/>
-									<span className="font-mono text-sm text-muted-foreground">
-										{option.display_label}.
-									</span>
-									<InlineMarkdown content={option.text} />
-								</label>
+					return (
+						<div
+							key={option.option_id}
+							className={cn(
+								"p-3 rounded-md border transition-colors",
+								showFeedback &&
+									isCorrectOption &&
+									"border-green-500 bg-green-50 dark:bg-green-900/20",
+								showFeedback &&
+									isSelected &&
+									!isCorrectOption &&
+									"border-red-500 bg-red-50 dark:bg-red-900/20",
+								showFeedback &&
+									!isSelected &&
+									!isCorrectOption &&
+									"border-muted bg-muted/30",
+								!showFeedback &&
+									selectedOptions.has(option.option_id) &&
+									"border-primary bg-primary/10",
+								!showFeedback &&
+									!selectedOptions.has(option.option_id) &&
+									"border-muted hover:border-primary/50",
+							)}
+						>
+							<label className="flex items-center gap-3 cursor-pointer">
+								<input
+									type={isMultipleChoice ? "checkbox" : "radio"}
+									name={isMultipleChoice ? undefined : `revision-quiz-${node.id}`}
+									value={option.option_id}
+									checked={selectedOptions.has(option.option_id)}
+									onChange={() => {
+										if (isMultipleChoice) {
+											setSelectedOptions((prev) => {
+												const next = new Set(prev);
+												if (next.has(option.option_id)) {
+													next.delete(option.option_id);
+												} else {
+													next.add(option.option_id);
+												}
+												return next;
+											});
+										} else {
+											setSelectedOptions(new Set([option.option_id]));
+										}
+									}}
+									disabled={showFeedback}
+									className="w-4 h-4"
+								/>
+								<span className="font-mono text-sm text-muted-foreground">
+									{option.display_label}.
+								</span>
+								<InlineMarkdown content={option.text} />
+							</label>
 
 								{/* Show explanation from quiz result */}
 								{showFeedback && isCorrectOption && (
@@ -293,17 +316,17 @@ export function RevisionConceptCard({
 				)}
 
 				<div className="flex justify-end pt-2">
-					<button
-						onClick={() => handleQuizSubmit(currentQuizIndex)}
-						disabled={!selectedOption || isSubmitting || showFeedback}
-						className={cn(
-							"px-4 py-2 rounded-md transition-colors",
-							selectedOption && !isSubmitting && !showFeedback
-								? "bg-primary text-primary-foreground hover:bg-primary/90"
-								: "bg-muted text-muted-foreground cursor-not-allowed",
-						)}
-						data-testid="revision-quiz-submit"
-					>
+				<button
+					onClick={() => handleQuizSubmit(currentQuizIndex)}
+					disabled={selectedOptions.size === 0 || isSubmitting || showFeedback}
+					className={cn(
+						"px-4 py-2 rounded-md transition-colors",
+						selectedOptions.size > 0 && !isSubmitting && !showFeedback
+							? "bg-primary text-primary-foreground hover:bg-primary/90"
+							: "bg-muted text-muted-foreground cursor-not-allowed",
+					)}
+					data-testid="revision-quiz-submit"
+				>
 						{isSubmitting ? "Submitting..." : "Submit Answer"}
 					</button>
 				</div>

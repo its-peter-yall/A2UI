@@ -63,6 +63,8 @@ import { MarkdownRenderer, InlineMarkdown } from "./MarkdownRenderer";
 import { QuizFeedback } from "./QuizFeedback";
 import { useQuizFeedback } from "./useQuizFeedback";
 import { ErrorState, LoadingState } from "./ErrorStates";
+import { parseCuriosityQuestions } from "./curiosityParser";
+import { CuriositySpark } from "./CuriositySpark";
 import {
 	AnimatedCard,
 	ContentTransition,
@@ -74,7 +76,7 @@ interface ConceptCardProps {
 	isActive?: boolean;
 	quizResult?: QuizSubmitResponse;
 	onProceedToQuiz?: (nodeId: string) => void;
-	onQuizSubmit?: (nodeId: string, optionId: string, quizIndex: number) => void;
+	onQuizSubmit?: (nodeId: string, optionIds: string[], quizIndex: number) => void;
 	onRetryQuiz?: (nodeId: string) => void;
 	onContinueToNext?: (nodeId: string) => void;
 	onNextQuiz?: () => void;
@@ -88,6 +90,7 @@ interface ConceptCardProps {
 	isTransitioning?: boolean;
 	selectedHeadingIds?: string[];
 	onToggleHeadingChat?: (headingId: string) => void;
+	onAskQuestion?: (question: string) => void;
 }
 
 export function ConceptCard({
@@ -109,8 +112,9 @@ export function ConceptCard({
 	quizResult,
 	selectedHeadingIds = [],
 	onToggleHeadingChat,
+	onAskQuestion,
 }: ConceptCardProps) {
-	const [selectedOption, setSelectedOption] = useState<string | null>(null);
+	const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
 
 	// Track previous status for animations
 
@@ -187,15 +191,21 @@ export function ConceptCard({
 		}
 	};
 
+	const showCuriosity =
+		!!onAskQuestion && node.status === "VIEWING_EXPLANATION";
+	const { mainContent, questions } = showCuriosity
+		? parseCuriosityQuestions(node.content_markdown)
+		: { mainContent: node.content_markdown, questions: [] };
+
 	const handleSubmitQuiz = (quizIndex: number) => {
-		if (selectedOption) {
-			onQuizSubmit?.(node.id, selectedOption, quizIndex);
-			setSelectedOption(null);
+		if (selectedOptions.size > 0) {
+			onQuizSubmit?.(node.id, Array.from(selectedOptions), quizIndex);
+			setSelectedOptions(new Set());
 		}
 	};
 
 	const handleRetry = () => {
-		setSelectedOption(null);
+		setSelectedOptions(new Set());
 		onRetryQuiz?.(node.id);
 	};
 
@@ -267,11 +277,17 @@ export function ConceptCard({
 							{node.status === "VIEWING_EXPLANATION" && (
 								<div className="space-y-4">
 									<MarkdownRenderer
-										content={node.content_markdown}
+										content={mainContent}
 										selectedHeadingIds={selectedHeadingIds}
 										onToggleHeadingChat={onToggleHeadingChat}
 										enableHeadingChat
 									/>
+									{questions.length > 0 && onAskQuestion && (
+										<CuriositySpark
+											questions={questions}
+											onAskQuestion={onAskQuestion}
+										/>
+									)}
 									<div className="flex justify-between items-center pt-4 border-t">
 										{renderPreviousButton()}
 										<button
@@ -303,6 +319,11 @@ export function ConceptCard({
 										"quizzes" in visibleQuiz
 											? visibleQuiz.quizzes[currentQuizIndex]
 											: (visibleQuiz as QuizCardHidden);
+
+									const isMultipleChoice =
+										"question_type" in currentQuiz &&
+										(currentQuiz as { question_type?: string }).question_type ===
+											"multiple_choice";
 
 									return (
 										<div className="space-y-4">
@@ -336,7 +357,7 @@ export function ConceptCard({
 											</div>
 											<fieldset
 												className="space-y-2"
-												role="radiogroup"
+												role={isMultipleChoice ? "group" : "radiogroup"}
 												aria-describedby={`quiz-question-${node.id}`}
 											>
 												<legend className="sr-only">Quiz options</legend>
@@ -345,19 +366,31 @@ export function ConceptCard({
 														key={option.option_id}
 														className={cn(
 															"flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors",
-															selectedOption === option.option_id
+															selectedOptions.has(option.option_id)
 																? "border-primary bg-primary/10"
 																: "border-muted hover:border-primary/50",
 														)}
 													>
 														<input
-															type="radio"
-															name={`quiz-${node.id}`}
+															type={isMultipleChoice ? "checkbox" : "radio"}
+															name={isMultipleChoice ? undefined : `quiz-${node.id}`}
 															value={option.option_id}
-															checked={selectedOption === option.option_id}
-															onChange={() =>
-																setSelectedOption(option.option_id)
-															}
+															checked={selectedOptions.has(option.option_id)}
+															onChange={() => {
+																if (isMultipleChoice) {
+																	setSelectedOptions((prev) => {
+																		const next = new Set(prev);
+																		if (next.has(option.option_id)) {
+																			next.delete(option.option_id);
+																		} else {
+																			next.add(option.option_id);
+																		}
+																		return next;
+																	});
+																} else {
+																	setSelectedOptions(new Set([option.option_id]));
+																}
+															}}
 															className="w-4 h-4"
 														/>
 														<span className="font-mono text-sm text-muted-foreground">
@@ -385,16 +418,16 @@ export function ConceptCard({
 														<span>Previous</span>
 													</button>
 												)}
-												<button
-													onClick={() => handleSubmitQuiz(currentQuizIndex)}
-													disabled={!selectedOption}
-													className={cn(
-														"px-4 py-2 rounded-md transition-colors",
-														selectedOption
-															? "bg-primary text-primary-foreground hover:bg-primary/90"
-															: "bg-muted text-muted-foreground cursor-not-allowed",
-													)}
-												>
+											<button
+												onClick={() => handleSubmitQuiz(currentQuizIndex)}
+												disabled={selectedOptions.size === 0}
+												className={cn(
+													"px-4 py-2 rounded-md transition-colors",
+													selectedOptions.size > 0
+														? "bg-primary text-primary-foreground hover:bg-primary/90"
+														: "bg-muted text-muted-foreground cursor-not-allowed",
+												)}
+											>
 													Submit Answer
 												</button>
 											</div>

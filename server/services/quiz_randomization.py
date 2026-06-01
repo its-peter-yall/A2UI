@@ -29,7 +29,7 @@ USAGE:
     )
     shuffled = shuffle_quiz_options(quiz_card)
     hidden = hide_quiz_card(shuffled)
-    result = evaluate_quiz_answer(quiz_card, selected_option_id)
+        result = evaluate_quiz_answer(quiz_card, [selected_option_id])
     ```
 ============================================================================
 """
@@ -39,7 +39,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import secrets
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from server.schemas.learning import (
     QuizCard,
@@ -224,54 +224,64 @@ def hide_quiz_set(quiz_set: QuizSet) -> QuizSetHidden:
 
 
 def evaluate_quiz_answer(
-    quiz: QuizCard, selected_option_id: str
+    quiz: QuizCard, selected_option_ids: List[str]
 ) -> dict:
     """Evaluate a quiz answer using stable option_id.
 
-    Looks up the selected option by its stable option_id and determines
+    Looks up the selected option(s) by their stable option_id(s) and determines
     correctness. Returns complete result information including explanation.
 
     Args:
         quiz: QuizCard with options (shuffled or original).
-        selected_option_id: Stable UUID of the selected option.
+        selected_option_ids: Stable UUID(s) of the selected option(s).
 
     Returns:
         Dict with:
         - is_correct: bool - Whether the selected answer is correct
-        - correct_option_id: str - The correct option's stable ID
+        - correct_option_ids: list - The correct option(s)' stable IDs
         - explanation: str - Explanation for the selected answer
-        - selected_option: QuizOption - The selected option object
+        - selected_options: list - The selected option objects
 
     Raises:
-        ValueError: If selected_option_id is not found in quiz options.
+        ValueError: If any selected_option_id is not found in quiz options.
 
     Example:
-        >>> result = evaluate_quiz_answer(quiz, "uuid-123-...")
+        >>> result = evaluate_quiz_answer(quiz, ["uuid-123-..."])
         >>> result['is_correct']
         True
         >>> result['explanation']
         'Correct! 2 + 2 equals 4.'
     """
-    selected_option = None
-    correct_option = None
+    question_type = getattr(quiz, 'question_type', 'single_choice')
+    correct_options = [opt for opt in quiz.options if opt.is_correct]
+    correct_option_ids_set = {opt.option_id for opt in correct_options}
 
-    for opt in quiz.options:
-        if opt.option_id == selected_option_id:
-            selected_option = opt
-        if opt.is_correct:
-            correct_option = opt
+    selected_options = []
+    for opt_id in selected_option_ids:
+        found = False
+        for opt in quiz.options:
+            if opt.option_id == opt_id:
+                selected_options.append(opt)
+                found = True
+                break
+        if not found:
+            raise ValueError(
+                f"Invalid option_id: {opt_id}. "
+                "Option not found in quiz."
+            )
 
-    if selected_option is None:
-        raise ValueError(
-            f"Invalid option_id: {selected_option_id}. "
-            "Option not found in quiz."
-        )
+    selected_option_id_set = set(selected_option_ids)
+
+    if question_type == "single_choice":
+        is_correct = len(selected_options) == 1 and selected_options[0].is_correct
+    else:  # multiple_choice
+        is_correct = (correct_option_ids_set == selected_option_id_set)
 
     return {
-        "is_correct": selected_option.is_correct,
-        "correct_option_id": correct_option.option_id if correct_option else None,
-        "explanation": selected_option.explanation,
-        "selected_option": selected_option,
+        "is_correct": is_correct,
+        "correct_option_ids": list(correct_option_ids_set),
+        "explanation": selected_options[0].explanation if selected_options else "",
+        "selected_options": selected_options,
     }
 
 

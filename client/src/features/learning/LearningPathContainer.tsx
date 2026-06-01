@@ -122,6 +122,12 @@ export function LearningPathContainer({
 	// Chat panel state
 	const [isChatOpen, setIsChatOpen] = useState(false);
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
+	const [prefillMessage, setPrefillMessage] = useState<string>("");
+
+	const handleAskQuestion = useCallback((question: string) => {
+		setPrefillMessage(question);
+		setIsChatOpen(true);
+	}, []);
 
 	// Resizable chat panel state
 	const [chatWidthPercent, setChatWidthPercent] = useState(25); // Default = minimum
@@ -843,6 +849,7 @@ export function LearningPathContainer({
 													canPrevious={canGoPrev}
 													selectedHeadingIds={selectedHeadingIds}
 													onToggleHeadingChat={handleToggleHeadingChat}
+													onAskQuestion={handleAskQuestion}
 												/>
 											</motion.div>
 										)}
@@ -909,6 +916,8 @@ export function LearningPathContainer({
 						session.nodes.every((n) => n.status === "COMPLETED")
 					}
 					widthPercent={chatWidthPercent}
+					prefillMessage={prefillMessage}
+					onPrefillConsumed={() => setPrefillMessage("")}
 				/>
 				</div>
 			</LearningErrorBoundary>
