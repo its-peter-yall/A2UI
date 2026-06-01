@@ -102,6 +102,7 @@ def shuffle_quiz_options(quiz: QuizCard) -> QuizCard:
         question_text=quiz.question_text,
         options=shuffled_options,
         difficulty=quiz.difficulty,
+        question_type=quiz.question_type,
     )
 
 
@@ -157,6 +158,7 @@ def shuffle_quiz_options_with_seed(quiz: QuizCard, seed: str) -> QuizCard:
         question_text=quiz.question_text,
         options=shuffled_options,
         difficulty=quiz.difficulty,
+        question_type=quiz.question_type,
     )
 
 
@@ -192,6 +194,7 @@ def hide_quiz_card(quiz: QuizCard) -> QuizCardHidden:
         question_text=quiz.question_text,
         options=hidden_options,
         difficulty=quiz.difficulty,
+        question_type=quiz.question_type,
     )
 
 
