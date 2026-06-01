@@ -52,20 +52,17 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
-# Model configuration for different agent roles using OpenRouter slugs
+# Temperature and token limits per agent role (model comes from client settings)
 MODEL_CONFIGS = {
     "planner": {
-        "model": "google/gemini-2.5-pro",
         "temperature": 0.3,
         "max_tokens": 10000,
     },
     "generator": {
-        "model": "google/gemini-2.5-flash",
         "temperature": 0.7,
         "max_tokens": 60000,
     },
     "quizzer": {
-        "model": "google/gemini-2.5-flash",
         "temperature": 0.2,
         "max_tokens": 8000,
     },
@@ -176,8 +173,13 @@ class InstructorClient:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
 
-        # Determine which model slug to use
-        model_slug = model_override or config["model"]
+        # Model must come from client settings — no hardcoded fallback
+        if not model_override or not model_override.strip():
+            raise ValueError(
+                f"No model specified for role '{role}'. "
+                f"Select a model in Settings before generating."
+            )
+        model_slug = model_override.strip()
 
         # Build OpenRouter parameters
         temperature = config.get("temperature", 0.5)
@@ -239,13 +241,13 @@ class InstructorClient:
 
     def get_model_config(self, role: str) -> dict[str, Any]:
         """
-        Get the model configuration for a specific role.
+        Get the temperature/token config for a specific role.
 
         Args:
             role: Agent role key
 
         Returns:
-            Configuration dict with model, temperature, max_tokens
+            Configuration dict with temperature, max_tokens
         """
         if role not in MODEL_CONFIGS:
             raise ValueError(f"Unknown role: {role}")

@@ -68,6 +68,7 @@ export function buildProviderHeaders(
     }
   } else if (provider === 'generalcompute') {
     headers['X-GeneralCompute-Key'] = apiKey;
+    if (model) headers['X-GeneralCompute-Model'] = model;
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
