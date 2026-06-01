@@ -1,0 +1,16 @@
+**/node_modules/**
+**/.git/**
+**/__pycache__/**
+**/.venv/**
+**/dist/**
+**/build/**
+**/.next/**
+**/.tsbuildinfo
+**/.vite/**
+*.pyc
+*.pyo
+*.so
+*.egg-info
+.idea/
+.vscode/
+*.log
