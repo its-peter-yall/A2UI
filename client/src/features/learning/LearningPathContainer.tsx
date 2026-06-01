@@ -120,7 +120,14 @@ export function LearningPathContainer({
 	const { toasts, showError, dismissToast } = useErrorToast();
 
 	// Chat panel state
-	const [isChatOpen, setIsChatOpen] = useState(false);
+	const [isChatOpen, setIsChatOpen] = useState(() => {
+		try {
+			const stored = localStorage.getItem("active_concept_chat");
+			return !!stored;
+		} catch {
+			return false;
+		}
+	});
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
 
 	// Resizable chat panel state

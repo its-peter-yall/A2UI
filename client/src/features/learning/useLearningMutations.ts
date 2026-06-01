@@ -135,7 +135,7 @@ export function useLearningMutations({
   };
 
   const retryConfig = {
-    retry: process.env.NODE_ENV === 'test' ? false : 3,
+    retry: import.meta.env.MODE === 'test' ? false : 3,
     retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
   };
 
