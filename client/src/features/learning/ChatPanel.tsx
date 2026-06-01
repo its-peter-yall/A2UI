@@ -165,17 +165,21 @@ export function ChatPanel({
 		}
 	}, [isOpen]);
 
-	// Apply prefill message from curiosity questions (or other callers)
+	// Apply prefill message from curiosity questions (or other callers).
+	// Uses the render-time derivation pattern (not useEffect) to avoid cascading renders.
+	const [lastPrefill, setLastPrefill] = useState<string | null>(null);
+	if (prefillMessage && prefillMessage !== lastPrefill) {
+		setLastPrefill(prefillMessage);
+		setInput(prefillMessage);
+		onPrefillConsumed?.();
+	}
 	useEffect(() => {
-		if (prefillMessage) {
-			setInput(prefillMessage);
-			onPrefillConsumed?.();
-			// Focus the textarea after a brief delay so the panel animation completes
+		if (lastPrefill) {
 			setTimeout(() => {
 				textareaRef.current?.focus();
 			}, 300);
 		}
-	}, [prefillMessage, onPrefillConsumed]);
+	}, [lastPrefill]);
 
 	// Escape key handler and focus trap
 	useEffect(() => {

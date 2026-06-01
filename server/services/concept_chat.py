@@ -163,6 +163,13 @@ async def stream_concept_chat(
     """
     base_url = resolve_chat_base_url(model_slug, provider)
 
+    logger.info(
+        "Concept chat request: provider=%s, base_url=%s, model=%s",
+        provider,
+        base_url,
+        model_slug,
+    )
+
     client = AsyncOpenAI(
         base_url=base_url,
         api_key=api_key,

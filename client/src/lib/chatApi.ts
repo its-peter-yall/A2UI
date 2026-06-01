@@ -69,15 +69,23 @@ export async function streamConceptChat({
 }: StreamConceptChatParams): Promise<void> {
 	const settings = getProviderSettings();
 	const activeConfig = settings.providers[settings.activeProvider];
-	const providerHeaders = buildProviderHeaders(
-		settings.activeProvider,
-		activeConfig.apiKey,
-		activeConfig.model || undefined,
-		activeConfig.thinking,
-		activeConfig.maxCompletionTokens,
-	);
 
-	const chatModel = activeConfig.chatModel || activeConfig.model || "";
+	const chatProvider = activeConfig.chatModelProvider ?? settings.activeProvider;
+	const chatProviderConfig = settings.providers[chatProvider];
+
+	const chatModel =
+		activeConfig.chatModel ||
+		chatProviderConfig.model ||
+		settings.providers[settings.activeProvider].model ||
+		"";
+
+	const providerHeaders = buildProviderHeaders(
+		chatProvider,
+		chatProviderConfig.apiKey,
+		chatProviderConfig.model || undefined,
+		chatProviderConfig.thinking,
+		chatProviderConfig.maxCompletionTokens,
+	);
 
 	const url = `${BASE_URL}/learning/sessions/${sessionId}/nodes/${nodeId}/chat`;
 
@@ -86,8 +94,8 @@ export async function streamConceptChat({
 		headers: {
 			"Content-Type": "application/json",
 			...providerHeaders,
-			"X-Provider-Api-Key": activeConfig.apiKey,
-			"X-Model": activeConfig.model || "",
+			"X-Provider-Api-Key": chatProviderConfig.apiKey,
+			"X-Model": chatProviderConfig.model || "",
 			"X-Chat-Model": chatModel,
 		},
 		body: JSON.stringify({

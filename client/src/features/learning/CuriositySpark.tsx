@@ -1,4 +1,5 @@
 import { MessageCircleQuestionMark } from "lucide-react";
+import { InlineMarkdown } from "./MarkdownRenderer";
 
 interface CuriositySparkProps {
 	questions: string[];
@@ -28,7 +29,7 @@ export function CuriositySpark({ questions, onAskQuestion }: CuriositySparkProps
 						>
 							<MessageCircleQuestionMark className="w-3.5 h-3.5 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
 							<span className="text-foreground group-hover:text-primary transition-colors">
-								{q}
+								<InlineMarkdown content={q} />
 							</span>
 						</button>
 					</li>

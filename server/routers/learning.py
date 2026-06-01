@@ -1054,6 +1054,10 @@ async def concept_chat(
     x_ai_provider: Optional[str] = Header(None, alias="X-AI-Provider"),
 ) -> StreamingResponse:
     """Stream a context-aware chat response for a concept node."""
+    logger.info(
+        "DEBUG chat headers: x_ai_provider=%s, x_provider_api_key present=%s, x_chat_model=%s",
+        x_ai_provider, bool(x_provider_api_key), x_chat_model
+    )
     if not x_provider_api_key or not x_provider_api_key.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
