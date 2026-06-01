@@ -123,9 +123,14 @@ export function LearningPathContainer({
 	const [isChatOpen, setIsChatOpen] = useState(false);
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
 	const [prefillMessage, setPrefillMessage] = useState<string>("");
+	// Stable nodeId for chat — only updates when user explicitly opens chat,
+	// NOT on carousel swipe. Prevents storage wipe during navigation.
+	const [chatNodeId, setChatNodeId] = useState<string>("");
+	const chatNodeIdRef = useRef<string>("");
 
 	const handleAskQuestion = useCallback((question: string) => {
 		setPrefillMessage(question);
+		setChatNodeId(chatNodeIdRef.current);
 		setIsChatOpen(true);
 	}, []);
 
@@ -199,6 +204,7 @@ export function LearningPathContainer({
 				? prev.filter((id) => id !== headingId)
 				: [...prev, headingId],
 		);
+		setChatNodeId(chatNodeIdRef.current);
 		setIsChatOpen(true);
 	}, []);
 
@@ -545,6 +551,11 @@ export function LearningPathContainer({
 		? carouselState.currentIndex < session.nodes.length - 1
 		: false;
 	const canGoPrev = carouselState.currentIndex > 0;
+
+	// Keep ref in sync so chat-open handlers capture correct node
+	useEffect(() => {
+		chatNodeIdRef.current = currentSlideNode?.id ?? "";
+	}, [currentSlideNode?.id]);
 
 	// Close chat panel automatically when switching to or entering a quiz/feedback node (anti-cheat)
 	const isQuizNode = currentSlideNode?.status === "IN_QUIZ" || currentSlideNode?.status === "SHOWING_FEEDBACK";
@@ -907,7 +918,7 @@ export function LearningPathContainer({
 					isOpen={effectiveIsChatOpen}
 					onClose={() => setIsChatOpen(false)}
 					sessionId={activeSessionId ?? ""}
-					nodeId={currentSlideNode?.id ?? ""}
+					nodeId={chatNodeId}
 					selectedHeadingIds={selectedHeadingIds}
 					onClearHeadings={() => setSelectedHeadingIds([])}
 					isCourseComplete={
@@ -925,7 +936,10 @@ export function LearningPathContainer({
 		{/* Chat FAB - bottom-right fixed (hidden during quizzes/feedback) */}
 		{!effectiveIsChatOpen && !isQuizNode && (
 		<button
-				onClick={() => setIsChatOpen(true)}
+				onClick={() => {
+					setChatNodeId(chatNodeIdRef.current);
+					setIsChatOpen(true);
+				}}
 				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center"
 				aria-label="Open concept chat"
 			>

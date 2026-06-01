@@ -16,10 +16,12 @@
  *
  * KEY COMPONENTS:
  *    - useConceptChat(): Named export hook returning chat state and actions
+ *    - getStorageKey(): Per-node localStorage key builder
+ *    - cleanupExpiredChats(): Removes stale chat entries on mount
  *
  * DEPENDENCIES:
  *    - External: react
- *    - Internal: @/types/learning, @/lib/chatApi, @/lib/providerSettings
+ *    - Internal: @/types/learning, @/lib/chatApi
  *
  * USAGE:
  *    ```tsx
@@ -34,17 +36,59 @@ import type { ConceptChatMessage } from "@/types/learning";
 import { streamConceptChat } from "@/lib/chatApi";
 
 const MAX_HISTORY_MESSAGES = 10;
+const ONE_HOUR = 60 * 60 * 1000;
+const STORAGE_PREFIX = "concept_chat_";
 
 interface StoredChat {
-	sessionId: string;
-	nodeId: string;
 	messages: ConceptChatMessage[];
 	lastPromptTimestamp: number;
 }
 
 /**
+ * Build a per-node localStorage key.
+ * Format: concept_chat_{sessionId}_{nodeId}
+ */
+function getStorageKey(sessionId: string, nodeId: string): string {
+	return `${STORAGE_PREFIX}${sessionId}_${nodeId}`;
+}
+
+/**
+ * Scan localStorage for expired concept_chat_* entries and remove them.
+ * Called once on mount to prevent unbounded key accumulation.
+ */
+function cleanupExpiredChats(): void {
+	try {
+		const keysToRemove: string[] = [];
+		for (let i = 0; i < localStorage.length; i++) {
+			const key = localStorage.key(i);
+			if (key && key.startsWith(STORAGE_PREFIX)) {
+				try {
+					const raw = localStorage.getItem(key);
+					if (raw) {
+						const stored: StoredChat = JSON.parse(raw);
+						if (Date.now() - stored.lastPromptTimestamp > ONE_HOUR) {
+							keysToRemove.push(key);
+						}
+					}
+				} catch {
+					// Corrupt entry — remove it
+					keysToRemove.push(key);
+				}
+			}
+		}
+		for (const key of keysToRemove) {
+			localStorage.removeItem(key);
+		}
+	} catch (e) {
+		console.error("Failed to cleanup expired chats:", e);
+	}
+}
+
+/**
  * Hook for ephemeral concept chat with SSE streaming.
  * Supports localStorage persistence across page refreshes.
+ * Each session+node pair gets its own storage key so carousel
+ * navigation does not wipe chat history.
  *
  * @param sessionId - Active learning session ID
  * @param nodeId - Active concept node ID
@@ -58,38 +102,81 @@ export function useConceptChat(
 ) {
 	const abortRef = useRef<AbortController | null>(null);
 
-	const loadStoredChat = useCallback((): ConceptChatMessage[] => {
-		if (isCourseComplete) {
+	// Keep refs in sync so streaming callbacks always use current IDs
+	const sessionIdRef = useRef(sessionId);
+	const nodeIdRef = useRef(nodeId);
+	useEffect(() => {
+		sessionIdRef.current = sessionId;
+	}, [sessionId]);
+	useEffect(() => {
+		nodeIdRef.current = nodeId;
+	}, [nodeId]);
+
+	// Cleanup expired chats once on mount
+	useEffect(() => {
+		cleanupExpiredChats();
+	}, []);
+
+	// Migrate legacy single-key storage to per-node key (one-time)
+	useEffect(() => {
+		try {
+			const legacyRaw = localStorage.getItem("active_concept_chat");
+			if (legacyRaw) {
+				const legacy = JSON.parse(legacyRaw) as {
+					sessionId: string;
+					nodeId: string;
+					messages: ConceptChatMessage[];
+					lastPromptTimestamp: number;
+				};
+				// Only migrate if not expired
+				if (Date.now() - legacy.lastPromptTimestamp <= ONE_HOUR) {
+					const key = getStorageKey(legacy.sessionId, legacy.nodeId);
+					// Don't overwrite if per-node key already exists
+					if (!localStorage.getItem(key)) {
+						const migrated: StoredChat = {
+							messages: legacy.messages,
+							lastPromptTimestamp: legacy.lastPromptTimestamp,
+						};
+						localStorage.setItem(key, JSON.stringify(migrated));
+					}
+				}
+				localStorage.removeItem("active_concept_chat");
+			}
+		} catch (e) {
+			console.error("Failed to migrate legacy chat storage:", e);
 			try {
 				localStorage.removeItem("active_concept_chat");
+			} catch { /* ignore */ }
+		}
+	}, []);
+
+	const loadStoredChat = useCallback((): ConceptChatMessage[] => {
+		// Course complete → clear this node's chat
+		if (isCourseComplete) {
+			try {
+				if (sessionId && nodeId) {
+					localStorage.removeItem(getStorageKey(sessionId, nodeId));
+				}
 			} catch (e) {
 				console.error("Failed to clear chat on course completion:", e);
 			}
 			return [];
 		}
 
+		// IDs not yet resolved — return empty without clearing
+		if (!sessionId || !nodeId) {
+			return [];
+		}
+
 		try {
-			const storedRaw = localStorage.getItem("active_concept_chat");
+			const key = getStorageKey(sessionId, nodeId);
+			const storedRaw = localStorage.getItem(key);
 			if (!storedRaw) return [];
 			const stored: StoredChat = JSON.parse(storedRaw);
 
-			// If sessionId or nodeId is not yet resolved, do not clear the saved chat, just return empty
-			if (!sessionId || !nodeId) {
-				return [];
-			}
-
-			// Validate sessionId and nodeId
-			if (stored.sessionId !== sessionId || stored.nodeId !== nodeId) {
-				// Changed topic or session -> clear
-				localStorage.removeItem("active_concept_chat");
-				return [];
-			}
-
 			// Validate 1-hour expiration
-			const ONE_HOUR = 60 * 60 * 1000;
 			if (Date.now() - stored.lastPromptTimestamp > ONE_HOUR) {
-				// Expired -> clear
-				localStorage.removeItem("active_concept_chat");
+				localStorage.removeItem(key);
 				return [];
 			}
 
@@ -118,6 +205,28 @@ export function useConceptChat(
 		}
 	}, [sessionId, nodeId, isCourseComplete, loadStoredChat]);
 
+	/** Save messages to per-node storage key using current ref values. */
+	const saveToStorage = useCallback(
+		(msgs: ConceptChatMessage[], timestamp: number) => {
+			try {
+				const sid = sessionIdRef.current;
+				const nid = nodeIdRef.current;
+				if (!sid || !nid) return;
+				const data: StoredChat = {
+					messages: msgs,
+					lastPromptTimestamp: timestamp,
+				};
+				localStorage.setItem(
+					getStorageKey(sid, nid),
+					JSON.stringify(data),
+				);
+			} catch (e) {
+				console.error("Failed to save chat to storage:", e);
+			}
+		},
+		[],
+	);
+
 	const clearChat = useCallback(() => {
 		if (abortRef.current) {
 			abortRef.current.abort();
@@ -127,7 +236,11 @@ export function useConceptChat(
 		setIsStreaming(false);
 		setError(null);
 		try {
-			localStorage.removeItem("active_concept_chat");
+			const sid = sessionIdRef.current;
+			const nid = nodeIdRef.current;
+			if (sid && nid) {
+				localStorage.removeItem(getStorageKey(sid, nid));
+			}
 		} catch (e) {
 			console.error("Failed to delete stored chat:", e);
 		}
@@ -137,10 +250,13 @@ export function useConceptChat(
 	useEffect(() => {
 		const checkExpiration = () => {
 			try {
-				const storedRaw = localStorage.getItem("active_concept_chat");
+				const sid = sessionIdRef.current;
+				const nid = nodeIdRef.current;
+				if (!sid || !nid) return;
+				const key = getStorageKey(sid, nid);
+				const storedRaw = localStorage.getItem(key);
 				if (storedRaw) {
 					const stored: StoredChat = JSON.parse(storedRaw);
-					const ONE_HOUR = 60 * 60 * 1000;
 					if (Date.now() - stored.lastPromptTimestamp > ONE_HOUR) {
 						clearChat();
 					}
@@ -161,33 +277,31 @@ export function useConceptChat(
 			const trimmed = message.trim();
 			if (!trimmed) return;
 
+			// Capture current IDs at call time for the API request
+			const currentSessionId = sessionIdRef.current;
+			const currentNodeId = nodeIdRef.current;
+
 			// Append user message immediately
 			const userMessage: ConceptChatMessage = {
 				role: "user",
 				content: trimmed,
 			};
 
-			const historyForRequest = [...messages, userMessage].slice(
-				-MAX_HISTORY_MESSAGES,
-			);
+			// Use functional updater to avoid stale messages closure
+			let historyForRequest: ConceptChatMessage[] = [];
+			const timestamp = Date.now();
 
-			const updatedWithUser = [...messages, userMessage];
-			setMessages(updatedWithUser);
+			setMessages((prev) => {
+				const updatedWithUser = [...prev, userMessage];
+				historyForRequest = updatedWithUser.slice(
+					-MAX_HISTORY_MESSAGES,
+				);
+				saveToStorage(updatedWithUser, timestamp);
+				return updatedWithUser;
+			});
+
 			setIsStreaming(true);
 			setError(null);
-
-			const timestamp = Date.now();
-			try {
-				const data: StoredChat = {
-					sessionId,
-					nodeId,
-					messages: updatedWithUser,
-					lastPromptTimestamp: timestamp,
-				};
-				localStorage.setItem("active_concept_chat", JSON.stringify(data));
-			} catch (e) {
-				console.error("Failed to save user message to storage:", e);
-			}
 
 			// Prepare assistant placeholder
 			const assistantMessage: ConceptChatMessage = {
@@ -201,9 +315,12 @@ export function useConceptChat(
 			abortRef.current = controller;
 
 			try {
+				// Wait one microtask so historyForRequest is populated
+				await Promise.resolve();
+
 				await streamConceptChat({
-					sessionId,
-					nodeId,
+					sessionId: currentSessionId,
+					nodeId: currentNodeId,
 					message: trimmed,
 					history: historyForRequest.slice(0, -1), // exclude current user msg
 					selectedHeadingIds,
@@ -217,17 +334,7 @@ export function useConceptChat(
 									content: last.content + delta,
 								};
 							}
-							try {
-								const data: StoredChat = {
-									sessionId,
-									nodeId,
-									messages: updated,
-									lastPromptTimestamp: timestamp,
-								};
-								localStorage.setItem("active_concept_chat", JSON.stringify(data));
-							} catch (e) {
-								console.error("Failed to save streaming delta:", e);
-							}
+							saveToStorage(updated, timestamp);
 							return updated;
 						});
 					},
@@ -241,21 +348,11 @@ export function useConceptChat(
 				// Remove empty assistant placeholder on error
 				setMessages((prev) => {
 					const last = prev[prev.length - 1];
-					let updated = prev;
-					if (last?.role === "assistant" && !last.content) {
-						updated = prev.slice(0, -1);
-					}
-					try {
-						const data: StoredChat = {
-							sessionId,
-							nodeId,
-							messages: updated,
-							lastPromptTimestamp: timestamp,
-						};
-						localStorage.setItem("active_concept_chat", JSON.stringify(data));
-					} catch (e) {
-						console.error("Failed to clean up storage after error:", e);
-					}
+					const updated =
+						last?.role === "assistant" && !last.content
+							? prev.slice(0, -1)
+							: prev;
+					saveToStorage(updated, timestamp);
 					return updated;
 				});
 			} finally {
@@ -265,7 +362,7 @@ export function useConceptChat(
 				setIsStreaming(false);
 			}
 		},
-		[messages, sessionId, nodeId],
+		[saveToStorage],
 	);
 
 	const stopStreaming = useCallback(() => {
