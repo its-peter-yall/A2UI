@@ -40,11 +40,13 @@ import { LearningPathContainer } from "./LearningPathContainer";
 import { SettingsButton } from "@/components/SettingsButton";
 import { getLearningSession } from "@/lib/learningApi";
 import { cn } from "@/lib/utils";
+import { useChatStreaming } from "./ChatStreamingContext";
 
 export function LearningPage() {
 	const { sessionId } = useParams<{ sessionId: string }>();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
+	const { isStreaming } = useChatStreaming();
 	const [dismissedSessionId, setDismissedSessionId] = useState<string | null>(
 		null,
 	);
@@ -68,8 +70,8 @@ export function LearningPage() {
 		queryFn: () => getLearningSession(sessionId!),
 		enabled: !!sessionId,
 		staleTime: 60_000,
-		// Refetch to sync progress bar with LearningPathContainer
-		refetchInterval: 2000,
+		// Pause polling during chat streaming to reduce server load
+		refetchInterval: isStreaming ? false : 2000,
 	});
 
 	// Invalidate course list on unmount so dashboard is fresh

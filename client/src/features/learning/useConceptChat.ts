@@ -34,6 +34,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { ConceptChatMessage } from "@/types/learning";
 import { streamConceptChat } from "@/lib/chatApi";
+import { useChatStreaming } from "./ChatStreamingContext";
 
 const MAX_HISTORY_MESSAGES = 10;
 const ONE_HOUR = 60 * 60 * 1000;
@@ -192,6 +193,7 @@ export function useConceptChat(
 	);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const { startStreaming, stopStreaming: stopStreamingCtx } = useChatStreaming();
 
 	// Sync state when topic, session, or completion state changes
 	useEffect(() => {
@@ -199,11 +201,12 @@ export function useConceptChat(
 		setMessages(loaded);
 		setError(null);
 		setIsStreaming(false);
+		stopStreamingCtx();
 		if (abortRef.current) {
 			abortRef.current.abort();
 			abortRef.current = null;
 		}
-	}, [sessionId, nodeId, isCourseComplete, loadStoredChat]);
+	}, [sessionId, nodeId, isCourseComplete, loadStoredChat, stopStreamingCtx]);
 
 	/** Save messages to per-node storage key using current ref values. */
 	const saveToStorage = useCallback(
@@ -234,6 +237,7 @@ export function useConceptChat(
 		}
 		setMessages([]);
 		setIsStreaming(false);
+		stopStreamingCtx();
 		setError(null);
 		try {
 			const sid = sessionIdRef.current;
@@ -244,7 +248,7 @@ export function useConceptChat(
 		} catch (e) {
 			console.error("Failed to delete stored chat:", e);
 		}
-	}, []);
+	}, [stopStreamingCtx]);
 
 	// Periodic checker for 1-hour expiration
 	useEffect(() => {
@@ -301,6 +305,7 @@ export function useConceptChat(
 			});
 
 			setIsStreaming(true);
+			startStreaming();
 			setError(null);
 
 			// Prepare assistant placeholder
@@ -360,6 +365,7 @@ export function useConceptChat(
 					abortRef.current = null;
 				}
 				setIsStreaming(false);
+				stopStreamingCtx();
 			}
 		},
 		[saveToStorage],

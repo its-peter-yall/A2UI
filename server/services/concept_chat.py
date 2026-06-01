@@ -43,6 +43,20 @@ logger = logging.getLogger(__name__)
 
 MAX_CHAT_HISTORY_MESSAGES = 10
 
+# Connection pool: reuse AsyncOpenAI clients per base_url
+_client_cache: dict[str, AsyncOpenAI] = {}
+
+
+def _get_client(base_url: str, api_key: str) -> AsyncOpenAI:
+    """Return cached AsyncOpenAI client for base_url, or create one."""
+    if base_url not in _client_cache:
+        _client_cache[base_url] = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            max_retries=0,
+        )
+    return _client_cache[base_url]
+
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GENERALCOMPUTE_BASE_URL = "https://api.generalcompute.com/v1"
@@ -170,11 +184,7 @@ async def stream_concept_chat(
         model_slug,
     )
 
-    client = AsyncOpenAI(
-        base_url=base_url,
-        api_key=api_key,
-        max_retries=0,
-    )
+    client = _get_client(base_url, api_key)
 
     messages = build_concept_chat_messages(
         message=message,

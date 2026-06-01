@@ -40,6 +40,7 @@ import { MotionConfig } from "framer-motion";
 import { LearningHome, LearningPage } from "@/features/learning";
 import { RevisionPage } from "@/features/learning/RevisionPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { ChatStreamingProvider } from "@/features/learning/ChatStreamingContext";
 
 /**
  * Global motion configuration wrapper.
@@ -54,10 +55,21 @@ function App() {
 					{/* Learning routes - default */}
 					<Route path="/" element={<LearningHome />} />
 					<Route path="/learn" element={<LearningHome />} />
-					<Route path="/learn/:sessionId" element={<LearningPage />} />
+					<Route
+						path="/learn/:sessionId"
+						element={
+							<ChatStreamingProvider>
+								<LearningPage />
+							</ChatStreamingProvider>
+						}
+					/>
 					<Route
 						path="/learn/:sessionId/revise/:revisionId"
-						element={<RevisionPage />}
+						element={
+							<ChatStreamingProvider>
+								<RevisionPage />
+							</ChatStreamingProvider>
+						}
 					/>
 
 					{/* Settings configuration route */}
