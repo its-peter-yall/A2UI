@@ -274,15 +274,14 @@ export function RevisionConceptCard({
 								)}
 								{showFeedback &&
 									isSelected &&
-									!isCorrectOption &&
-									quizResult?.selected_explanation && (
+									!isCorrectOption && (
 										<div className="mt-2 pl-7">
 											<span className="text-xs text-red-500 dark:text-red-400 font-medium block mb-1">
 												Why this is incorrect:
 											</span>
 											<MarkdownRenderer
 												className="text-sm text-red-600 dark:text-red-300 [&>div]:!mt-0"
-												content={quizResult.selected_explanation}
+												content={option.explanation}
 											/>
 										</div>
 									)}

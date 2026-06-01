@@ -68,7 +68,6 @@ export function QuizFeedback({
 		selected_option_ids,
 		correct_option_ids,
 		explanation,
-		selected_explanation,
 	} = result;
 
 	const resultHeaderRef = useRef<HTMLDivElement>(null);
@@ -263,15 +262,14 @@ export function QuizFeedback({
 									{/* Show explanation for wrong selected answer (when answer is wrong) */}
 									{!showCorrectAnswer &&
 										isSelected &&
-										!isCorrectOption &&
-										selected_explanation && (
+										!isCorrectOption && (
 											<div className="mt-2">
 												<span className="text-xs text-red-500 dark:text-red-400 font-medium block mb-1">
 													Why this is incorrect:
 												</span>
 												<MarkdownRenderer
 													className="text-sm text-red-600 dark:text-red-300 [&>div]:!mt-0"
-													content={selected_explanation}
+													content={option.explanation}
 												/>
 											</div>
 										)}
