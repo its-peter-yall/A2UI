@@ -69,11 +69,11 @@ yarn-error.log*
 
 # Testing & Coverage
 coverage/
+.coverage
 .nyc_output/
 htmlcov/
 *.test.ts
 *.test.tsx
-server/tests/
 vitest.setup.ts
 
 # Dev tooling

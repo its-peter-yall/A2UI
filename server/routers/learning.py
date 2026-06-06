@@ -9,7 +9,7 @@ PURPOSE:
     management, and quiz state transitions.
 ROLE IN PROJECT:
     Defines the HTTP interface for the learning feature.
-    - Maps URL routes to business logic in CourseOrchestrator
+    - Maps URL routes to business logic in LangGraph course graph
     - Enforces server-authoritative state validation on all transitions
 KEY COMPONENTS:
     - generate_course: Creates structured learning courses from topic queries
@@ -21,7 +21,7 @@ KEY COMPONENTS:
 DEPENDENCIES:
     - External: fastapi
     - Internal: server.database.learning_persistence, server.schemas.learning,
-              server.services.course_orchestrator
+              server.graph.build
 USAGE:
     ```python
     response = await client.post("/learning/generate",
@@ -32,13 +32,17 @@ USAGE:
 
 import asyncio
 import logging
+import time
 from typing import List, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query, status, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
+from server.graph.build import get_graph
+from server.graph.regen import regenerate_failed_node
 from server.schemas.learning import (
     ConceptChatRequest,
     ConceptNodeResponse,
@@ -59,7 +63,6 @@ from server.schemas.learning import (
 )
 from server.schemas.llm import LLMContext, get_llm_context
 from server.services.concept_chat import stream_concept_chat
-from server.services.course_orchestrator import course_orchestrator
 from server.services.quiz_randomization import (
     get_or_create_shuffle_order,
     hide_quiz_card,
@@ -174,6 +177,7 @@ def _apply_node_visibility(node: dict, include_flags: bool = False) -> dict:
             quiz_set = quiz_set_data["quiz_set"]
             existing_seed = quiz_set_data.get("shuffle_seed")
             current_index = quiz_set_data.get("current_index", 0)
+            shuffled_set = quiz_set
 
             if quiz_set.quizzes:
                 current_index = max(0, min(current_index, len(quiz_set.quizzes) - 1))
@@ -252,6 +256,52 @@ def _ensure_quiz_shuffle_seed(node_id: str) -> Optional[str]:
     return shuffle_seed
 
 
+async def _generate_course_with_graph(
+    request_body: GenerateCourseRequest,
+    request: Request,
+    llm_context: LLMContext,
+) -> dict:
+    """Generate a learning course using LangGraph."""
+    graph = get_graph(request.app.state)
+    session_ref: dict[str, str] = {}
+    input_state = {
+        "query": request_body.query,
+        "user_id": request_body.user_id,
+        "topic_results": [],
+        "total_start_time": time.perf_counter(),
+    }
+    config = {
+        "configurable": {
+            "thread_id": f"course-{uuid4()}",
+        }
+    }
+    context = {
+        "llm_context": llm_context,
+        "session_ref": session_ref,
+    }
+
+    gen_task = asyncio.create_task(graph.ainvoke(input_state, config, context=context))
+    while not gen_task.done():
+        await asyncio.wait({gen_task}, timeout=0.5)
+        if gen_task.done():
+            break
+        if await request.is_disconnected():
+            logger.info("Client disconnected. Cancelling graph generation...")
+            gen_task.cancel()
+            try:
+                await gen_task
+            except asyncio.CancelledError:
+                session_id = session_ref.get("session_id")
+                if session_id:
+                    learning_manager.delete_learning_session(session_id)
+            raise HTTPException(
+                status_code=499,
+                detail="Generation cancelled",
+            )
+
+    return gen_task.result()
+
+
 @router.post(
     "/generate",
     response_model=LearningSessionWithNodes,
@@ -264,34 +314,14 @@ async def generate_course(
     request: Request,
     llm_context: LLMContext = Depends(get_llm_context),
 ) -> LearningSessionWithNodes:
-    """Generate a learning course using the Planner-Worker pattern."""
+    """Generate a learning course using LangGraph."""
     try:
-        gen_task = asyncio.create_task(
-            course_orchestrator.generate_course(
-                query=request_body.query,
-                user_id=request_body.user_id,
-                llm_context=llm_context,
-            )
+        result = await _generate_course_with_graph(
+            request_body=request_body,
+            request=request,
+            llm_context=llm_context,
         )
 
-        while not gen_task.done():
-            # Check for client disconnect every 0.5 seconds
-            done, pending = await asyncio.wait({gen_task}, timeout=0.5)
-            if gen_task.done():
-                break
-            if await request.is_disconnected():
-                logger.info("Client disconnected. Cancelling course generation task...")
-                gen_task.cancel()
-                try:
-                    await gen_task
-                except asyncio.CancelledError:
-                    pass
-                raise HTTPException(
-                    status_code=499,
-                    detail="Generation cancelled",
-                )
-
-        result = gen_task.result()
         session = result.get("session", {})
         nodes_data = result.get("nodes", [])
         nodes = [
@@ -718,11 +748,7 @@ def get_revision_summary(revision_id: str) -> RevisionSummary:
 def get_concept_node(node_id: str) -> ConceptNodeWithVisibility:
     """Get a concept node with visibility flags based on state."""
     try:
-        conn = learning_manager._get_connection()
-        try:
-            node = learning_manager._get_node_by_id(node_id, conn)
-        finally:
-            conn.close()
+        node = learning_manager.get_concept_node(node_id)
 
         if not node:
             raise HTTPException(
@@ -817,16 +843,12 @@ def submit_quiz(
     """Submit a quiz answer and record the attempt."""
     try:
         # Get current node info for session and sequence
-        conn = learning_manager._get_connection()
-        try:
-            node = learning_manager._get_node_by_id(node_id, conn)
-            if not node:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Concept node not found: {node_id}",
-                )
-        finally:
-            conn.close()
+        node = learning_manager.get_concept_node(node_id)
+        if not node:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Concept node not found: {node_id}",
+            )
 
         # Create the quiz attempt
         result = learning_manager.create_quiz_attempt(
@@ -942,18 +964,14 @@ def previous_quiz(node_id: str) -> ConceptNodeResponse:
 
         if not updated_node:
             # Check if node exists to distinguish 404 from "cannot decrement"
-            conn = learning_manager._get_connection()
-            try:
-                node = learning_manager._get_node_by_id(node_id, conn)
-                if not node:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Concept node not found: {node_id}",
-                    )
-                # If node exists but decrement returned None (e.g. legacy quiz), just return node
-                updated_node = node
-            finally:
-                conn.close()
+            node = learning_manager.get_concept_node(node_id)
+            if not node:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Concept node not found: {node_id}",
+                )
+            # If node exists but decrement returned None (e.g. legacy quiz), just return node
+            updated_node = node
 
         # Ensure we are in IN_QUIZ state for the returned node
         if NodeStatus(updated_node["status"]) != NodeStatus.IN_QUIZ:
@@ -984,52 +1002,33 @@ async def regenerate_node_endpoint(
     request: Request,
     llm_context: LLMContext = Depends(get_llm_context),
 ) -> ConceptNodeResponse:
-    """Regenerate content for a failed node using the orchestrator."""
+    """Regenerate content for a failed concept node."""
     try:
-        gen_task = asyncio.create_task(
-            course_orchestrator.regenerate_node(
-                node_id=node_id,
-                llm_context=llm_context,
-            )
+        updated_node = await regenerate_failed_node(
+            node_id=node_id,
+            llm_context=llm_context,
         )
-
-        while not gen_task.done():
-            # Check for client disconnect every 0.5 seconds
-            done, pending = await asyncio.wait({gen_task}, timeout=0.5)
-            if gen_task.done():
-                break
-            if await request.is_disconnected():
-                logger.info(f"Client disconnected. Cancelling node regeneration task for node {node_id}...")
-                gen_task.cancel()
-                try:
-                    await gen_task
-                except asyncio.CancelledError:
-                    pass
-                raise HTTPException(
-                    status_code=499,
-                    detail="Regeneration cancelled",
-                )
-
-        result = gen_task.result()
-
-        if result is None:
+        if updated_node is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Cannot regenerate node: not found, not in ERROR status, or retry unavailable",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Regeneration failed unexpectedly",
             )
-
-        if not result.get("regenerated", False):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=result.get("error", "Regeneration failed"),
-            )
-
-        response_node = _apply_node_visibility(result)
+        response_node = _apply_node_visibility(updated_node)
         return ConceptNodeResponse(**response_node)
+    except LookupError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Concept node not found: {node_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error regenerating node: {e}")
+        logger.error("Error regenerating node %s: %s", node_id, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
@@ -1071,7 +1070,6 @@ async def concept_chat(
             detail="X-Chat-Model or X-Model header is required",
         )
 
-    conn = learning_manager._get_connection()
     try:
         session = learning_manager.get_learning_session(session_id)
         if not session:
@@ -1080,7 +1078,7 @@ async def concept_chat(
                 detail=f"Learning session not found: {session_id}",
             )
 
-        node = learning_manager._get_node_by_id(node_id, conn)
+        node = learning_manager.get_concept_node(node_id)
         if not node:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1103,8 +1101,6 @@ async def concept_chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
         )
-    finally:
-        conn.close()
 
     return StreamingResponse(
         stream_concept_chat(
