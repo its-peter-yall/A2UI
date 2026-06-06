@@ -88,9 +88,14 @@ A2UI/
 │   │   ├── common.py          # Base classes
 │   │   ├── learning.py        # Learning domain models
 │   │   └── llm.py             # LLM context models
+│   ├── graph/                  # LangGraph course generation
+│   │   ├── state.py            # CourseState TypedDict schema
+│   │   ├── nodes.py            # planner_node, topic_worker, etc.
+│   │   ├── build.py            # Graph compile + caching
+│   │   └── regen.py            # Single-node regen
 │   ├── services/               # Business logic
-│   │   ├── course_orchestrator.py  # Scatter-Gather pipeline
-│   │   └── quiz_randomization.py   # Quiz shuffling
+│   │   ├── quiz_randomization.py   # Quiz shuffling
+│   │   └── concept_chat.py         # Concept chat support
 │   ├── agents/                 # AI agent implementations
 │   │   ├── base.py            # Abstract base agent
 │   │   ├── planner.py         # KLI curriculum decomposition

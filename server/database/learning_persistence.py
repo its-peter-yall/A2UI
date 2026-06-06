@@ -8,8 +8,8 @@ PURPOSE:
     storage for learning sessions, concept nodes, quizzes, and mastery
     tracking with enforced state transitions.
 ROLE IN PROJECT:
-    Core data layer for the learning feature, consumed by CourseOrchestrator
-    and learning router.
+    Core data layer for the learning feature, consumed by the LangGraph
+    course graph and learning router.
     - Enforces sequential node progression through a state machine
     - Provides quiz attempt tracking for mastery evaluation
 KEY COMPONENTS:
@@ -104,6 +104,8 @@ class LearningManager:
                     status TEXT NOT NULL,
                     error_message TEXT,
                     retry_available INTEGER DEFAULT 0,
+                    summary_for_context TEXT,
+                    key_terms TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (learning_session_id)
@@ -1345,6 +1347,8 @@ class LearningManager:
         error_message: Optional[str] = None,
         retry_available: bool = False,
         complexity: Optional[str] = "Intermediate",
+        summary_for_context: Optional[str] = None,
+        key_terms: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Create a new concept node for a learning session.
 
@@ -1366,9 +1370,10 @@ class LearningManager:
                 """
                 INSERT INTO concept_nodes (
                     id, learning_session_id, sequence_index, title, content_markdown,
-                    status, error_message, retry_available, complexity, created_at, updated_at
+                    status, error_message, retry_available, complexity,
+                    summary_for_context, key_terms, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     node_id,
@@ -1380,6 +1385,8 @@ class LearningManager:
                     error_message,
                     int(retry_available),
                     complexity,
+                    summary_for_context,
+                    json.dumps(key_terms) if key_terms is not None else None,
                     now,
                     now,
                 ),
@@ -1440,6 +1447,8 @@ class LearningManager:
                 "error_message": error_message,
                 "retry_available": retry_available,
                 "complexity": complexity,
+                "summary_for_context": summary_for_context,
+                "key_terms": key_terms,
                 "created_at": now,
                 "updated_at": now,
                 "quiz": quiz_payload,
@@ -1478,6 +1487,8 @@ class LearningManager:
                     cn.error_message,
                     cn.retry_available,
                     cn.complexity,
+                    cn.summary_for_context,
+                    cn.key_terms,
                     cn.created_at,
                     cn.updated_at,
                     qd.payload AS quiz_payload
@@ -1493,6 +1504,8 @@ class LearningManager:
                 quiz_payload = (
                     json.loads(row["quiz_payload"]) if row["quiz_payload"] else None
                 )
+                key_terms_raw = row["key_terms"]
+                key_terms = json.loads(key_terms_raw) if key_terms_raw else None
                 nodes.append(
                     {
                         "id": row["id"],
@@ -1506,6 +1519,8 @@ class LearningManager:
                         if row["retry_available"] is not None
                         else False,
                         "complexity": row["complexity"],
+                        "summary_for_context": row["summary_for_context"],
+                        "key_terms": key_terms,
                         "created_at": row["created_at"],
                         "updated_at": row["updated_at"],
                         "quiz": quiz_payload,
@@ -2683,6 +2698,8 @@ class LearningManager:
                 cn.error_message,
                 cn.retry_available,
                 cn.complexity,
+                cn.summary_for_context,
+                cn.key_terms,
                 cn.created_at,
                 cn.updated_at,
                 qd.payload AS quiz_payload
@@ -2696,6 +2713,8 @@ class LearningManager:
         if not row:
             return None
         quiz_payload = json.loads(row["quiz_payload"]) if row["quiz_payload"] else None
+        key_terms_raw = row["key_terms"]
+        key_terms = json.loads(key_terms_raw) if key_terms_raw else None
         return {
             "id": row["id"],
             "learning_session_id": row["learning_session_id"],
@@ -2708,10 +2727,23 @@ class LearningManager:
             if row["retry_available"] is not None
             else False,
             "complexity": row["complexity"],
+            "summary_for_context": row["summary_for_context"],
+            "key_terms": key_terms,
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "quiz": quiz_payload,
         }
+
+    def get_concept_node(self, node_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a concept node by ID, managing the database connection lifecycle."""
+        conn = self._get_connection()
+        try:
+            return self._get_node_by_id(node_id, conn)
+        except sqlite3.Error as e:
+            logger.error(f"Error getting concept node by ID: {e}")
+            raise
+        finally:
+            conn.close()
 
     @staticmethod
     def _calculate_progress_percent(completed_nodes: int, total_nodes: int) -> int:
@@ -2843,6 +2875,14 @@ class LearningManager:
         if "complexity" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE concept_nodes ADD COLUMN complexity TEXT DEFAULT 'Intermediate'"
+            )
+        if "summary_for_context" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN summary_for_context TEXT"
+            )
+        if "key_terms" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN key_terms TEXT"
             )
 
     def _ensure_session_progress_columns(self, conn: sqlite3.Connection) -> None:

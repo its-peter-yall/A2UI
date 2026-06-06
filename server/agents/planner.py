@@ -376,7 +376,7 @@ def validate_complexity_distribution(
     Detects degenerate LLM outputs where all topics share the same
     complexity rating or quiz_count values don't match their
     complexity band. Returns actionable diagnostics for the
-    CourseOrchestrator to decide whether to accept or retry.
+    LangGraph course graph to decide whether to accept or retry.
 
     Args:
         outline: A CourseOutline with topics containing complexity

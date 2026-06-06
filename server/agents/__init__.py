@@ -9,7 +9,7 @@ PURPOSE:
 ROLE IN PROJECT:
     Entry point for the agent pipeline (Plan -> Generate -> Quiz).
     - Exports all agent classes and singleton instances
-    - Consumed by CourseOrchestrator to drive content generation
+    - Consumed by the LangGraph course graph to drive content generation
 KEY COMPONENTS:
     - BaseAgent: Abstract base class for all agent implementations
     - PlannerAgent / planner_agent: Decomposes queries into outlines
