@@ -28,16 +28,21 @@ USAGE:
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from server.database.learning_persistence import learning_manager
-from server.routers import learning_router, llm_router
 import logging
 import os
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+from server.database.learning_persistence import learning_manager
+from server.graph.build import CHECKPOINT_DB_PATH, build_graph
+from server.routers import learning_router, llm_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,7 +59,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 
-    yield
+    CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    async with AsyncSqliteSaver.from_conn_string(
+        str(CHECKPOINT_DB_PATH),
+    ) as checkpointer:
+        app.state.checkpointer = checkpointer
+        app.state.course_graph = build_graph(
+            checkpointer=checkpointer,
+        )
+        yield
 
     logger.info("Shutting down A2UI Backend...")
 
