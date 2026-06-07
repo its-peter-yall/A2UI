@@ -34,6 +34,7 @@ from server.agents.generator import GeneratedContent
 from server.database.learning_persistence import LearningManager
 from server.graph.regen import regenerate_failed_node
 from server.schemas.learning import (
+    FailedStep,
     NodeStatus,
     QuizCard,
     QuizOption,
@@ -125,6 +126,7 @@ class RegenFunctionTests(unittest.IsolatedAsyncioTestCase):
             quiz_set=_quiz_set(),
             summary_for_context=summary_for_context,
             key_terms=key_terms,
+            failed_step=FailedStep.BOTH,
         )
         return node["id"]
 
@@ -264,6 +266,110 @@ class RegenFunctionTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(RuntimeError):
             await regenerate_failed_node(node_id)
+
+
+    def _create_node_with_failed_step(
+        self,
+        failed_step_value: str,
+        sequence_index: int = 0,
+        prev_status: str = "COMPLETED",
+        real_content: bool = True,
+    ) -> str:
+        session = self.manager.create_learning_session(
+            query="test", course_title="Test"
+        )
+        if sequence_index > 0:
+            self.manager.create_concept_node(
+                session_id=session["id"],
+                sequence_index=0,
+                title="Prev",
+                content_markdown="prev " * 50,
+                status=NodeStatus(prev_status),
+                quiz_set=_quiz_set(),
+            )
+        content = "Real content " * 50 if real_content else "Content generation failed."
+        node = self.manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=sequence_index,
+            title="Topic",
+            content_markdown=content,
+            status=NodeStatus.ERROR,
+            error_message="boom",
+            retry_available=True,
+            failed_step=FailedStep(failed_step_value),
+            quiz_set=_quiz_set() if failed_step_value != "QUIZZER" else None,
+        )
+        return node["id"]
+
+    @patch("server.graph.regen.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
+    @patch("server.graph.regen.generator_agent.generate_explanation", new_callable=AsyncMock)
+    async def test_regen_quizzer_only_skips_generator(
+        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
+    ) -> None:
+        mock_quiz.return_value = _quiz_set()
+        node_id = self._create_node_with_failed_step(
+            failed_step_value="QUIZZER",
+            real_content=True,
+        )
+        result = await regenerate_failed_node(node_id)
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            result["status"], NodeStatus.VIEWING_EXPLANATION.value
+        )
+        # Generator MUST NOT have been called
+        mock_gen.assert_not_awaited()
+        mock_quiz.assert_awaited_once()
+        # Real content preserved from before regen
+        self.assertIn("Real content", result["content_markdown"])
+
+    @patch("server.graph.regen.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
+    @patch("server.graph.regen.generator_agent.generate_explanation", new_callable=AsyncMock)
+    async def test_regen_generator_only_skips_quizzer(
+        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
+    ) -> None:
+        mock_gen.return_value = _content()
+        mock_quiz.return_value = _quiz_set()
+        node_id = self._create_node_with_failed_step(
+            failed_step_value="GENERATOR", real_content=False
+        )
+        result = await regenerate_failed_node(node_id)
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            result["status"], NodeStatus.VIEWING_EXPLANATION.value
+        )
+        # Generator must run; quizzer must also run (quiz depends on content)
+        mock_gen.assert_awaited_once()
+        mock_quiz.assert_awaited_once()
+        # failed_step cleared on success
+        self.assertIsNone(result["failed_step"])
+
+    @patch("server.graph.regen.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
+    @patch("server.graph.regen.generator_agent.generate_explanation", new_callable=AsyncMock)
+    async def test_regen_both_runs_both(
+        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
+    ) -> None:
+        mock_gen.return_value = _content()
+        mock_quiz.return_value = _quiz_set()
+        node_id = self._create_node_with_failed_step(failed_step_value="BOTH")
+        result = await regenerate_failed_node(node_id)
+        self.assertIsNotNone(result)
+        mock_gen.assert_awaited_once()
+        mock_quiz.assert_awaited_once()
+        self.assertIsNone(result["failed_step"])
+
+    @patch("server.graph.regen.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
+    @patch("server.graph.regen.generator_agent.generate_explanation", new_callable=AsyncMock)
+    async def test_regen_step_override_quizzer_only(
+        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
+    ) -> None:
+        mock_quiz.return_value = _quiz_set()
+        node_id = self._create_node_with_failed_step(failed_step_value="BOTH")
+        result = await regenerate_failed_node(
+            node_id, regen_step="QUIZZER"
+        )
+        self.assertIsNotNone(result)
+        mock_gen.assert_not_awaited()
+        mock_quiz.assert_awaited_once()
 
 
 if __name__ == "__main__":

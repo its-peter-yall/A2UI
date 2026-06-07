@@ -30,6 +30,7 @@ from server.agents.generator import GeneratedContent, generator_agent
 from server.agents.quizzer import quizzer_agent
 from server.database.learning_persistence import learning_manager
 from server.schemas.learning import (
+    FailedStep,
     NodeStatus,
     QuizSet,
     TopicNode,
@@ -42,23 +43,30 @@ logger = logging.getLogger(__name__)
 async def regenerate_failed_node(
     node_id: str,
     llm_context: Optional[LLMContext] = None,
+    regen_step: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Re-generate content for a single failed concept node.
 
-    Looks up the node and its session siblings, rebuilds a
-    TopicNode from stored data, calls generator and quizzer
-    agents, and persists the new content.
+    By default, dispatches only the LLM step(s) that failed according to
+    the node's stored `failed_step`:
+        - QUIZZER: re-run quizzer_agent only (keeps existing content)
+        - GENERATOR: re-run generator_agent, then quizzer_agent (quiz
+          depends on content)
+        - BOTH or missing: re-run both
 
     Args:
         node_id: Identifier of the node to regenerate.
         llm_context: Optional LLM provider context.
+        regen_step: Optional override. One of "GENERATOR", "QUIZZER",
+            "BOTH". If None, the node's stored failed_step is used.
 
     Returns:
         Updated node dict on success, None on failure.
 
     Raises:
         LookupError: If node_id does not exist.
-        ValueError: If node is not eligible for regeneration.
+        ValueError: If node is not eligible for regeneration or
+            regen_step is invalid.
     """
     node = learning_manager.get_concept_node(node_id)
 
@@ -66,14 +74,23 @@ async def regenerate_failed_node(
         raise LookupError(f"Node not found: {node_id}")
 
     if node.get("status") != NodeStatus.ERROR.value:
-        raise ValueError(
-            f"Node {node_id} is not in ERROR status"
-        )
+        raise ValueError(f"Node {node_id} is not in ERROR status")
 
     if not node.get("retry_available", False):
-        raise ValueError(
-            f"Node {node_id} does not have retry available"
-        )
+        raise ValueError(f"Node {node_id} does not have retry available")
+
+    stored_step = node.get("failed_step")
+    if regen_step is not None:
+        if regen_step not in {s.value for s in FailedStep}:
+            raise ValueError(
+                f"Invalid regen_step '{regen_step}'. "
+                f"Must be one of: {[s.value for s in FailedStep]}"
+            )
+        target_step = regen_step
+    elif stored_step:
+        target_step = stored_step
+    else:
+        target_step = FailedStep.BOTH.value
 
     session_id = node["learning_session_id"]
     sequence_index = node["sequence_index"]
@@ -108,21 +125,36 @@ async def regenerate_failed_node(
         quiz_count=quiz_count,
     )
 
-    content: GeneratedContent = (
-        await generator_agent.generate_explanation(
+    new_content_markdown = node.get("content_markdown") or ""
+    new_quiz_set: Optional[QuizSet] = None
+    run_generator = target_step in {
+        FailedStep.GENERATOR.value,
+        FailedStep.BOTH.value,
+    }
+    run_quizzer = target_step in {
+        FailedStep.QUIZZER.value,
+        FailedStep.GENERATOR.value,
+        FailedStep.BOTH.value,
+    }
+
+    if run_generator:
+        content: GeneratedContent = (
+            await generator_agent.generate_explanation(
+                topic=topic,
+                prev_summary=prev_summary,
+                next_summary=next_summary,
+                llm_context=llm_context,
+            )
+        )
+        new_content_markdown = content.content_markdown
+
+    if run_quizzer:
+        new_quiz_set = await quizzer_agent.generate_quiz_set(
             topic=topic,
-            prev_summary=prev_summary,
-            next_summary=next_summary,
+            content=new_content_markdown,
+            quiz_count=quiz_count,
             llm_context=llm_context,
         )
-    )
-
-    quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
-        topic=topic,
-        content=content.content_markdown,
-        quiz_count=quiz_count,
-        llm_context=llm_context,
-    )
 
     new_status = NodeStatus.LOCKED
     if sequence_index == 0:
@@ -132,11 +164,12 @@ async def regenerate_failed_node(
 
     updated_node = learning_manager.update_node_content(
         node_id=node_id,
-        content_markdown=content.content_markdown,
+        content_markdown=new_content_markdown,
         status=new_status,
-        quiz_set=quiz_set,
+        quiz_set=new_quiz_set,
         error_message=None,
         retry_available=False,
+        failed_step=None,
     )
 
     if not updated_node:
@@ -144,8 +177,10 @@ async def regenerate_failed_node(
         return None
 
     logger.info(
-        "Regenerated node %s with %d quizzes",
+        "Regenerated node %s (step=%s, ran_generator=%s, ran_quizzer=%s)",
         node_id,
-        len(quiz_set.quizzes),
+        target_step,
+        run_generator,
+        run_quizzer,
     )
     return updated_node
