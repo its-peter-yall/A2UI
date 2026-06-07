@@ -123,11 +123,13 @@ async def _fetch_generalcompute_models(llm_context: LLMContext) -> List[ModelRes
                 model_id = item.get("id")
                 if not model_id:
                     continue
+                max_tokens = item.get("max_completion_tokens")
                 result.append(
                     ModelResponse(
                         id=model_id,
                         name=model_id,
                         context_length=None,
+                        max_completion_tokens=max_tokens,
                     )
                 )
             return result

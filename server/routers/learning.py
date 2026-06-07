@@ -47,6 +47,7 @@ from server.schemas.learning import (
     ConceptChatRequest,
     ConceptNodeResponse,
     LearningSessionResponse,
+    LearningSessionSummary,
     NodeStatus,
     QuizAttemptHistory,
     QuizAttemptResponse,
@@ -213,6 +214,8 @@ def _apply_node_visibility(node: dict, include_flags: bool = False) -> dict:
                     or quiz_set.shuffle_seed
                     or _ensure_quiz_shuffle_seed(node["id"])
                 )
+                if not review_seed:
+                    review_seed = node["id"]
                 shuffled_set = shuffle_quiz_set_with_seed(quiz_set, review_seed)
                 response_node["quiz_set"] = shuffled_set
                 response_node["quiz"] = shuffled_set.quizzes[current_index]
@@ -386,8 +389,11 @@ def get_learning_sessions(
             offset=offset,
         )
         has_more = total_count > (offset + safe_limit)
+        typed_sessions = [
+            LearningSessionSummary.model_validate(s) for s in sessions
+        ]
         return SessionListResponse(
-            sessions=sessions,
+            sessions=typed_sessions,
             total_count=total_count,
             has_more=has_more,
         )
@@ -543,8 +549,11 @@ def get_revisions_for_session(
             limit=safe_limit,
             offset=offset,
         )
+        typed_revisions = [
+            RevisionSessionResponse.model_validate(r) for r in revisions
+        ]
         return RevisionSessionListResponse(
-            revisions=revisions,
+            revisions=typed_revisions,
             total_count=total_count,
         )
     except Exception as e:

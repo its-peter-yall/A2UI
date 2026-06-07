@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import AsyncGenerator, List
+from typing import Any, AsyncGenerator, List, cast
 
 from openai import AsyncOpenAI
 
@@ -139,7 +139,7 @@ def build_concept_chat_messages(
 
     capped_history = history[-MAX_CHAT_HISTORY_MESSAGES:]
     for h in capped_history:
-        messages.append({"role": h.role.value if hasattr(h.role, 'value') else h.role, "content": h.content})
+        messages.append({"role": h.role, "content": h.content})
 
     messages.append({"role": "user", "content": message})
 
@@ -203,7 +203,7 @@ async def stream_concept_chat(
     try:
         stream = await client.chat.completions.create(
             model=model_slug,
-            messages=messages,
+            messages=cast(Any, messages),
             stream=True,
         )
 

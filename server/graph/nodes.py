@@ -182,8 +182,12 @@ def _adjacent_summaries(
 
 def fan_out_generators(state: CourseState) -> list[Send]:
     """Fan out one Send packet per topic for parallel content generation."""
-    outline = CourseOutline(**state["outline"])
-    session_id = state["session"]["id"]
+    outline_data = state.get("outline")
+    session_data = state.get("session")
+    assert outline_data is not None, "outline required in state"
+    assert session_data is not None, "session required in state"
+    outline = CourseOutline(**outline_data)
+    session_id = session_data["id"]
     sends: list[Send] = []
 
     for index, topic in enumerate(outline.topics):
@@ -245,11 +249,13 @@ async def generator_node(
 ) -> dict[str, list[GeneratorResult]]:
     """Generate content for one topic. Pure — no DB writes."""
     llm_context = _get_llm_context(runtime)
-    topic = TopicNode(**state["topic_data"])
+    topic_data = state.get("topic_data")
+    session_id = str(state.get("session_id", ""))
+    sequence_index = int(state.get("sequence_index", 0))
+    assert topic_data is not None, "topic_data required in state"
+    topic = TopicNode(**topic_data)
     prev_summary = state.get("prev_summary", "Start")
     next_summary = state.get("next_summary", "End")
-    session_id = state["session_id"]
-    sequence_index = state["sequence_index"]
     start_time = time.perf_counter()
 
     content: GeneratedContent = await generator_agent.generate_explanation(
@@ -263,7 +269,7 @@ async def generator_node(
     return {
         "generator_results": [
             {
-                "topic_data": state["topic_data"],
+                "topic_data": topic_data,
                 "content_markdown": content.content_markdown,
                 "generation_ms": generation_ms,
                 "error_message": None,
@@ -280,11 +286,13 @@ async def quizzer_node(
 ) -> dict[str, list[TopicResult]]:
     """Generate quiz and persist concept node. Handles both success and error cases."""
     llm_context = _get_llm_context(runtime)
-    topic = TopicNode(**state["topic_data"])
-    session_id = state["session_id"]
-    sequence_index = state["sequence_index"]
-    content_markdown = state["content_markdown"]
+    topic_data = state.get("topic_data")
+    session_id = str(state.get("session_id", ""))
+    sequence_index = int(state.get("sequence_index", 0))
+    content_markdown = state.get("content_markdown", "")
     generator_error = state.get("error_message")
+    assert topic_data is not None, "topic_data required in state"
+    topic = TopicNode(**topic_data)
     start_time = time.perf_counter()
 
     if generator_error:
@@ -358,15 +366,18 @@ async def generator_error_handler(
         error.error,
         state.get("sequence_index"),
     )
+    topic_data_d = state.get("topic_data", {})
+    sequence_index_d = int(state.get("sequence_index", 0))
+    session_id_d = str(state.get("session_id", ""))
     return {
         "generator_results": [
             {
-                "topic_data": state["topic_data"],
+                "topic_data": topic_data_d,
                 "content_markdown": "Content generation failed. Retry is available.",
                 "generation_ms": 0.0,
                 "error_message": str(error.error),
-                "sequence_index": state["sequence_index"],
-                "session_id": state["session_id"],
+                "sequence_index": sequence_index_d,
+                "session_id": session_id_d,
             }
         ]
     }
@@ -377,9 +388,11 @@ async def quizzer_error_handler(
     error: NodeError,
 ) -> dict[str, list[TopicResult]]:
     """Catch quizzer failure after retries exhausted. Persists ERROR node to DB."""
-    topic = TopicNode(**state["topic_data"])
-    session_id = state["session_id"]
-    sequence_index = state["sequence_index"]
+    topic_data_e = state.get("topic_data")
+    session_id = str(state.get("session_id", ""))
+    sequence_index = int(state.get("sequence_index", 0))
+    assert topic_data_e is not None, "topic_data required in state"
+    topic = TopicNode(**topic_data_e)
 
     logger.error(
         "Quizzer error handler caught: %s for topic %s",
@@ -390,7 +403,7 @@ async def quizzer_error_handler(
         session_id=session_id,
         sequence_index=sequence_index,
         title=topic.title,
-        content_markdown=state["content_markdown"],
+        content_markdown=state.get("content_markdown", ""),
         status=NodeStatus.ERROR,
         quiz=None,
         error_message=str(error.error),
@@ -477,7 +490,8 @@ def build_response_node(state: CourseState) -> dict[str, Any]:
     )
     failure_count = len(nodes) - success_count
 
-    session = dict(state["session"])
+    session_data_b = state.get("session", {})
+    session = dict(session_data_b)
     session["total_nodes"] = len(nodes)
     session["completed_nodes"] = 0
 

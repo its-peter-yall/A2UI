@@ -89,6 +89,8 @@ class CourseState(TypedDict):
     generator_results: Annotated[list[GeneratorResult], operator.add]
 
     topic_data: NotRequired[dict[str, Any]]
+    content_markdown: NotRequired[str]
+    error_message: NotRequired[str]
     prev_summary: NotRequired[str]
     next_summary: NotRequired[str]
     session_id: NotRequired[str]

@@ -7,6 +7,7 @@ pydantic
 instructor
 tenacity
 jsonref
+langchain
 langgraph==1.2.4
 langgraph-checkpoint-sqlite==3.1.0
 aiosqlite==0.22.1

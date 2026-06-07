@@ -5,21 +5,18 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Shared context for chat streaming state. Allows LearningPage to pause
- *    session polling while a concept chat stream is active, reducing
- *    unnecessary GET requests during LLM response generation.
+ *    Provides ChatStreamingContext to the component tree. Tracks streaming
+ *    count via ref so LearningPage can pause polling during active streams.
  *
  * ROLE IN PROJECT:
- *    Lightweight signal bridge between useConceptChat (producer) and
- *    LearningPage's refetchInterval (consumer).
+ *    Provider wrapper around ChatStreamingContext from useChatStreaming.
  *
  * KEY COMPONENTS:
  *    - ChatStreamingProvider: Tracks isStreaming count via ref
- *    - useChatStreaming: Returns current streaming state
  *
  * DEPENDENCIES:
  *    - External: react
- *    - Internal: none
+ *    - Internal: ./useChatStreaming (ChatStreamingContext)
  *
  * USAGE:
  *    ```tsx
@@ -30,26 +27,9 @@
  * ============================================================================
  */
 
-import {
-	createContext,
-	useContext,
-	useState,
-	useCallback,
-	useRef,
-	type ReactNode,
-} from "react";
+import { useState, useCallback, useRef, type ReactNode } from "react";
 
-interface ChatStreamingContextValue {
-	isStreaming: boolean;
-	startStreaming: () => void;
-	stopStreaming: () => void;
-}
-
-const ChatStreamingContext = createContext<ChatStreamingContextValue>({
-	isStreaming: false,
-	startStreaming: () => {},
-	stopStreaming: () => {},
-});
+import { ChatStreamingContext } from "./useChatStreaming";
 
 export function ChatStreamingProvider({ children }: { children: ReactNode }) {
 	const countRef = useRef(0);
@@ -74,8 +54,4 @@ export function ChatStreamingProvider({ children }: { children: ReactNode }) {
 			{children}
 		</ChatStreamingContext.Provider>
 	);
-}
-
-export function useChatStreaming() {
-	return useContext(ChatStreamingContext);
 }

@@ -34,7 +34,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import type { ConceptChatMessage } from "@/types/learning";
 import { streamConceptChat } from "@/lib/chatApi";
-import { useChatStreaming } from "./ChatStreamingContext";
+import { useChatStreaming } from "./useChatStreaming";
 
 const MAX_HISTORY_MESSAGES = 10;
 const ONE_HOUR = 60 * 60 * 1000;
@@ -368,7 +368,7 @@ export function useConceptChat(
 				stopStreamingCtx();
 			}
 		},
-		[saveToStorage],
+		[saveToStorage, startStreaming, stopStreamingCtx],
 	);
 
 	const stopStreaming = useCallback(() => {

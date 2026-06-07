@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from server.schemas.common import ResponseBase, TimestampMixin
 
@@ -296,7 +296,7 @@ class QuizSet(BaseModel):
 
     @field_validator("current_index")
     @classmethod
-    def validate_current_index(cls, current_index: int, info: "ModelInfo") -> int:
+    def validate_current_index(cls, current_index: int, info: ValidationInfo) -> int:
         quizzes = info.data.get("quizzes", [])
         if quizzes and current_index >= len(quizzes):
             raise ValueError(
@@ -684,7 +684,7 @@ class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
 
     def get_visible_quiz(
         self, status: NodeStatus
-    ) -> Optional[Union[QuizCard, QuizSet]]:
+    ) -> Optional[Union[QuizCard, QuizSet, QuizCardHidden, QuizSetHidden]]:
         """Get quiz payload based on node status.
 
         For IN_QUIZ state, returns hidden version (no correctness/explanation).

@@ -40,7 +40,7 @@ import { LearningPathContainer } from "./LearningPathContainer";
 import { SettingsButton } from "@/components/SettingsButton";
 import { getLearningSession } from "@/lib/learningApi";
 import { cn } from "@/lib/utils";
-import { useChatStreaming } from "./ChatStreamingContext";
+import { useChatStreaming } from "./useChatStreaming";
 
 export function LearningPage() {
 	const { sessionId } = useParams<{ sessionId: string }>();
