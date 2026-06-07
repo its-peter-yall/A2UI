@@ -36,7 +36,12 @@ from server.agents.generator import GeneratedContent, generator_agent
 from server.agents.planner import planner_agent, validate_complexity_distribution
 from server.agents.quizzer import quizzer_agent
 from server.database.learning_persistence import learning_manager
-from server.graph.state import CourseGraphContext, CourseState, TopicResult
+from server.graph.state import (
+    CourseGraphContext,
+    CourseState,
+    GeneratorResult,
+    TopicResult,
+)
 from server.schemas.learning import CourseOutline, FailedStep, NodeStatus, QuizSet, TopicNode
 from server.schemas.llm import LLMContext
 
@@ -195,6 +200,41 @@ def fan_out_topics(state: CourseState) -> list[Send]:
         )
 
     return sends
+
+
+async def generator_node(
+    state: CourseState,
+    runtime: Runtime[CourseGraphContext] | dict[str, Any],
+) -> dict[str, list[GeneratorResult]]:
+    """Generate content for one topic. Pure — no DB writes."""
+    llm_context = _get_llm_context(runtime)
+    topic = TopicNode(**state["topic_data"])
+    prev_summary = state.get("prev_summary", "Start")
+    next_summary = state.get("next_summary", "End")
+    session_id = state["session_id"]
+    sequence_index = state["sequence_index"]
+    start_time = time.perf_counter()
+
+    content: GeneratedContent = await generator_agent.generate_explanation(
+        topic=topic,
+        prev_summary=prev_summary if prev_summary != "Start" else None,
+        next_summary=next_summary if next_summary != "End" else None,
+        llm_context=llm_context,
+    )
+
+    generation_ms = (time.perf_counter() - start_time) * 1000
+    return {
+        "generator_results": [
+            {
+                "topic_data": state["topic_data"],
+                "content_markdown": content.content_markdown,
+                "generation_ms": generation_ms,
+                "error_message": None,
+                "sequence_index": sequence_index,
+                "session_id": session_id,
+            }
+        ]
+    }
 
 
 async def topic_worker(

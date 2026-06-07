@@ -34,6 +34,7 @@ from server.graph.build import build_graph, get_graph
 from server.graph.nodes import (
     build_response_node,
     fan_out_topics,
+    generator_node,
     planner_node,
     topic_worker,
 )
@@ -458,6 +459,60 @@ class StateSchemaTests(unittest.TestCase):
 
     def test_course_state_has_generator_results(self) -> None:
         self.assertIn("generator_results", CourseState.__annotations__)
+
+
+class GeneratorNodeTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for generator_node pure content generation."""
+
+    async def test_generator_node_returns_content(self) -> None:
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "prev_summary": "Start",
+            "next_summary": "Summary 1",
+            "session_id": "session-1",
+            "sequence_index": 0,
+        }
+
+        with (
+            patch("server.graph.nodes.generator_agent.generate_explanation")
+            as mock_generate,
+        ):
+            mock_generate.return_value = GeneratedContent(
+                content_markdown="Generated content" * 30,
+                key_takeaways=["a", "b", "c"],
+            )
+            result = await generator_node(state, _runtime_context())
+
+        self.assertEqual(len(result["generator_results"]), 1)
+        gen_result = result["generator_results"][0]
+        self.assertEqual(
+            gen_result["content_markdown"], "Generated content" * 30,
+        )
+        self.assertIsNone(gen_result["error_message"])
+        self.assertEqual(gen_result["sequence_index"], 0)
+
+    async def test_generator_node_no_db_writes(self) -> None:
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "prev_summary": "Start",
+            "next_summary": "Summary 1",
+            "session_id": "session-1",
+            "sequence_index": 0,
+        }
+
+        with (
+            patch("server.graph.nodes.generator_agent.generate_explanation")
+            as mock_generate,
+            patch("server.graph.nodes.learning_manager") as mock_manager,
+        ):
+            mock_generate.return_value = GeneratedContent(
+                content_markdown="content" * 50,
+                key_takeaways=["a", "b", "c"],
+            )
+            await generator_node(state, _runtime_context())
+
+        mock_manager.create_concept_node.assert_not_called()
+        mock_manager.create_learning_session.assert_not_called()
 
 
 class GraphBuildTests(unittest.IsolatedAsyncioTestCase):
