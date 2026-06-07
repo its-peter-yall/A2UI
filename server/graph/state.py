@@ -39,6 +39,17 @@ class TopicResult(TypedDict):
     error_message: Optional[str]
 
 
+class GeneratorResult(TypedDict):
+    """Result returned by one generator node."""
+
+    topic_data: dict[str, Any]
+    content_markdown: str
+    generation_ms: float
+    error_message: Optional[str]
+    sequence_index: int
+    session_id: str
+
+
 class CourseMetrics(TypedDict):
     """Timing and success metrics for course generation."""
 
@@ -74,6 +85,7 @@ class CourseState(TypedDict):
     parallel_start_time: NotRequired[float]
 
     topic_results: Annotated[list[TopicResult], operator.add]
+    generator_results: Annotated[list[GeneratorResult], operator.add]
 
     topic_data: NotRequired[dict[str, Any]]
     prev_summary: NotRequired[str]

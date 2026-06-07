@@ -37,6 +37,7 @@ from server.graph.nodes import (
     planner_node,
     topic_worker,
 )
+from server.graph.state import CourseState, GeneratorResult, TopicResult
 from server.schemas.learning import (
     CourseOutline,
     NodeStatus,
@@ -440,6 +441,23 @@ class GraphNodeTests(unittest.IsolatedAsyncioTestCase):
 
         mock_validate.assert_called_once_with(mock_plan.return_value)
         mock_logger.warning.assert_called_once()
+
+
+class StateSchemaTests(unittest.TestCase):
+    def test_generator_result_has_required_fields(self) -> None:
+        result: GeneratorResult = {
+            "topic_data": {"title": "Test"},
+            "content_markdown": "content",
+            "generation_ms": 100.0,
+            "error_message": None,
+            "sequence_index": 0,
+            "session_id": "session-1",
+        }
+        self.assertEqual(result["sequence_index"], 0)
+        self.assertIsNone(result["error_message"])
+
+    def test_course_state_has_generator_results(self) -> None:
+        self.assertIn("generator_results", CourseState.__annotations__)
 
 
 class GraphBuildTests(unittest.IsolatedAsyncioTestCase):
