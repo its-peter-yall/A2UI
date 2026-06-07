@@ -7,8 +7,8 @@ PURPOSE:
     Provides LangGraph node functions for adaptive course generation.
 ROLE IN PROJECT:
     Wraps the existing Planner, Generator, and Quizzer agents for graph use.
-    - Preserves original course generation business behavior
-    - Adds graph-native fan-out and fan-in support
+    - Two-stage fan-out: generators parallel, then quizzer parallel
+    - Error handlers for graceful degradation on failures
 KEY COMPONENTS:
     - planner_node: Creates course outline and learning session
     - fan_out_generators: Sends each topic to a parallel generator

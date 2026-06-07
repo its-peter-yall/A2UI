@@ -11,6 +11,7 @@ ROLE IN PROJECT:
     - Uses a reducer to merge parallel topic worker results
 KEY COMPONENTS:
     - TopicResult: Per-topic worker result shape
+    - GeneratorResult: Per-generator result shape
     - CourseMetrics: Final timing and success metrics
     - CourseState: Main graph state schema
 DEPENDENCIES:

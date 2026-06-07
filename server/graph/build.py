@@ -13,7 +13,7 @@ ROLE IN PROJECT:
     - Stores compiled graph on app state for reuse
 KEY COMPONENTS:
     - CHECKPOINT_DB_PATH: Default checkpoint database path
-    - build_graph: Compiles graph with optional checkpointer
+    - build_graph: Compiles graph with split generator/quizzer nodes and retry_policy
     - get_graph: Returns cached graph from app state or builds one
 DEPENDENCIES:
     - External: pathlib, typing, langgraph, pydantic
