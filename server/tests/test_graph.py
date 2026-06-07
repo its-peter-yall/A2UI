@@ -490,10 +490,12 @@ class GeneratorNodeTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(gen_result["error_message"])
         self.assertEqual(gen_result["sequence_index"], 0)
+        mock_generate.assert_called_once()
 
     async def test_generator_node_no_db_writes(self) -> None:
+        topic = _topics()[0]
         state = {
-            "topic_data": _topics()[0].model_dump(),
+            "topic_data": topic.model_dump(),
             "prev_summary": "Start",
             "next_summary": "Summary 1",
             "session_id": "session-1",
@@ -503,16 +505,21 @@ class GeneratorNodeTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch("server.graph.nodes.generator_agent.generate_explanation")
             as mock_generate,
-            patch("server.graph.nodes.learning_manager") as mock_manager,
         ):
             mock_generate.return_value = GeneratedContent(
                 content_markdown="content" * 50,
                 key_takeaways=["a", "b", "c"],
             )
-            await generator_node(state, _runtime_context())
+            result = await generator_node(state, _runtime_context())
 
-        mock_manager.create_concept_node.assert_not_called()
-        mock_manager.create_learning_session.assert_not_called()
+        mock_generate.assert_called_once_with(
+            topic=topic,
+            prev_summary=None,
+            next_summary="Summary 1",
+            llm_context=_llm_context(),
+        )
+        gen_result = result["generator_results"][0]
+        self.assertNotIn("node", gen_result)
 
 
 class GraphBuildTests(unittest.IsolatedAsyncioTestCase):
