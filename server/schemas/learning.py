@@ -64,6 +64,18 @@ class NodeStatus(str, Enum):
     ERROR = "ERROR"
 
 
+class FailedStep(str, Enum):
+    """Identifier of which LLM step failed during concept node generation.
+
+    Used by regenerate_failed_node to skip re-running successful steps
+    and save tokens.
+    """
+
+    GENERATOR = "GENERATOR"  # generator_agent (explanation) failed
+    QUIZZER = "QUIZZER"  # quizzer_agent (quiz set) failed
+    BOTH = "BOTH"  # both steps failed (or atomic regen requested)
+
+
 class QuizDifficulty(str, Enum):
     """Difficulty levels for quiz cards."""
 
@@ -658,6 +670,13 @@ class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
     )
     retry_available: bool = Field(
         default=False, description="Whether retry is available"
+    )
+    failed_step: Optional[FailedStep] = Field(
+        default=None,
+        description=(
+            "Which LLM step failed (generator/quizzer/both). "
+            "Drives partial regen in regenerate_failed_node."
+        ),
     )
     complexity: Optional[Literal["Basic", "Intermediate", "Advanced"]] = Field(
         default=None, description="Topic complexity rating (matches TopicNode type)"
