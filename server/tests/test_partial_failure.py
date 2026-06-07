@@ -4,24 +4,22 @@ FILE: test_partial_failure.py
 LOCATION: server/tests/test_partial_failure.py
 ============================================================================
 PURPOSE:
-    Verifies topic_worker persists partial content and tagged failed_step
-    when only one of (generator, quizzer) raises.
+    Verifies quizzer_node persists partial content and tagged failed_step
+    when quiz generation fails or generator error is present in state.
 USAGE:
     python -m unittest server.tests.test_partial_failure -v
 ============================================================================
 """
 from __future__ import annotations
 
-import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 from unittest.mock import AsyncMock, patch
 
-from server.agents.generator import GeneratedContent
 from server.database.learning_persistence import LearningManager
-from server.graph.nodes import topic_worker
+from server.graph.nodes import quizzer_node
 from server.schemas.learning import (
     CourseOutline,
     FailedStep,
@@ -50,13 +48,6 @@ def _qs() -> QuizSet:
     )
 
 
-def _gen_content() -> GeneratedContent:
-    return GeneratedContent(
-        content_markdown="# Real content\n" + ("x " * 200),
-        key_takeaways=["a", "b", "c"],
-    )
-
-
 def _outline() -> CourseOutline:
     return CourseOutline(
         course_title="Test",
@@ -74,18 +65,25 @@ def _outline() -> CourseOutline:
     )
 
 
-def _make_state(session_id: str, topic: TopicNode) -> Dict[str, Any]:
-    return {
+def _make_state(
+    session_id: str,
+    topic: TopicNode,
+    content_markdown: str = "",
+    error_message: str | None = None,
+) -> Dict[str, Any]:
+    state: Dict[str, Any] = {
         "session_id": session_id,
         "sequence_index": 0,
         "topic_data": topic.model_dump(),
         "outline": _outline().model_dump(),
-        "prev_summary": "Start",
-        "next_summary": "End",
+        "content_markdown": content_markdown,
     }
+    if error_message is not None:
+        state["error_message"] = error_message
+    return state
 
 
-class TopicWorkerPartialFailureTests(unittest.IsolatedAsyncioTestCase):
+class QuizzerNodePartialFailureTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.manager = LearningManager(db_path=Path(self.tmp.name) / "t.db")
@@ -98,68 +96,59 @@ class TopicWorkerPartialFailureTests(unittest.IsolatedAsyncioTestCase):
         self.session = self.manager.create_learning_session(
             query="q", course_title="c"
         )
-        self.ctx = {"llm_context": LLMContext(api_key="test", model="test/m")}
+        self.runtime = {"llm_context": LLMContext(api_key="test", model="test/m")}
 
     def tearDown(self) -> None:
         self.patcher.stop()
         self.tmp.cleanup()
 
     @patch("server.graph.nodes.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
-    @patch("server.graph.nodes.generator_agent.generate_explanation", new_callable=AsyncMock)
     async def test_quizzer_failure_keeps_real_content(
-        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
+        self, mock_quiz: AsyncMock
     ) -> None:
-        mock_gen.return_value = _gen_content()
         mock_quiz.side_effect = RuntimeError("quiz fail")
-        state = _make_state(self.session["id"], _outline().topics[0])
-        result = await topic_worker(state, self.ctx)
+        content = "# Real content\n" + ("x " * 200)
+        state = _make_state(self.session["id"], _outline().topics[0], content_markdown=content)
+        result = await quizzer_node(state, self.runtime)
         node = result["topic_results"][0]["node"]
         self.assertEqual(node["status"], NodeStatus.ERROR.value)
         self.assertEqual(node["failed_step"], FailedStep.QUIZZER.value)
         self.assertTrue(node["retry_available"])
         self.assertIn("Real content", node["content_markdown"])
-        mock_gen.assert_awaited_once()
         mock_quiz.assert_awaited_once()
 
-    @patch("server.graph.nodes.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
-    @patch("server.graph.nodes.generator_agent.generate_explanation", new_callable=AsyncMock)
-    async def test_generator_failure_uses_placeholder(
-        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
-    ) -> None:
-        mock_gen.side_effect = RuntimeError("gen fail")
-        state = _make_state(self.session["id"], _outline().topics[0])
-        result = await topic_worker(state, self.ctx)
+    async def test_generator_error_uses_placeholder(self) -> None:
+        state = _make_state(
+            self.session["id"],
+            _outline().topics[0],
+            content_markdown="# Generated",
+            error_message="gen fail",
+        )
+        result = await quizzer_node(state, self.runtime)
         node = result["topic_results"][0]["node"]
         self.assertEqual(node["status"], NodeStatus.ERROR.value)
         self.assertEqual(node["failed_step"], FailedStep.GENERATOR.value)
         self.assertTrue(node["retry_available"])
         self.assertEqual(node["content_markdown"], "Content generation failed. Retry is available.")
-        mock_gen.assert_awaited_once()
-        mock_quiz.assert_not_awaited()
+
+    async def test_generator_error_skips_quizzer(self) -> None:
+        state = _make_state(
+            self.session["id"],
+            _outline().topics[0],
+            content_markdown="# Generated",
+            error_message="gen fail",
+        )
+        with patch("server.graph.nodes.quizzer_agent.generate_quiz_set", new_callable=AsyncMock) as mock_quiz:
+            await quizzer_node(state, self.runtime)
+            mock_quiz.assert_not_awaited()
 
     @patch("server.graph.nodes.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
-    @patch("server.graph.nodes.generator_agent.generate_explanation", new_callable=AsyncMock)
-    async def test_both_failure_tagged_both(
-        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
-    ) -> None:
-        mock_gen.side_effect = RuntimeError("gen fail")
-        mock_quiz.side_effect = RuntimeError("quiz fail")
-        state = _make_state(self.session["id"], _outline().topics[0])
-        result = await topic_worker(state, self.ctx)
-        node = result["topic_results"][0]["node"]
-        self.assertEqual(node["status"], NodeStatus.ERROR.value)
-        self.assertEqual(node["failed_step"], FailedStep.GENERATOR.value)
-        self.assertTrue(node["retry_available"])
-
-    @patch("server.graph.nodes.quizzer_agent.generate_quiz_set", new_callable=AsyncMock)
-    @patch("server.graph.nodes.generator_agent.generate_explanation", new_callable=AsyncMock)
     async def test_success_no_failed_step(
-        self, mock_gen: AsyncMock, mock_quiz: AsyncMock
+        self, mock_quiz: AsyncMock
     ) -> None:
-        mock_gen.return_value = _gen_content()
         mock_quiz.return_value = _qs()
-        state = _make_state(self.session["id"], _outline().topics[0])
-        result = await topic_worker(state, self.ctx)
+        state = _make_state(self.session["id"], _outline().topics[0], content_markdown="# Content")
+        result = await quizzer_node(state, self.runtime)
         node = result["topic_results"][0]["node"]
         self.assertEqual(node["status"], NodeStatus.VIEWING_EXPLANATION.value)
         self.assertIsNone(node["failed_step"])
