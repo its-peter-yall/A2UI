@@ -1021,7 +1021,7 @@ async def regenerate_node_endpoint(
         updated_node = await regenerate_failed_node(
             node_id=node_id,
             llm_context=llm_context,
-            regen_step=step,
+            regen_step=step.upper() if step else None,
         )
         if updated_node is None:
             raise HTTPException(
