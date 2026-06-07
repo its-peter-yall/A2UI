@@ -785,5 +785,52 @@ class FanOutTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sends[0].arg["error_message"], "LLM failed")
 
 
+class NewGraphBuildTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for the rewired graph with split generator/quizzer nodes."""
+
+    async def test_full_graph_with_split_nodes(self) -> None:
+        manager = MagicMock()
+        manager.create_learning_session.return_value = _session()
+        manager.create_concept_node.side_effect = [
+            _node(0, NodeStatus.VIEWING_EXPLANATION),
+            _node(1),
+            _node(2),
+            _node(3),
+            _node(4),
+        ]
+        graph = build_graph()
+
+        with (
+            patch("server.graph.nodes.planner_agent.plan", new=AsyncMock())
+            as mock_plan,
+            patch("server.graph.nodes.generator_agent.generate_explanation")
+            as mock_generate,
+            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
+            as mock_quiz,
+            patch("server.graph.nodes.learning_manager", manager),
+        ):
+            mock_plan.return_value = _outline()
+            mock_generate.return_value = GeneratedContent(
+                content_markdown="Content" * 100,
+                key_takeaways=["a", "b", "c"],
+            )
+            mock_quiz.return_value = _quiz_set()
+            result = await graph.ainvoke(
+                {
+                    "query": "test query",
+                    "user_id": "user-1",
+                    "topic_results": [],
+                    "generator_results": [],
+                },
+                context=_runtime_context(),
+            )
+
+        self.assertIn("session", result)
+        self.assertIn("nodes", result)
+        self.assertIn("metrics", result)
+        self.assertEqual(len(result["nodes"]), 5)
+        self.assertEqual(result["session"]["total_nodes"], 5)
+
+
 if __name__ == "__main__":
     unittest.main()
