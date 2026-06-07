@@ -52,6 +52,7 @@ from pydantic import ValidationError
 
 from server.database.persistence import DB_PATH
 from server.schemas.learning import (
+    FailedStep,
     NodeStatus,
     QuizCard,
     QuizSet,
@@ -104,6 +105,7 @@ class LearningManager:
                     status TEXT NOT NULL,
                     error_message TEXT,
                     retry_available INTEGER DEFAULT 0,
+                    failed_step TEXT,
                     summary_for_context TEXT,
                     key_terms TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1349,6 +1351,7 @@ class LearningManager:
         complexity: Optional[str] = "Intermediate",
         summary_for_context: Optional[str] = None,
         key_terms: Optional[List[str]] = None,
+        failed_step: Optional["FailedStep"] = None,
     ) -> Dict[str, Any]:
         """Create a new concept node for a learning session.
 
@@ -1370,10 +1373,10 @@ class LearningManager:
                 """
                 INSERT INTO concept_nodes (
                     id, learning_session_id, sequence_index, title, content_markdown,
-                    status, error_message, retry_available, complexity,
+                    status, error_message, retry_available, failed_step, complexity,
                     summary_for_context, key_terms, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     node_id,
@@ -1384,6 +1387,7 @@ class LearningManager:
                     status.value,
                     error_message,
                     int(retry_available),
+                    failed_step.value if failed_step is not None else None,
                     complexity,
                     summary_for_context,
                     json.dumps(key_terms) if key_terms is not None else None,
@@ -1446,6 +1450,7 @@ class LearningManager:
                 "status": status.value,
                 "error_message": error_message,
                 "retry_available": retry_available,
+                "failed_step": failed_step.value if failed_step is not None else None,
                 "complexity": complexity,
                 "summary_for_context": summary_for_context,
                 "key_terms": key_terms,
@@ -1486,6 +1491,7 @@ class LearningManager:
                     cn.status,
                     cn.error_message,
                     cn.retry_available,
+                    cn.failed_step,
                     cn.complexity,
                     cn.summary_for_context,
                     cn.key_terms,
@@ -1518,6 +1524,7 @@ class LearningManager:
                         "retry_available": bool(row["retry_available"])
                         if row["retry_available"] is not None
                         else False,
+                        "failed_step": row["failed_step"],
                         "complexity": row["complexity"],
                         "summary_for_context": row["summary_for_context"],
                         "key_terms": key_terms,
@@ -1623,6 +1630,7 @@ class LearningManager:
         quiz_set: Optional[QuizSet] = None,
         error_message: Optional[str] = None,
         retry_available: bool = False,
+        failed_step: Optional["FailedStep"] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update node content, quiz data, and status.
 
@@ -1655,7 +1663,7 @@ class LearningManager:
                 """
                 UPDATE concept_nodes
                 SET content_markdown = ?, status = ?, error_message = ?,
-                    retry_available = ?, updated_at = ?
+                    retry_available = ?, failed_step = ?, updated_at = ?
                 WHERE id = ? AND status = ?
                 """,
                 (
@@ -1663,6 +1671,7 @@ class LearningManager:
                     status.value,
                     error_message,
                     int(retry_available),
+                    failed_step.value if failed_step is not None else None,
                     now,
                     node_id,
                     current_status.value,
@@ -1831,6 +1840,7 @@ class LearningManager:
                     cn.status,
                     cn.error_message,
                     cn.retry_available,
+                    cn.failed_step,
                     cn.created_at,
                     cn.updated_at,
                     qd.payload AS quiz_payload
@@ -1858,6 +1868,7 @@ class LearningManager:
                 "retry_available": bool(row["retry_available"])
                 if row["retry_available"] is not None
                 else False,
+                "failed_step": row["failed_step"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
                 "quiz": quiz_payload,
@@ -2697,6 +2708,7 @@ class LearningManager:
                 cn.status,
                 cn.error_message,
                 cn.retry_available,
+                cn.failed_step,
                 cn.complexity,
                 cn.summary_for_context,
                 cn.key_terms,
@@ -2726,6 +2738,7 @@ class LearningManager:
             "retry_available": bool(row["retry_available"])
             if row["retry_available"] is not None
             else False,
+            "failed_step": row["failed_step"],
             "complexity": row["complexity"],
             "summary_for_context": row["summary_for_context"],
             "key_terms": key_terms,
@@ -2883,6 +2896,10 @@ class LearningManager:
         if "key_terms" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE concept_nodes ADD COLUMN key_terms TEXT"
+            )
+        if "failed_step" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE concept_nodes ADD COLUMN failed_step TEXT"
             )
 
     def _ensure_session_progress_columns(self, conn: sqlite3.Connection) -> None:
