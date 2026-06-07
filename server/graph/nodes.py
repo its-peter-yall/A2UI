@@ -11,14 +11,18 @@ ROLE IN PROJECT:
     - Adds graph-native fan-out and fan-in support
 KEY COMPONENTS:
     - planner_node: Creates course outline and learning session
-    - fan_out_topics: Sends each topic to a parallel worker
-    - topic_worker: Generates content and quizzes for one topic
+    - fan_out_generators: Sends each topic to a parallel generator
+    - generator_node: Generates content for one topic (pure, no DB)
+    - fan_out_quizzers: Sends each generator result to a parallel quizzer
+    - quizzer_node: Generates quiz and persists concept node
+    - generator_error_handler: Catches generator failures after retries
+    - quizzer_error_handler: Catches quizzer failures, persists ERROR node
     - build_response_node: Builds final response and metrics
 DEPENDENCIES:
     - External: asyncio, logging, time, langgraph
     - Internal: server.agents, server.database, server.schemas
 USAGE:
-    from server.graph.nodes import planner_node, topic_worker
+    from server.graph.nodes import planner_node, generator_node, quizzer_node
 ============================================================================
 """
 
@@ -29,6 +33,7 @@ import logging
 import time
 from typing import Any, Optional
 
+from langgraph.errors import NodeError
 from langgraph.runtime import Runtime
 from langgraph.types import Send
 
@@ -382,13 +387,12 @@ async def quizzer_node(
 
 async def generator_error_handler(
     state: CourseState,
-    runtime: Runtime[CourseGraphContext] | dict[str, Any],
-    error: Exception,
+    error: NodeError,
 ) -> dict[str, list[GeneratorResult]]:
     """Catch generator failure after retries exhausted. Returns error result to state."""
     logger.error(
         "Generator error handler caught: %s for topic %s",
-        error,
+        error.error,
         state.get("sequence_index"),
     )
     return {
@@ -397,7 +401,7 @@ async def generator_error_handler(
                 "topic_data": state["topic_data"],
                 "content_markdown": "Content generation failed. Retry is available.",
                 "generation_ms": 0.0,
-                "error_message": str(error),
+                "error_message": str(error.error),
                 "sequence_index": state["sequence_index"],
                 "session_id": state["session_id"],
             }
@@ -407,8 +411,7 @@ async def generator_error_handler(
 
 async def quizzer_error_handler(
     state: CourseState,
-    runtime: Runtime[CourseGraphContext] | dict[str, Any],
-    error: Exception,
+    error: NodeError,
 ) -> dict[str, list[TopicResult]]:
     """Catch quizzer failure after retries exhausted. Persists ERROR node to DB."""
     topic = TopicNode(**state["topic_data"])
@@ -417,7 +420,7 @@ async def quizzer_error_handler(
 
     logger.error(
         "Quizzer error handler caught: %s for topic %s",
-        error,
+        error.error,
         sequence_index,
     )
     node = learning_manager.create_concept_node(
@@ -427,7 +430,7 @@ async def quizzer_error_handler(
         content_markdown=state["content_markdown"],
         status=NodeStatus.ERROR,
         quiz=None,
-        error_message=str(error),
+        error_message=str(error.error),
         retry_available=True,
         complexity=topic.complexity,
         summary_for_context=topic.summary_for_context,
@@ -439,7 +442,7 @@ async def quizzer_error_handler(
             {
                 "node": node,
                 "generation_ms": 0.0,
-                "error_message": str(error),
+                "error_message": str(error.error),
             }
         ]
     }

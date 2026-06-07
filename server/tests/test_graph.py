@@ -29,6 +29,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from langgraph.types import Send
 
+from langgraph.errors import NodeError
+
 from server.agents.generator import GeneratedContent
 from server.graph.build import build_graph, get_graph
 from server.graph.nodes import (
@@ -620,10 +622,10 @@ class ErrorHandlerTests(unittest.IsolatedAsyncioTestCase):
             "sequence_index": 0,
             "session_id": "session-1",
         }
-        error = RuntimeError("LLM timeout")
+        error = NodeError(node="generator_node", error=RuntimeError("LLM timeout"))
 
         result = await generator_error_handler(
-            state, _runtime_context(), error,
+            state, error,
         )
 
         self.assertEqual(len(result["generator_results"]), 1)
@@ -642,11 +644,11 @@ class ErrorHandlerTests(unittest.IsolatedAsyncioTestCase):
             "sequence_index": 1,
             "session_id": "session-1",
         }
-        error = RuntimeError("quiz API down")
+        error = NodeError(node="quizzer_node", error=RuntimeError("quiz API down"))
 
         with patch("server.graph.nodes.learning_manager", manager):
             result = await quizzer_error_handler(
-                state, _runtime_context(), error,
+                state, error,
             )
 
         call_kwargs = manager.create_concept_node.call_args.kwargs
@@ -830,6 +832,30 @@ class NewGraphBuildTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("metrics", result)
         self.assertEqual(len(result["nodes"]), 5)
         self.assertEqual(result["session"]["total_nodes"], 5)
+
+    async def test_generator_failure_produces_error_result(self) -> None:
+        """Generator error handler produces ERROR result for quizzer consumption."""
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "prev_summary": "Start",
+            "next_summary": "Summary 1",
+            "session_id": "session-1",
+            "sequence_index": 0,
+        }
+        node_error = NodeError(
+            node="generator_node",
+            error=RuntimeError("LLM timeout"),
+        )
+
+        result = await generator_error_handler(state, node_error)
+
+        gen_results = result["generator_results"]
+        self.assertEqual(len(gen_results), 1)
+        self.assertEqual(gen_results[0]["error_message"], "LLM timeout")
+        self.assertIn("failed", gen_results[0]["content_markdown"].lower())
+        self.assertEqual(gen_results[0]["sequence_index"], 0)
+        self.assertEqual(gen_results[0]["session_id"], "session-1")
+        self.assertIsNotNone(gen_results[0]["topic_data"])
 
 
 if __name__ == "__main__":
