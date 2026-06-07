@@ -31,12 +31,11 @@ USAGE:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Type, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from server.utils.instructor_client import instructor_client
 from server.schemas.llm import LLMContext
@@ -95,8 +94,7 @@ class BaseAgent(ABC):
         llm_context: Optional[LLMContext] = None,
         **kwargs: Any,
     ) -> T:
-        """
-        Generate a structured response using the agent's role configuration.
+        """Generate a structured response using the agent's role configuration.
 
         Builds the full system prompt with context injection and calls
         the InstructorClient for validated structured output.
@@ -113,61 +111,35 @@ class BaseAgent(ABC):
 
         Raises:
             ValueError: If OpenRouter API key is missing
-            Exception: On generation failures after retries
+            Exception: On generation failures
         """
-        # Validate that we have llm_context and a key
         if not llm_context or not llm_context.api_key:
             provider_name = llm_context.provider.value.title() if llm_context else "AI"
             raise ValueError(f"{provider_name} API key is required in llm_context.")
 
-        # Build the full system prompt with context
         full_system_prompt = self._build_system_prompt(context)
-
-        # Prepare messages
         messages = [{"role": "user", "content": user_message}]
 
-        max_attempts = 2
-        for attempt in range(1, max_attempts + 1):
-            try:
-                # Extract options from llm_context
-                api_key = llm_context.api_key
-                model_override = llm_context.model
-                attribution_headers = llm_context.get_attribution_headers()
-                reasoning_params = llm_context.get_reasoning_params()
+        api_key = llm_context.api_key
+        model_override = llm_context.model
+        attribution_headers = llm_context.get_attribution_headers()
+        reasoning_params = llm_context.get_reasoning_params()
 
-                response = await instructor_client.create_structured(
-                    role=self._role,
-                    response_model=response_model,
-                    messages=messages,
-                    api_key=api_key,
-                    model_override=model_override,
-                    attribution_headers=attribution_headers,
-                    system_prompt=full_system_prompt,
-                    provider=llm_context.provider,
-                    reasoning_params=reasoning_params,
-                    max_completion_tokens=llm_context.max_completion_tokens,
-                    **kwargs,
-                )
-                logger.info(
-                    f"{self.__class__.__name__} generated structured response"
-                )
-                return response
-
-            except ValidationError as e:
-                if attempt == max_attempts:
-                    logger.error(
-                        f"{self.__class__.__name__} validation failed after "
-                        f"retries: {e}"
-                    )
-                    raise
-                logger.warning(
-                    f"{self.__class__.__name__} validation failed "
-                    f"(attempt {attempt}); retrying"
-                )
-                await asyncio.sleep(0.5 * attempt)
-            except Exception as e:
-                logger.error(f"{self.__class__.__name__} generation failed: {e}")
-                raise
+        response = await instructor_client.create_structured(
+            role=self._role,
+            response_model=response_model,
+            messages=messages,
+            api_key=api_key,
+            model_override=model_override,
+            attribution_headers=attribution_headers,
+            system_prompt=full_system_prompt,
+            provider=llm_context.provider,
+            reasoning_params=reasoning_params,
+            max_completion_tokens=llm_context.max_completion_tokens,
+            **kwargs,
+        )
+        logger.info(f"{self.__class__.__name__} generated structured response")
+        return response
 
     def _build_system_prompt(self, context: Optional[dict[str, Any]] = None) -> str:
         """
