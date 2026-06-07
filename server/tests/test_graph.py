@@ -36,6 +36,7 @@ from server.graph.nodes import (
     fan_out_topics,
     generator_node,
     planner_node,
+    quizzer_node,
     topic_worker,
 )
 from server.graph.state import CourseState, GeneratorResult, TopicResult
@@ -520,6 +521,90 @@ class GeneratorNodeTests(unittest.IsolatedAsyncioTestCase):
         )
         gen_result = result["generator_results"][0]
         self.assertNotIn("node", gen_result)
+
+
+class QuizzerNodeTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for quizzer_node — quiz generation + DB persistence."""
+
+    async def test_quizzer_node_creates_success_node(self) -> None:
+        manager = MagicMock()
+        manager.create_concept_node.return_value = _node(
+            0, NodeStatus.VIEWING_EXPLANATION,
+        )
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "content_markdown": "Generated content",
+            "sequence_index": 0,
+            "session_id": "session-1",
+            "error_message": None,
+        }
+
+        with (
+            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
+            as mock_quiz,
+            patch("server.graph.nodes.learning_manager", manager),
+        ):
+            mock_quiz.return_value = _quiz_set()
+            result = await quizzer_node(state, _runtime_context())
+
+        self.assertEqual(len(result["topic_results"]), 1)
+        self.assertEqual(
+            result["topic_results"][0]["node"]["status"],
+            NodeStatus.VIEWING_EXPLANATION.value,
+        )
+        manager.create_concept_node.assert_called_once()
+
+    async def test_quizzer_node_skips_quiz_on_generator_error(self) -> None:
+        manager = MagicMock()
+        error_node = _node(0, NodeStatus.ERROR)
+        error_node["error_message"] = "generator failed"
+        error_node["retry_available"] = True
+        manager.create_concept_node.return_value = error_node
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "content_markdown": "Content generation failed. Retry is available.",
+            "sequence_index": 0,
+            "session_id": "session-1",
+            "error_message": "generator failed",
+        }
+
+        with (
+            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
+            as mock_quiz,
+            patch("server.graph.nodes.learning_manager", manager),
+        ):
+            result = await quizzer_node(state, _runtime_context())
+
+        mock_quiz.assert_not_called()
+        self.assertEqual(
+            result["topic_results"][0]["node"]["status"],
+            NodeStatus.ERROR.value,
+        )
+
+    async def test_quizzer_node_preserves_content_on_quiz_failure(self) -> None:
+        manager = MagicMock()
+        error_node = _node(1, NodeStatus.ERROR)
+        error_node["error_message"] = "quiz boom"
+        manager.create_concept_node.return_value = error_node
+        state = {
+            "topic_data": _topics()[1].model_dump(),
+            "content_markdown": "Real content here",
+            "sequence_index": 1,
+            "session_id": "session-1",
+            "error_message": None,
+        }
+
+        with (
+            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
+            as mock_quiz,
+            patch("server.graph.nodes.learning_manager", manager),
+        ):
+            mock_quiz.side_effect = RuntimeError("quiz boom")
+            result = await quizzer_node(state, _runtime_context())
+
+        call_kwargs = manager.create_concept_node.call_args.kwargs
+        self.assertEqual(call_kwargs["content_markdown"], "Real content here")
+        self.assertEqual(call_kwargs["failed_step"].value, "QUIZZER")
 
 
 class GraphBuildTests(unittest.IsolatedAsyncioTestCase):

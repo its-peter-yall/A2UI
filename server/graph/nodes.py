@@ -237,6 +237,120 @@ async def generator_node(
     }
 
 
+async def quizzer_node(
+    state: CourseState,
+    runtime: Runtime[CourseGraphContext] | dict[str, Any],
+) -> dict[str, list[TopicResult]]:
+    """Generate quiz and persist concept node. Handles both success and error cases."""
+    llm_context = _get_llm_context(runtime)
+    topic = TopicNode(**state["topic_data"])
+    session_id = state["session_id"]
+    sequence_index = state["sequence_index"]
+    content_markdown = state["content_markdown"]
+    generator_error = state.get("error_message")
+    start_time = time.perf_counter()
+
+    if generator_error:
+        logger.error(
+            "Generator failed for topic %s '%s': %s",
+            sequence_index,
+            topic.title,
+            generator_error,
+        )
+        node = learning_manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=sequence_index,
+            title=topic.title,
+            content_markdown=content_markdown,
+            status=NodeStatus.ERROR,
+            quiz=None,
+            error_message=generator_error,
+            retry_available=True,
+            complexity=topic.complexity,
+            summary_for_context=topic.summary_for_context,
+            key_terms=topic.key_terms,
+            failed_step=FailedStep.GENERATOR,
+        )
+        generation_ms = (time.perf_counter() - start_time) * 1000
+        return {
+            "topic_results": [
+                {
+                    "node": node,
+                    "generation_ms": generation_ms,
+                    "error_message": generator_error,
+                }
+            ]
+        }
+
+    try:
+        quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
+            topic=topic,
+            content=content_markdown,
+            quiz_count=topic.quiz_count,
+            llm_context=llm_context,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as quiz_exc:
+        generation_ms = (time.perf_counter() - start_time) * 1000
+        logger.error(
+            "Quizzer failed for topic %s '%s': %s",
+            sequence_index,
+            topic.title,
+            quiz_exc,
+        )
+        node = learning_manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=sequence_index,
+            title=topic.title,
+            content_markdown=content_markdown,
+            status=NodeStatus.ERROR,
+            quiz=None,
+            error_message=str(quiz_exc),
+            retry_available=True,
+            complexity=topic.complexity,
+            summary_for_context=topic.summary_for_context,
+            key_terms=topic.key_terms,
+            failed_step=FailedStep.QUIZZER,
+        )
+        return {
+            "topic_results": [
+                {
+                    "node": node,
+                    "generation_ms": generation_ms,
+                    "error_message": str(quiz_exc),
+                }
+            ]
+        }
+
+    initial_status = (
+        NodeStatus.VIEWING_EXPLANATION
+        if sequence_index == 0
+        else NodeStatus.LOCKED
+    )
+    node = learning_manager.create_concept_node(
+        session_id=session_id,
+        sequence_index=sequence_index,
+        title=topic.title,
+        content_markdown=content_markdown,
+        status=initial_status,
+        quiz_set=quiz_set,
+        complexity=topic.complexity,
+        summary_for_context=topic.summary_for_context,
+        key_terms=topic.key_terms,
+    )
+    generation_ms = (time.perf_counter() - start_time) * 1000
+    return {
+        "topic_results": [
+            {
+                "node": node,
+                "generation_ms": generation_ms,
+                "error_message": None,
+            }
+        ]
+    }
+
+
 async def topic_worker(
     state: CourseState,
     runtime: Runtime[CourseGraphContext] | dict[str, Any],
