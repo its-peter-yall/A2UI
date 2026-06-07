@@ -251,36 +251,16 @@ async def quizzer_node(
     start_time = time.perf_counter()
 
     if generator_error:
-        logger.error(
-            "Generator failed for topic %s '%s': %s",
-            sequence_index,
-            topic.title,
-            generator_error,
-        )
-        node = learning_manager.create_concept_node(
+        return _persist_partial_failure(
+            state=state,
+            topic=topic,
             session_id=session_id,
             sequence_index=sequence_index,
-            title=topic.title,
-            content_markdown=content_markdown,
-            status=NodeStatus.ERROR,
-            quiz=None,
+            start_time=start_time,
             error_message=generator_error,
-            retry_available=True,
-            complexity=topic.complexity,
-            summary_for_context=topic.summary_for_context,
-            key_terms=topic.key_terms,
             failed_step=FailedStep.GENERATOR,
+            content_markdown="Content generation failed. Retry is available.",
         )
-        generation_ms = (time.perf_counter() - start_time) * 1000
-        return {
-            "topic_results": [
-                {
-                    "node": node,
-                    "generation_ms": generation_ms,
-                    "error_message": generator_error,
-                }
-            ]
-        }
 
     try:
         quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
@@ -292,36 +272,16 @@ async def quizzer_node(
     except asyncio.CancelledError:
         raise
     except Exception as quiz_exc:
-        generation_ms = (time.perf_counter() - start_time) * 1000
-        logger.error(
-            "Quizzer failed for topic %s '%s': %s",
-            sequence_index,
-            topic.title,
-            quiz_exc,
-        )
-        node = learning_manager.create_concept_node(
+        return _persist_partial_failure(
+            state=state,
+            topic=topic,
             session_id=session_id,
             sequence_index=sequence_index,
-            title=topic.title,
-            content_markdown=content_markdown,
-            status=NodeStatus.ERROR,
-            quiz=None,
+            start_time=start_time,
             error_message=str(quiz_exc),
-            retry_available=True,
-            complexity=topic.complexity,
-            summary_for_context=topic.summary_for_context,
-            key_terms=topic.key_terms,
             failed_step=FailedStep.QUIZZER,
+            content_markdown=content_markdown,
         )
-        return {
-            "topic_results": [
-                {
-                    "node": node,
-                    "generation_ms": generation_ms,
-                    "error_message": str(quiz_exc),
-                }
-            ]
-        }
 
     initial_status = (
         NodeStatus.VIEWING_EXPLANATION
