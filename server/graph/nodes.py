@@ -180,43 +180,6 @@ def _adjacent_summaries(
     return prev_summary, next_summary
 
 
-def fan_out_topics(state: CourseState) -> list[Send]:
-    """Fan out one Send packet per topic for parallel generation."""
-    outline = CourseOutline(**state["outline"])
-    session_id = state["session"]["id"]
-    sends: list[Send] = []
-
-    for index, topic in enumerate(outline.topics):
-        if topic.index != index:
-            logger.warning(
-                "Topic index mismatch: list index does not match topic index",
-                extra={
-                    "session_id": session_id,
-                    "list_index": index,
-                    "topic_index": topic.index,
-                    "topic_title": topic.title,
-                },
-            )
-
-        prev_summary, next_summary = _adjacent_summaries(
-            outline.topics, index
-        )
-        sends.append(
-            Send(
-                "topic_worker",
-                {
-                    "topic_data": topic.model_dump(),
-                    "prev_summary": prev_summary,
-                    "next_summary": next_summary,
-                    "session_id": session_id,
-                    "sequence_index": index,
-                },
-            )
-        )
-
-    return sends
-
-
 def fan_out_generators(state: CourseState) -> list[Send]:
     """Fan out one Send packet per topic for parallel content generation."""
     outline = CourseOutline(**state["outline"])
@@ -443,89 +406,6 @@ async def quizzer_error_handler(
                 "node": node,
                 "generation_ms": 0.0,
                 "error_message": str(error.error),
-            }
-        ]
-    }
-
-
-async def topic_worker(
-    state: CourseState,
-    runtime: Runtime[CourseGraphContext] | dict[str, Any],
-) -> dict[str, list[TopicResult]]:
-    """Generate content and quiz data for one topic."""
-    llm_context = _get_llm_context(runtime)
-    topic = TopicNode(**state["topic_data"])
-    prev_summary = state.get("prev_summary", "Start")
-    next_summary = state.get("next_summary", "End")
-    session_id = state["session_id"]
-    sequence_index = state["sequence_index"]
-    start_time = time.perf_counter()
-
-    try:
-        content: GeneratedContent = await generator_agent.generate_explanation(
-            topic=topic,
-            prev_summary=prev_summary if prev_summary != "Start" else None,
-            next_summary=next_summary if next_summary != "End" else None,
-            llm_context=llm_context,
-        )
-    except asyncio.CancelledError:
-        raise
-    except Exception as gen_exc:
-        return _persist_partial_failure(
-            state=state,
-            topic=topic,
-            session_id=session_id,
-            sequence_index=sequence_index,
-            start_time=start_time,
-            error_message=str(gen_exc),
-            failed_step=FailedStep.GENERATOR,
-            content_markdown="Content generation failed. Retry is available.",
-        )
-
-    try:
-        quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
-            topic=topic,
-            content=content.content_markdown,
-            quiz_count=topic.quiz_count,
-            llm_context=llm_context,
-        )
-    except asyncio.CancelledError:
-        raise
-    except Exception as quiz_exc:
-        return _persist_partial_failure(
-            state=state,
-            topic=topic,
-            session_id=session_id,
-            sequence_index=sequence_index,
-            start_time=start_time,
-            error_message=str(quiz_exc),
-            failed_step=FailedStep.QUIZZER,
-            content_markdown=content.content_markdown,
-        )
-
-    initial_status = (
-        NodeStatus.VIEWING_EXPLANATION
-        if sequence_index == 0
-        else NodeStatus.LOCKED
-    )
-    node = learning_manager.create_concept_node(
-        session_id=session_id,
-        sequence_index=sequence_index,
-        title=topic.title,
-        content_markdown=content.content_markdown,
-        status=initial_status,
-        quiz_set=quiz_set,
-        complexity=topic.complexity,
-        summary_for_context=topic.summary_for_context,
-        key_terms=topic.key_terms,
-    )
-    generation_ms = (time.perf_counter() - start_time) * 1000
-    return {
-        "topic_results": [
-            {
-                "node": node,
-                "generation_ms": generation_ms,
-                "error_message": None,
             }
         ]
     }

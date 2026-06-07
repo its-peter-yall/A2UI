@@ -37,13 +37,11 @@ from server.graph.nodes import (
     build_response_node,
     fan_out_generators,
     fan_out_quizzers,
-    fan_out_topics,
     generator_error_handler,
     generator_node,
     planner_node,
     quizzer_error_handler,
     quizzer_node,
-    topic_worker,
 )
 from server.graph.state import CourseState, GeneratorResult, TopicResult
 from server.schemas.learning import (
@@ -181,81 +179,6 @@ class GraphNodeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["topic_results"], [])
         self.assertIn("planner_ms", result)
 
-    def test_fan_out_topics_excludes_llm_context_and_api_key(self) -> None:
-        state = {
-            "outline": _outline().model_dump(),
-            "session": _session(),
-        }
-
-        sends = fan_out_topics(state)
-
-        self.assertEqual(len(sends), 5)
-        self.assertTrue(all(isinstance(send, Send) for send in sends))
-        payload_text = repr(sends)
-        self.assertNotIn("test-key", payload_text)
-        self.assertNotIn("llm_context", payload_text)
-
-    async def test_topic_worker_creates_success_node(self) -> None:
-        manager = MagicMock()
-        manager.create_concept_node.return_value = _node(
-            0,
-            NodeStatus.VIEWING_EXPLANATION,
-        )
-        state = {
-            "topic_data": _topics()[0].model_dump(),
-            "prev_summary": "Start",
-            "next_summary": "Summary 1",
-            "session_id": "session-1",
-            "sequence_index": 0,
-        }
-
-        with (
-            patch("server.graph.nodes.generator_agent.generate_explanation")
-            as mock_generate,
-            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
-            as mock_quiz,
-            patch("server.graph.nodes.learning_manager", manager),
-        ):
-            mock_generate.return_value = GeneratedContent(
-                content_markdown="Content" * 100,
-                key_takeaways=["a", "b", "c"],
-            )
-            mock_quiz.return_value = _quiz_set()
-            result = await topic_worker(state, _runtime_context())
-
-        topic_result = result["topic_results"][0]
-        self.assertEqual(
-            topic_result["node"]["status"],
-            NodeStatus.VIEWING_EXPLANATION.value,
-        )
-        manager.create_concept_node.assert_called_once()
-
-    async def test_topic_worker_creates_skeleton_on_failure(self) -> None:
-        manager = MagicMock()
-        error_node = _node(2, NodeStatus.ERROR)
-        error_node["error_message"] = "boom"
-        error_node["retry_available"] = True
-        manager.create_concept_node.return_value = error_node
-        state = {
-            "topic_data": _topics()[2].model_dump(),
-            "prev_summary": "Summary 1",
-            "next_summary": "Summary 3",
-            "session_id": "session-1",
-            "sequence_index": 2,
-        }
-
-        with (
-            patch("server.graph.nodes.generator_agent.generate_explanation")
-            as mock_generate,
-            patch("server.graph.nodes.learning_manager", manager),
-        ):
-            mock_generate.side_effect = RuntimeError("boom")
-            result = await topic_worker(state, _runtime_context())
-
-        topic_result = result["topic_results"][0]
-        self.assertEqual(topic_result["error_message"], "boom")
-        self.assertEqual(topic_result["node"]["status"], NodeStatus.ERROR.value)
-
     def test_build_response_node_sorts_and_computes_metrics(self) -> None:
         state = {
             "session": _session(),
@@ -312,77 +235,6 @@ class GraphNodeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("test-key", metrics_text)
         self.assertNotIn("llm_context", metrics_text)
         self.assertNotIn("api_key", metrics_text)
-
-    async def test_topic_worker_re_raises_cancelled_error(self) -> None:
-        manager = MagicMock()
-        manager.create_concept_node.return_value = _node(0)
-        state = {
-            "topic_data": _topics()[0].model_dump(),
-            "prev_summary": "Start",
-            "next_summary": "End",
-            "session_id": "session-1",
-            "sequence_index": 0,
-        }
-
-        with (
-            patch("server.graph.nodes.generator_agent.generate_explanation")
-            as mock_generate,
-            patch("server.graph.nodes.learning_manager", manager),
-        ):
-            mock_generate.side_effect = asyncio.CancelledError()
-            with self.assertRaises(asyncio.CancelledError):
-                await topic_worker(state, _runtime_context())
-
-        manager.create_concept_node.assert_not_called()
-
-    def test_fan_out_topics_context_injection(self) -> None:
-        topics = _topics()
-        outline = _outline()
-        state = {"outline": outline.model_dump(), "session": _session()}
-
-        sends = fan_out_topics(state)
-
-        self.assertEqual(len(sends), 5)
-
-        first = sends[0].arg
-        self.assertEqual(first["prev_summary"], "Start")
-        self.assertEqual(first["next_summary"], topics[1].summary_for_context)
-
-        middle = sends[2].arg
-        self.assertEqual(middle["prev_summary"], topics[1].summary_for_context)
-        self.assertEqual(middle["next_summary"], topics[3].summary_for_context)
-
-        last = sends[4].arg
-        self.assertEqual(last["prev_summary"], topics[3].summary_for_context)
-        self.assertEqual(last["next_summary"], "End")
-
-    async def test_topic_worker_passes_quiz_count(self) -> None:
-        manager = MagicMock()
-        manager.create_concept_node.return_value = _node(1, NodeStatus.LOCKED)
-        topics = _topics(3)
-        state = {
-            "topic_data": topics[1].model_dump(),
-            "prev_summary": "Summary 0",
-            "next_summary": "Summary 2",
-            "session_id": "session-1",
-            "sequence_index": 1,
-        }
-
-        with (
-            patch("server.graph.nodes.generator_agent.generate_explanation")
-            as mock_gen,
-            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
-            as mock_quiz,
-            patch("server.graph.nodes.learning_manager", manager),
-        ):
-            mock_gen.return_value = GeneratedContent(
-                content_markdown="Content" * 100,
-                key_takeaways=["a", "b", "c"],
-            )
-            mock_quiz.return_value = _quiz_set()
-            await topic_worker(state, _runtime_context())
-
-        self.assertEqual(mock_quiz.await_args.kwargs["quiz_count"], 2)
 
     def test_build_response_node_mixed_failures(self) -> None:
         state = {
@@ -528,6 +380,23 @@ class GeneratorNodeTests(unittest.IsolatedAsyncioTestCase):
         gen_result = result["generator_results"][0]
         self.assertNotIn("node", gen_result)
 
+    async def test_generator_node_re_raises_cancelled_error(self) -> None:
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "prev_summary": "Start",
+            "next_summary": "End",
+            "session_id": "session-1",
+            "sequence_index": 0,
+        }
+
+        with (
+            patch("server.graph.nodes.generator_agent.generate_explanation")
+            as mock_generate,
+        ):
+            mock_generate.side_effect = asyncio.CancelledError()
+            with self.assertRaises(asyncio.CancelledError):
+                await generator_node(state, _runtime_context())
+
 
 class QuizzerNodeTests(unittest.IsolatedAsyncioTestCase):
     """Tests for quizzer_node — quiz generation + DB persistence."""
@@ -612,6 +481,28 @@ class QuizzerNodeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_kwargs["content_markdown"], "Real content here")
         self.assertEqual(call_kwargs["failed_step"].value, "QUIZZER")
 
+    async def test_quizzer_node_passes_quiz_count(self) -> None:
+        manager = MagicMock()
+        manager.create_concept_node.return_value = _node(1, NodeStatus.LOCKED)
+        topics = _topics(3)
+        state = {
+            "topic_data": topics[1].model_dump(),
+            "content_markdown": "Generated content",
+            "sequence_index": 1,
+            "session_id": "session-1",
+            "error_message": None,
+        }
+
+        with (
+            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
+            as mock_quiz,
+            patch("server.graph.nodes.learning_manager", manager),
+        ):
+            mock_quiz.return_value = _quiz_set()
+            await quizzer_node(state, _runtime_context())
+
+        self.assertEqual(mock_quiz.await_args.kwargs["quiz_count"], 2)
+
 
 class ErrorHandlerTests(unittest.IsolatedAsyncioTestCase):
     """Tests for error handler nodes (catch after retries exhausted)."""
@@ -667,48 +558,6 @@ class GraphBuildTests(unittest.IsolatedAsyncioTestCase):
         graph_two = get_graph(app_state)
 
         self.assertIs(graph_one, graph_two)
-
-    async def test_full_graph_returns_response_shape(self) -> None:
-        manager = MagicMock()
-        manager.create_learning_session.return_value = _session()
-        manager.create_concept_node.side_effect = [
-            _node(0, NodeStatus.VIEWING_EXPLANATION),
-            _node(1),
-            _node(2),
-            _node(3),
-            _node(4),
-        ]
-        graph = build_graph()
-
-        with (
-            patch("server.graph.nodes.planner_agent.plan", new=AsyncMock())
-            as mock_plan,
-            patch("server.graph.nodes.generator_agent.generate_explanation")
-            as mock_generate,
-            patch("server.graph.nodes.quizzer_agent.generate_quiz_set")
-            as mock_quiz,
-            patch("server.graph.nodes.learning_manager", manager),
-        ):
-            mock_plan.return_value = _outline()
-            mock_generate.return_value = GeneratedContent(
-                content_markdown="Content" * 100,
-                key_takeaways=["a", "b", "c"],
-            )
-            mock_quiz.return_value = _quiz_set()
-            result = await graph.ainvoke(
-                {
-                    "query": "test query",
-                    "user_id": "user-1",
-                    "topic_results": [],
-                },
-                context=_runtime_context(),
-            )
-
-        self.assertIn("session", result)
-        self.assertIn("nodes", result)
-        self.assertIn("metrics", result)
-        self.assertEqual(len(result["nodes"]), 5)
-        self.assertEqual(result["session"]["total_nodes"], 5)
 
 
 class FanOutTests(unittest.IsolatedAsyncioTestCase):
