@@ -34,8 +34,10 @@ from server.graph.build import build_graph, get_graph
 from server.graph.nodes import (
     build_response_node,
     fan_out_topics,
+    generator_error_handler,
     generator_node,
     planner_node,
+    quizzer_error_handler,
     quizzer_node,
     topic_worker,
 )
@@ -605,6 +607,51 @@ class QuizzerNodeTests(unittest.IsolatedAsyncioTestCase):
         call_kwargs = manager.create_concept_node.call_args.kwargs
         self.assertEqual(call_kwargs["content_markdown"], "Real content here")
         self.assertEqual(call_kwargs["failed_step"].value, "QUIZZER")
+
+
+class ErrorHandlerTests(unittest.IsolatedAsyncioTestCase):
+    """Tests for error handler nodes (catch after retries exhausted)."""
+
+    async def test_generator_error_handler_returns_error_result(self) -> None:
+        state = {
+            "topic_data": _topics()[0].model_dump(),
+            "sequence_index": 0,
+            "session_id": "session-1",
+        }
+        error = RuntimeError("LLM timeout")
+
+        result = await generator_error_handler(
+            state, _runtime_context(), error,
+        )
+
+        self.assertEqual(len(result["generator_results"]), 1)
+        gen_result = result["generator_results"][0]
+        self.assertEqual(gen_result["error_message"], "LLM timeout")
+        self.assertIn("failed", gen_result["content_markdown"].lower())
+        self.assertEqual(gen_result["sequence_index"], 0)
+
+    async def test_quizzer_error_handler_persists_error_node(self) -> None:
+        manager = MagicMock()
+        error_node = _node(1, NodeStatus.ERROR)
+        manager.create_concept_node.return_value = error_node
+        state = {
+            "topic_data": _topics()[1].model_dump(),
+            "content_markdown": "Real content",
+            "sequence_index": 1,
+            "session_id": "session-1",
+        }
+        error = RuntimeError("quiz API down")
+
+        with patch("server.graph.nodes.learning_manager", manager):
+            result = await quizzer_error_handler(
+                state, _runtime_context(), error,
+            )
+
+        call_kwargs = manager.create_concept_node.call_args.kwargs
+        self.assertEqual(call_kwargs["status"], NodeStatus.ERROR)
+        self.assertEqual(call_kwargs["failed_step"].value, "QUIZZER")
+        self.assertEqual(call_kwargs["content_markdown"], "Real content")
+        self.assertTrue(call_kwargs["retry_available"])
 
 
 class GraphBuildTests(unittest.IsolatedAsyncioTestCase):

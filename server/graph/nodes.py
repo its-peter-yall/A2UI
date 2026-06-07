@@ -311,6 +311,71 @@ async def quizzer_node(
     }
 
 
+async def generator_error_handler(
+    state: CourseState,
+    runtime: Runtime[CourseGraphContext] | dict[str, Any],
+    error: Exception,
+) -> dict[str, list[GeneratorResult]]:
+    """Catch generator failure after retries exhausted. Returns error result to state."""
+    logger.error(
+        "Generator error handler caught: %s for topic %s",
+        error,
+        state.get("sequence_index"),
+    )
+    return {
+        "generator_results": [
+            {
+                "topic_data": state["topic_data"],
+                "content_markdown": "Content generation failed. Retry is available.",
+                "generation_ms": 0.0,
+                "error_message": str(error),
+                "sequence_index": state["sequence_index"],
+                "session_id": state["session_id"],
+            }
+        ]
+    }
+
+
+async def quizzer_error_handler(
+    state: CourseState,
+    runtime: Runtime[CourseGraphContext] | dict[str, Any],
+    error: Exception,
+) -> dict[str, list[TopicResult]]:
+    """Catch quizzer failure after retries exhausted. Persists ERROR node to DB."""
+    topic = TopicNode(**state["topic_data"])
+    session_id = state["session_id"]
+    sequence_index = state["sequence_index"]
+
+    logger.error(
+        "Quizzer error handler caught: %s for topic %s",
+        error,
+        sequence_index,
+    )
+    node = learning_manager.create_concept_node(
+        session_id=session_id,
+        sequence_index=sequence_index,
+        title=topic.title,
+        content_markdown=state["content_markdown"],
+        status=NodeStatus.ERROR,
+        quiz=None,
+        error_message=str(error),
+        retry_available=True,
+        complexity=topic.complexity,
+        summary_for_context=topic.summary_for_context,
+        key_terms=topic.key_terms,
+        failed_step=FailedStep.QUIZZER,
+    )
+    return {
+        "topic_results": [
+            {
+                "node": node,
+                "generation_ms": 0.0,
+                "error_message": str(error),
+            }
+        ]
+    }
+
+
 async def topic_worker(
     state: CourseState,
     runtime: Runtime[CourseGraphContext] | dict[str, Any],
