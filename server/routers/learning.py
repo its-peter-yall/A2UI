@@ -1000,13 +1000,28 @@ def previous_quiz(node_id: str) -> ConceptNodeResponse:
 async def regenerate_node_endpoint(
     node_id: str,
     request: Request,
+    step: Optional[str] = Query(
+        default=None,
+        description=(
+            "Optional regen step override. One of GENERATOR, QUIZZER, BOTH. "
+            "If omitted, uses the node's stored failed_step."
+        ),
+    ),
     llm_context: LLMContext = Depends(get_llm_context),
 ) -> ConceptNodeResponse:
     """Regenerate content for a failed concept node."""
+    VALID_STEPS = {"GENERATOR", "QUIZZER", "BOTH"}
+    if step is not None and step.upper() not in VALID_STEPS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid regen step: {step}. Must be one of: "
+            f"{', '.join(sorted(VALID_STEPS))}",
+        )
     try:
         updated_node = await regenerate_failed_node(
             node_id=node_id,
             llm_context=llm_context,
+            regen_step=step,
         )
         if updated_node is None:
             raise HTTPException(
