@@ -202,6 +202,61 @@ def fan_out_topics(state: CourseState) -> list[Send]:
     return sends
 
 
+def fan_out_generators(state: CourseState) -> list[Send]:
+    """Fan out one Send packet per topic for parallel content generation."""
+    outline = CourseOutline(**state["outline"])
+    session_id = state["session"]["id"]
+    sends: list[Send] = []
+
+    for index, topic in enumerate(outline.topics):
+        prev_summary = (
+            outline.topics[index - 1].summary_for_context
+            if index > 0
+            else "Start"
+        )
+        next_summary = (
+            outline.topics[index + 1].summary_for_context
+            if index < len(outline.topics) - 1
+            else "End"
+        )
+        sends.append(
+            Send(
+                "generator_node",
+                {
+                    "topic_data": topic.model_dump(),
+                    "prev_summary": prev_summary,
+                    "next_summary": next_summary,
+                    "session_id": session_id,
+                    "sequence_index": index,
+                },
+            )
+        )
+
+    return sends
+
+
+def fan_out_quizzers(state: CourseState) -> list[Send]:
+    """Fan out one Send per generator result for parallel quiz generation."""
+    generator_results = state.get("generator_results", [])
+    sends: list[Send] = []
+
+    for result in generator_results:
+        sends.append(
+            Send(
+                "quizzer_node",
+                {
+                    "topic_data": result["topic_data"],
+                    "content_markdown": result["content_markdown"],
+                    "sequence_index": result["sequence_index"],
+                    "session_id": result["session_id"],
+                    "error_message": result.get("error_message"),
+                },
+            )
+        )
+
+    return sends
+
+
 async def generator_node(
     state: CourseState,
     runtime: Runtime[CourseGraphContext] | dict[str, Any],

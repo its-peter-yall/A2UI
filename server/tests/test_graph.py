@@ -33,6 +33,8 @@ from server.agents.generator import GeneratedContent
 from server.graph.build import build_graph, get_graph
 from server.graph.nodes import (
     build_response_node,
+    fan_out_generators,
+    fan_out_quizzers,
     fan_out_topics,
     generator_error_handler,
     generator_node,
@@ -705,6 +707,82 @@ class GraphBuildTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("metrics", result)
         self.assertEqual(len(result["nodes"]), 5)
         self.assertEqual(result["session"]["total_nodes"], 5)
+
+
+class FanOutTests(unittest.IsolatedAsyncioTestCase):
+    def test_fan_out_generators_creates_send_per_topic(self) -> None:
+        state = {
+            "outline": _outline().model_dump(),
+            "session": _session(),
+        }
+
+        sends = fan_out_generators(state)
+
+        self.assertEqual(len(sends), 5)
+        self.assertTrue(all(isinstance(s, Send) for s in sends))
+        self.assertTrue(all(s.node == "generator_node" for s in sends))
+
+    def test_fan_out_generators_excludes_api_key(self) -> None:
+        state = {
+            "outline": _outline().model_dump(),
+            "session": _session(),
+        }
+
+        sends = fan_out_generators(state)
+        payload_text = repr(sends)
+
+        self.assertNotIn("test-key", payload_text)
+        self.assertNotIn("llm_context", payload_text)
+
+    def test_fan_out_generators_sets_prev_next_summaries(self) -> None:
+        topics = _topics()
+        state = {
+            "outline": _outline().model_dump(),
+            "session": _session(),
+        }
+
+        sends = fan_out_generators(state)
+
+        self.assertEqual(sends[0].arg["prev_summary"], "Start")
+        self.assertEqual(sends[0].arg["next_summary"], topics[1].summary_for_context)
+        self.assertEqual(sends[4].arg["prev_summary"], topics[3].summary_for_context)
+        self.assertEqual(sends[4].arg["next_summary"], "End")
+
+    def test_fan_out_quizzers_creates_send_per_result(self) -> None:
+        generator_results = [
+            {
+                "topic_data": _topics()[i].model_dump(),
+                "content_markdown": f"Content {i}",
+                "generation_ms": 100.0,
+                "error_message": None,
+                "sequence_index": i,
+                "session_id": "session-1",
+            }
+            for i in range(3)
+        ]
+        state = {"generator_results": generator_results}
+
+        sends = fan_out_quizzers(state)
+
+        self.assertEqual(len(sends), 3)
+        self.assertTrue(all(s.node == "quizzer_node" for s in sends))
+
+    def test_fan_out_quizzers_passes_error_message(self) -> None:
+        generator_results = [
+            {
+                "topic_data": _topics()[0].model_dump(),
+                "content_markdown": "Content",
+                "generation_ms": 100.0,
+                "error_message": "LLM failed",
+                "sequence_index": 0,
+                "session_id": "session-1",
+            }
+        ]
+        state = {"generator_results": generator_results}
+
+        sends = fan_out_quizzers(state)
+
+        self.assertEqual(sends[0].arg["error_message"], "LLM failed")
 
 
 if __name__ == "__main__":
