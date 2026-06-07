@@ -37,7 +37,7 @@ from server.agents.planner import planner_agent, validate_complexity_distributio
 from server.agents.quizzer import quizzer_agent
 from server.database.learning_persistence import learning_manager
 from server.graph.state import CourseGraphContext, CourseState, TopicResult
-from server.schemas.learning import CourseOutline, NodeStatus, QuizSet, TopicNode
+from server.schemas.learning import CourseOutline, FailedStep, NodeStatus, QuizSet, TopicNode
 from server.schemas.llm import LLMContext
 
 logger = logging.getLogger(__name__)
@@ -217,70 +217,110 @@ async def topic_worker(
             next_summary=next_summary if next_summary != "End" else None,
             llm_context=llm_context,
         )
+    except asyncio.CancelledError:
+        raise
+    except Exception as gen_exc:
+        return _persist_partial_failure(
+            state=state,
+            topic=topic,
+            session_id=session_id,
+            sequence_index=sequence_index,
+            start_time=start_time,
+            error_message=str(gen_exc),
+            failed_step=FailedStep.GENERATOR,
+            content_markdown="Content generation failed. Retry is available.",
+        )
+
+    try:
         quiz_set: QuizSet = await quizzer_agent.generate_quiz_set(
             topic=topic,
             content=content.content_markdown,
             quiz_count=topic.quiz_count,
             llm_context=llm_context,
         )
-        initial_status = (
-            NodeStatus.VIEWING_EXPLANATION
-            if sequence_index == 0
-            else NodeStatus.LOCKED
-        )
-        node = learning_manager.create_concept_node(
-            session_id=session_id,
-            sequence_index=sequence_index,
-            title=topic.title,
-            content_markdown=content.content_markdown,
-            status=initial_status,
-            quiz_set=quiz_set,
-            complexity=topic.complexity,
-            summary_for_context=topic.summary_for_context,
-            key_terms=topic.key_terms,
-        )
-        generation_ms = (time.perf_counter() - start_time) * 1000
-        return {
-            "topic_results": [
-                {
-                    "node": node,
-                    "generation_ms": generation_ms,
-                    "error_message": None,
-                }
-            ]
-        }
     except asyncio.CancelledError:
         raise
-    except Exception as exc:
-        generation_ms = (time.perf_counter() - start_time) * 1000
-        logger.error(
-            "Failed to generate concept unit for topic %s '%s': %s",
-            sequence_index,
-            topic.title,
-            exc,
-        )
-        node = learning_manager.create_concept_node(
+    except Exception as quiz_exc:
+        return _persist_partial_failure(
+            state=state,
+            topic=topic,
             session_id=session_id,
             sequence_index=sequence_index,
-            title=topic.title,
-            content_markdown="Content generation failed. Retry is available.",
-            status=NodeStatus.ERROR,
-            quiz=None,
-            error_message=str(exc),
-            retry_available=True,
-            complexity=topic.complexity,
-            summary_for_context=topic.summary_for_context,
-            key_terms=topic.key_terms,
+            start_time=start_time,
+            error_message=str(quiz_exc),
+            failed_step=FailedStep.QUIZZER,
+            content_markdown=content.content_markdown,
         )
-        return {
-            "topic_results": [
-                {
-                    "node": node,
-                    "generation_ms": generation_ms,
-                    "error_message": str(exc),
-                }
-            ]
-        }
+
+    initial_status = (
+        NodeStatus.VIEWING_EXPLANATION
+        if sequence_index == 0
+        else NodeStatus.LOCKED
+    )
+    node = learning_manager.create_concept_node(
+        session_id=session_id,
+        sequence_index=sequence_index,
+        title=topic.title,
+        content_markdown=content.content_markdown,
+        status=initial_status,
+        quiz_set=quiz_set,
+        complexity=topic.complexity,
+        summary_for_context=topic.summary_for_context,
+        key_terms=topic.key_terms,
+    )
+    generation_ms = (time.perf_counter() - start_time) * 1000
+    return {
+        "topic_results": [
+            {
+                "node": node,
+                "generation_ms": generation_ms,
+                "error_message": None,
+            }
+        ]
+    }
+
+
+def _persist_partial_failure(
+    state: CourseState,
+    topic: TopicNode,
+    session_id: str,
+    sequence_index: int,
+    start_time: float,
+    error_message: str,
+    failed_step: FailedStep,
+    content_markdown: str,
+) -> dict[str, list[TopicResult]]:
+    generation_ms = (time.perf_counter() - start_time) * 1000
+    logger.error(
+        "Failed to generate concept unit for topic %s '%s' (step=%s): %s",
+        sequence_index,
+        topic.title,
+        failed_step.value,
+        error_message,
+    )
+    node = learning_manager.create_concept_node(
+        session_id=session_id,
+        sequence_index=sequence_index,
+        title=topic.title,
+        content_markdown=content_markdown,
+        status=NodeStatus.ERROR,
+        quiz=None,
+        error_message=error_message,
+        retry_available=True,
+        complexity=topic.complexity,
+        summary_for_context=topic.summary_for_context,
+        key_terms=topic.key_terms,
+        failed_step=failed_step,
+    )
+    return {
+        "topic_results": [
+            {
+                "node": node,
+                "generation_ms": generation_ms,
+                "error_message": error_message,
+            }
+        ]
+    }
 
 
 def build_response_node(state: CourseState) -> dict[str, Any]:
