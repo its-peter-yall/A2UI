@@ -158,6 +158,23 @@ async def planner_node(
     }
 
 
+def _adjacent_summaries(
+    topics: list[TopicNode], index: int
+) -> tuple[str, str]:
+    """Return (prev_summary, next_summary) for the topic at *index*."""
+    prev_summary = (
+        topics[index - 1].summary_for_context
+        if index > 0
+        else "Start"
+    )
+    next_summary = (
+        topics[index + 1].summary_for_context
+        if index < len(topics) - 1
+        else "End"
+    )
+    return prev_summary, next_summary
+
+
 def fan_out_topics(state: CourseState) -> list[Send]:
     """Fan out one Send packet per topic for parallel generation."""
     outline = CourseOutline(**state["outline"])
@@ -176,15 +193,8 @@ def fan_out_topics(state: CourseState) -> list[Send]:
                 },
             )
 
-        prev_summary = (
-            outline.topics[index - 1].summary_for_context
-            if index > 0
-            else "Start"
-        )
-        next_summary = (
-            outline.topics[index + 1].summary_for_context
-            if index < len(outline.topics) - 1
-            else "End"
+        prev_summary, next_summary = _adjacent_summaries(
+            outline.topics, index
         )
         sends.append(
             Send(
@@ -209,15 +219,19 @@ def fan_out_generators(state: CourseState) -> list[Send]:
     sends: list[Send] = []
 
     for index, topic in enumerate(outline.topics):
-        prev_summary = (
-            outline.topics[index - 1].summary_for_context
-            if index > 0
-            else "Start"
-        )
-        next_summary = (
-            outline.topics[index + 1].summary_for_context
-            if index < len(outline.topics) - 1
-            else "End"
+        if topic.index != index:
+            logger.warning(
+                "Topic index mismatch: list index does not match topic index",
+                extra={
+                    "session_id": session_id,
+                    "list_index": index,
+                    "topic_index": topic.index,
+                    "topic_title": topic.title,
+                },
+            )
+
+        prev_summary, next_summary = _adjacent_summaries(
+            outline.topics, index
         )
         sends.append(
             Send(
@@ -249,7 +263,7 @@ def fan_out_quizzers(state: CourseState) -> list[Send]:
                     "content_markdown": result["content_markdown"],
                     "sequence_index": result["sequence_index"],
                     "session_id": result["session_id"],
-                    "error_message": result.get("error_message"),
+                    "error_message": result["error_message"],
                 },
             )
         )
