@@ -38,24 +38,45 @@
   --animate-shine: shine 2s linear infinite;
 
   @keyframes accordion-down {
-    from { height: 0 }
-    to { height: var(--radix-accordion-content-height) }
+    from {
+      height: 0
+    }
+
+    to {
+      height: var(--radix-accordion-content-height)
+    }
   }
+
   @keyframes accordion-up {
-    from { height: var(--radix-accordion-content-height) }
-    to { height: 0 }
+    from {
+      height: var(--radix-accordion-content-height)
+    }
+
+    to {
+      height: 0
+    }
   }
+
   @keyframes shine {
-    0% { opacity: 1 }
-    50% { opacity: 0.5 }
-    100% { opacity: 1 }
+    0% {
+      opacity: 1
+    }
+
+    50% {
+      opacity: 0.5
+    }
+
+    100% {
+      opacity: 1
+    }
   }
 }
 
 @utility container {
   margin-inline: auto;
   padding-inline: 2rem;
-  @media (width >= 1400px) {
+
+  @media (width >=1400px) {
     max-width: 1400px;
   }
 }
@@ -91,7 +112,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
 
-    --primary: 33 100% 45%; /* #ffb74d darkened for light mode contrast */
+    --primary: 33 100% 45%;
+    /* #ffb74d darkened for light mode contrast */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 240 4.8% 95.9%;
@@ -113,7 +135,8 @@
     --radius: 0.75rem;
 
     /* Cyber Yellow - adapts to theme for better contrast */
-    --cyber-yellow: #c28a40; /* Darkened #ffb74d for light mode */
+    --cyber-yellow: #c28a40;
+    /* Darkened #ffb74d for light mode */
   }
 
   .dark {
@@ -126,7 +149,8 @@
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 33 100% 68%; /* #ffb74d */
+    --primary: 33 100% 68%;
+    /* #ffb74d */
     --primary-foreground: 240 5.9% 10%;
 
     --secondary: 240 3.7% 15.9%;
@@ -156,12 +180,20 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  ::selection {
+    /* ::selection restricts CSS. Backdrop-filter not allowed. Low opacity (50%) mimics glass overlay. */
+    background-color: color-mix(in srgb, var(--cyber-yellow) 85%, transparent);
+    color: black;
   }
 }
 
 @layer components {
+
   /* Interactive element cursor defaults - ensures hand cursor on hover */
   button,
   a,
@@ -222,7 +254,7 @@
 
   }
 
-  
+
 
   .dark .prose-invert {
 
@@ -236,6 +268,7 @@
 
 /* Respect prefers-reduced-motion for all CSS animations */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -245,7 +278,3 @@
     scroll-behavior: auto !important;
   }
 }
-
-
-
-
