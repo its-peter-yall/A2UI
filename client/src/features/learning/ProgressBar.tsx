@@ -21,9 +21,8 @@
  *    - Legend: Color key for mastered/in-progress/locked states
  *
  * DEPENDENCIES:
- *    - External: framer-motion
- *    - Internal: @/lib/utils (cn), @/types/learning (ConceptNode, NodeStatus),
- *                ./animations (progressStepVariants)
+ *    - External: framer-motion, react
+ *    - Internal: @/lib/utils (cn), @/types/learning (ConceptNode, NodeStatus)
  *
  * USAGE:
  *    ```tsx
@@ -39,7 +38,7 @@
 import { cn } from "@/lib/utils";
 import type { ConceptNode, NodeStatus } from "@/types/learning";
 import { motion } from "framer-motion";
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 
 interface ProgressBarProps {
 	nodes: ConceptNode[];
@@ -56,6 +55,40 @@ export function ProgressBar({
 }: ProgressBarProps) {
 	const completedCount = nodes.filter((n) => n.status === "COMPLETED").length;
 
+	// Pagination state: 10 nodes per page
+	const nodesPerPage = 10;
+	const totalPages = Math.ceil(nodes.length / nodesPerPage);
+
+	const [currentPage, setCurrentPage] = useState(() => {
+		const nodeIndex = nodes.findIndex((n) => n.id === currentNodeId);
+		return nodeIndex !== -1 ? Math.floor(nodeIndex / nodesPerPage) : 0;
+	});
+	const [prevNodeId, setPrevNodeId] = useState(currentNodeId);
+
+	// Sync current page when currentNodeId changes from outside
+	if (currentNodeId !== prevNodeId) {
+		setPrevNodeId(currentNodeId);
+		const nodeIndex = nodes.findIndex((n) => n.id === currentNodeId);
+		if (nodeIndex !== -1) {
+			setCurrentPage(Math.floor(nodeIndex / nodesPerPage));
+		}
+	}
+
+	const startIndex = currentPage * nodesPerPage;
+	const endIndex = Math.min(nodes.length, startIndex + nodesPerPage);
+	const visibleNodes = nodes.slice(startIndex, endIndex);
+
+	const hasPrev = currentPage > 0;
+	const hasNext = currentPage < totalPages - 1;
+
+	const prevRangeText = hasPrev
+		? `${(currentPage - 1) * nodesPerPage + 1}-${currentPage * nodesPerPage}`
+		: "";
+
+	const nextRangeText = hasNext
+		? `${(currentPage + 1) * nodesPerPage + 1}-${Math.min(nodes.length, (currentPage + 2) * nodesPerPage)}`
+		: "";
+
 	return (
 		<div className={cn("w-full", className)}>
 			{/* Progress text with screen reader context */}
@@ -68,9 +101,26 @@ export function ProgressBar({
 			</div>
 
 			{/* Node steps as navigation list structured as a glowing o---o---o chain */}
-			<nav aria-label="Learning path progress" className="py-2">
-				<ol className="flex items-center w-full gap-0 list-none p-0 m-0 overflow-x-auto scrollbar-none">
-					{nodes.map((node, index) => {
+			<nav aria-label="Learning path progress" className="pt-8 pb-2 flex items-center justify-between gap-4">
+				{totalPages > 1 && (
+					<button
+						onClick={() => hasPrev && setCurrentPage((prev) => prev - 1)}
+						disabled={!hasPrev}
+						className={cn(
+							"flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold select-none transition-all duration-200 flex-shrink-0 cursor-pointer",
+							"border border-border/80 text-muted-foreground bg-card hover:bg-accent/40 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background",
+							!hasPrev && "opacity-30 cursor-not-allowed hover:bg-card"
+						)}
+						aria-label={hasPrev ? `Go to topics ${prevRangeText}` : "No previous topics"}
+					>
+						<span className="text-sm font-bold">&lt;</span>
+						{hasPrev && <span>{prevRangeText}</span>}
+					</button>
+				)}
+
+				<ol className="flex items-center justify-center flex-1 gap-0 list-none p-0 m-0">
+					{visibleNodes.map((node, localIndex) => {
+						const globalIndex = startIndex + localIndex;
 						const isCurrent = node.id === currentNodeId;
 						const isLocked = node.status === "LOCKED";
 						const canClick = !isLocked && onNodeClick;
@@ -99,13 +149,25 @@ export function ProgressBar({
 								? "from-zinc-700 via-zinc-800 to-zinc-900 opacity-60"
 								: "from-zinc-400 via-zinc-600 to-zinc-800";
 
-						const nextNode = nodes[index + 1];
+						const nextNode = nodes[globalIndex + 1];
 						const isNextUnlocked = nextNode && nextNode.status !== "LOCKED";
 
 						return (
 							<Fragment key={node.id}>
 								{/* Node (button) */}
-								<li className="relative flex items-center">
+								<li className="relative flex items-center group">
+									{/* Hover Popover showing 1-based order number */}
+									<div
+										className={cn(
+											"absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] font-bold z-30 select-none transition-all duration-200 ease-out whitespace-nowrap",
+											"bg-primary text-primary-foreground shadow-lg",
+											"opacity-0 scale-75 translate-y-1.5 pointer-events-none group-hover:opacity-100 group-hover:scale-100 group-hover:translate-y-0",
+											"border border-zinc-950/20"
+										)}
+									>
+										{globalIndex + 1}
+									</div>
+
 									<motion.button
 										onClick={() => {
 											if (canClick) {
@@ -115,8 +177,7 @@ export function ProgressBar({
 										disabled={isLocked}
 										aria-disabled={isLocked}
 										aria-current={isCurrent ? "step" : undefined}
-										aria-label={`${node.title}: ${formatStatusForScreenReader(node.status, index + 1)}`}
-										title={`${node.title} (${formatStatus(node.status)})`}
+										aria-label={`${node.title}: ${formatStatusForScreenReader(node.status, globalIndex + 1)}`}
 										whileHover={!isLocked ? { scale: 1.2 } : {}}
 										whileTap={!isLocked ? { scale: 0.9 } : {}}
 										className={cn(
@@ -146,7 +207,7 @@ export function ProgressBar({
 								</li>
 
 								{/* Connecting Edge (Line) */}
-								{index < nodes.length - 1 && (
+								{localIndex < visibleNodes.length - 1 && (
 									<li className="flex-1 h-[3px]" aria-hidden="true">
 										<div
 											className={cn(
@@ -162,6 +223,22 @@ export function ProgressBar({
 						);
 					})}
 				</ol>
+
+				{totalPages > 1 && (
+					<button
+						onClick={() => hasNext && setCurrentPage((prev) => prev + 1)}
+						disabled={!hasNext}
+						className={cn(
+							"flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold select-none transition-all duration-200 flex-shrink-0 cursor-pointer",
+							"border border-border/80 text-muted-foreground bg-card hover:bg-accent/40 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-1 focus:ring-offset-background",
+							!hasNext && "opacity-30 cursor-not-allowed hover:bg-card"
+						)}
+						aria-label={hasNext ? `Go to topics ${nextRangeText}` : "No next topics"}
+					>
+						{hasNext && <span>{nextRangeText}</span>}
+						<span className="text-sm font-bold">&gt;</span>
+					</button>
+				)}
 			</nav>
 
 			{/* Legend - visible to screen readers for context on step colors */}
@@ -205,24 +282,6 @@ export function ProgressBar({
 	);
 }
 
-function formatStatus(status: NodeStatus): string {
-	switch (status) {
-		case "LOCKED":
-			return "Locked - complete previous topic first";
-		case "VIEWING_EXPLANATION":
-			return "Reading explanation";
-		case "IN_QUIZ":
-			return "Taking quiz";
-		case "SHOWING_FEEDBACK":
-			return "Reviewing feedback";
-		case "COMPLETED":
-			return "Mastered";
-		case "ERROR":
-			return "Error - retry available";
-		default:
-			return status;
-	}
-}
 
 function formatStatusForScreenReader(
 	status: NodeStatus,

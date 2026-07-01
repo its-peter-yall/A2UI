@@ -29,7 +29,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
 	Sun,
@@ -50,6 +50,9 @@ import { cn } from "@/lib/utils";
 export function SettingsPage() {
 	const { theme, setTheme } = useTheme();
 	const [settings, setSettings] = useState(() => getProviderSettings());
+	const location = useLocation();
+
+	const fromPath = (location.state as { from?: string })?.from || "/learn";
 
 	const handleChatModelSelect = useCallback(
 		(provider: AIProvider, modelId: string, modelTitle: string) => {
@@ -111,7 +114,7 @@ export function SettingsPage() {
 					</Link>
 					<nav className="flex items-center gap-4" aria-label="Main navigation">
 						<Link
-							to="/learn"
+							to={fromPath}
 							className={cn(
 								"flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors",
 								"focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1",

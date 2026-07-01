@@ -25,13 +25,14 @@
  */
 
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function SettingsButton() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isRotating, setIsRotating] = useState(false);
 
   const handleClick = (e: React.MouseEvent) => {
@@ -41,7 +42,7 @@ export function SettingsButton() {
     
     // Complete the rotation animation before navigating
     setTimeout(() => {
-      navigate('/settings');
+      navigate('/settings', { state: { from: location.pathname + location.search + location.hash } });
     }, 400); // 400ms matching transition duration
   };
 

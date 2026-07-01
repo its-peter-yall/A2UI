@@ -167,7 +167,7 @@ export function ConceptCard({
 	// Status-based styling
 	const statusStyles: Record<NodeStatus, string> = {
 		LOCKED: "opacity-50 bg-muted cursor-not-allowed",
-		VIEWING_EXPLANATION: "border-primary bg-card",
+		VIEWING_EXPLANATION: "border-primary bg-muted",
 		IN_QUIZ: "border-primary bg-card",
 		SHOWING_FEEDBACK: "border-amber-500 bg-card",
 		COMPLETED: "border-green-500 bg-card",
@@ -238,7 +238,12 @@ export function ConceptCard({
 					)}
 				>
 					{/* Card Header */}
-					<div className="flex items-center gap-3 p-4 border-b bg-card/50">
+					<div
+						className={cn(
+							"flex items-center gap-3 p-4 border-b",
+							node.status === "VIEWING_EXPLANATION" ? "bg-muted/50" : "bg-card/50",
+						)}
+					>
 						<span className="text-xl">{statusIcons[node.status]}</span>
 						<div className="flex-1">
 							<div className="flex items-center gap-2">
