@@ -165,6 +165,16 @@ export function ChatPanel({
 		}
 	}, [isOpen]);
 
+	// Scroll to bottom when opening the panel with messages
+	useEffect(() => {
+		if (isOpen && messages.length > 0) {
+			const timer = setTimeout(() => {
+				messagesEndRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
+			}, 50);
+			return () => clearTimeout(timer);
+		}
+	}, [isOpen, messages.length]);
+
 	// Apply prefill message from curiosity questions (or other callers).
 	// Uses the render-time derivation pattern (not useEffect) to avoid cascading renders.
 	const [lastPrefill, setLastPrefill] = useState<string | null>(null);
