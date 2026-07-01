@@ -72,8 +72,8 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
 	};
 
 	return (
-		<div className="my-4 rounded-xl border border-border bg-[#18181b] overflow-hidden">
-			<div className="flex items-center justify-between px-4 py-2 border-b border-border bg-[#0f0f12] text-xs font-semibold text-muted-foreground select-none">
+		<div className="not-prose my-4 rounded-xl border border-zinc-800 bg-[#18181b] overflow-hidden">
+			<div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800 bg-[#0f0f12] text-xs font-semibold text-muted-foreground select-none">
 				<span>{displayLang}</span>
 				<button
 					type="button"
@@ -101,7 +101,7 @@ export function CodeBlock({ className, children }: CodeBlockProps) {
 						fontFamily: "inherit",
 					}}
 					codeTagProps={{
-						className: "font-mono text-[#f4f4f5]",
+						className: "font-mono !text-[#f4f4f5]",
 					}}
 				>
 					{codeText}
@@ -318,18 +318,20 @@ export function MarkdownRenderer({
 				"dark:prose-invert",
 				// Body Text
 				"prose-p:text-foreground",
-				// Headings: Cyber Yellow (Primary)
-				"prose-headings:text-primary",
-				// Strong / Bold: Cyber Yellow (Primary)
-				"prose-strong:text-primary",
+				// Headings: prominent slate/foreground in light mode, Cyber Yellow in dark mode
+				"prose-headings:text-foreground dark:prose-headings:text-primary font-bold",
+				// Strong / Bold: prominent slate/foreground in light mode, Cyber Yellow in dark mode
+				"prose-strong:text-foreground dark:prose-strong:text-primary font-bold",
 				// Links: Cyber Yellow (Primary)
 				"prose-a:text-primary hover:prose-a:text-primary/80",
 				// Code
-				"prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none [&_pre_code]:text-foreground [&_pre_code]:bg-transparent [&_pre_code]:p-0",
+				"prose-code:text-primary prose-code:bg-primary/10 prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none [&_pre_code]:bg-transparent [&_pre_code]:p-0",
 				// Lists
 				"prose-ul:text-muted-foreground prose-ol:text-muted-foreground",
+				// Blockquotes: left border matches primary brand, text is slightly muted
+				"prose-blockquote:border-l-primary prose-blockquote:text-muted-foreground/90 prose-blockquote:italic",
 				// Pre / Block Code
-				"prose-pre:bg-muted prose-pre:border prose-pre:border-border",
+				"prose-pre:bg-transparent prose-pre:p-0 prose-pre:border-none",
 				className,
 			)}
 		>
@@ -388,6 +390,9 @@ export function MarkdownRenderer({
 								{children}
 							</td>
 						);
+					},
+					pre({ children }) {
+						return <>{children}</>;
 					},
 					code({
 						className: codeClassName,

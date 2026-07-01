@@ -103,40 +103,45 @@
   }
 
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 38 38% 96%;
+    /* Warm cream linen background #faf6ee */
+    --foreground: 24 10% 12%;
+    /* Rich cocoa-charcoal text #211e1c */
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    /* Crisp white cards to float on cream background */
+    --card-foreground: 24 10% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 24 10% 12%;
 
-    --primary: 33 100% 45%;
-    /* #ffb74d darkened for light mode contrast */
+    --primary: 33 100% 40%;
+    /* Contrast-compliant deep amber orange */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --secondary: 37 30% 92%;
+    /* Soft warm cream-gray for secondary elements #f2ebe0 */
+    --secondary-foreground: 24 10% 12%;
 
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted: 37 30% 92%;
+    --muted-foreground: 30 10% 45%;
+    /* Warm taupe for secondary labels #7d756e */
 
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
+    --accent: 37 30% 92%;
+    --accent-foreground: 24 10% 12%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 240 10% 3.9%;
+    --border: 38 20% 88%;
+    /* Warm sand border #e3dbce */
+    --input: 38 20% 88%;
+    --ring: 33 100% 40%;
 
     --radius: 0.75rem;
 
-    /* Cyber Yellow - adapts to theme for better contrast */
-    --cyber-yellow: #c28a40;
-    /* Darkened #ffb74d for light mode */
+    /* Cyber Yellow - vibrant golden yellow/amber accent */
+    --cyber-yellow: #ffa000;
   }
 
   .dark {

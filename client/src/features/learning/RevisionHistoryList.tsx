@@ -97,7 +97,7 @@ export function RevisionHistoryList({
 
   return (
     <div
-      className="border-t border-white/10 pt-2 mt-1"
+      className="border-t border-border/80 pt-2 mt-1"
       data-testid="revision-history-section"
     >
       {/* Toggle button */}

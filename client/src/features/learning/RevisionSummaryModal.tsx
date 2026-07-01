@@ -177,7 +177,7 @@ export function RevisionSummaryModal({
 					aria-label="Revision Summary"
 					tabIndex={-1}
 					className={cn(
-						"relative w-full max-w-md rounded-xl border border-white/10 p-6",
+						"relative w-full max-w-md rounded-xl border border-border p-6",
 						"bg-card/95 backdrop-blur-md shadow-2xl",
 						"flex flex-col gap-5",
 						"focus:outline-none",
@@ -261,7 +261,7 @@ export function RevisionSummaryModal({
 					{/* Comparison section */}
 					{comparison && (
 						<div
-							className="rounded-lg border border-white/10 bg-muted/30 p-4 space-y-2"
+							className="rounded-lg border border-border bg-muted/30 p-4 space-y-2"
 							data-testid="comparison-section"
 						>
 							<h3 className="text-sm font-medium text-foreground text-center">
@@ -291,7 +291,7 @@ export function RevisionSummaryModal({
 							onClick={onBackToDashboard}
 							className={cn(
 								"flex-1 rounded-lg px-4 py-2 text-sm font-medium",
-								"border border-white/10 text-muted-foreground",
+								"border border-border text-muted-foreground",
 								"hover:bg-muted/50 transition-colors",
 								"focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
 							)}

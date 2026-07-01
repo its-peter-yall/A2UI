@@ -45,8 +45,8 @@ export function CourseCardSkeleton({ className }: CourseCardSkeletonProps) {
   return (
     <div
       className={cn(
-        'relative rounded-xl border border-white/10 p-5',
-        'bg-card/80 backdrop-blur-sm',
+        'relative rounded-xl border border-border/60 p-5',
+        'bg-card/85 backdrop-blur-sm shadow-sm',
         'flex flex-col gap-3 w-full animate-pulse',
         className
       )}

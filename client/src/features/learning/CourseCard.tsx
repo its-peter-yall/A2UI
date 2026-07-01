@@ -131,13 +131,13 @@ export function CourseCard({
 	return (
 		<motion.article
 			className={cn(
-				"group relative rounded-xl border border-white/10 p-5",
-				"bg-card/80 backdrop-blur-sm",
+				"group relative rounded-xl border border-border/60 p-5",
+				"bg-card/85 backdrop-blur-sm shadow-sm hover:shadow-md hover:border-border transition-all duration-300",
 				"flex flex-col gap-3",
 				"w-full",
 				"cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
 			)}
-			whileHover={{ scale: 1.02 }}
+			whileHover={{ scale: 1.015 }}
 			transition={{ type: "spring", stiffness: 300, damping: 20 }}
 			data-testid="course-card"
 			role="article"
