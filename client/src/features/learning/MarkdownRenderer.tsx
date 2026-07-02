@@ -318,10 +318,10 @@ export function MarkdownRenderer({
 				"dark:prose-invert",
 				// Body Text
 				"prose-p:text-foreground",
-				// Headings: prominent slate/foreground in light mode, Cyber Yellow in dark mode
-				"prose-headings:text-foreground dark:prose-headings:text-primary font-bold",
-				// Strong / Bold: prominent slate/foreground in light mode, Cyber Yellow in dark mode
-				"prose-strong:text-foreground dark:prose-strong:text-primary font-bold",
+				// Headings: Cyber Yellow / Primary brand color
+				"prose-headings:text-primary font-bold",
+				// Strong / Bold: Cyber Yellow / Primary brand color
+				"prose-strong:text-primary font-bold",
 				// Links: Cyber Yellow (Primary)
 				"prose-a:text-primary hover:prose-a:text-primary/80",
 				// Code

@@ -360,7 +360,7 @@ export function ChatPanel({
 									<span>{msg.content}</span>
 								</div>
 							) : (
-								<div className="w-full text-[15px] bg-muted rounded-lg px-4 py-3 border border-border/10">
+								<div className="w-full text-[15px] bg-white dark:bg-muted rounded-lg px-4 py-3 border border-border/10">
 									{msg.content ? (
 										<MarkdownRenderer
 											content={msg.content}
