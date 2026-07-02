@@ -94,16 +94,19 @@ export function Mermaid({ chart }: MermaidProps) {
 				}
 			} catch (err: any) {
 				console.error("Mermaid parsing error: ", err);
+				if (containerRef.current) {
+					containerRef.current.innerHTML = "";
+				}
 				if (isMounted) {
-					setError("Failed to parse Mermaid diagram");
+					setError("Failed to parse Mermaid diagram (invalid syntax while typing)");
 				}
 			}
 		};
 
-		// Render on next tick to ensure ref is mounted
+		// Debounce rendering by 300ms to avoid layout flickering and syntax error thrashing
 		const timer = setTimeout(() => {
 			renderChart();
-		}, 0);
+		}, 300);
 
 		return () => {
 			isMounted = false;
@@ -115,19 +118,22 @@ export function Mermaid({ chart }: MermaidProps) {
 		<div className="mermaid-wrapper my-6">
 			{/* Hidden rendering target for mermaid */}
 			<div ref={containerRef} className="hidden" />
+			
 			{error && (
-				<div className="text-red-500 text-sm p-4 border border-red-500/20 rounded bg-red-500/5 font-mono whitespace-pre-wrap">
+				<div className="text-red-500 text-xs p-3 border border-red-500/20 rounded bg-red-500/5 font-mono whitespace-pre-wrap mb-2">
 					{error}
 				</div>
 			)}
-			{!error && !svg && (
+			
+			{!svg && !error && (
 				<div className="animate-pulse bg-zinc-800/20 h-40 rounded-xl flex items-center justify-center text-xs text-muted-foreground">
 					Rendering diagram...
 				</div>
 			)}
-			{!error && svg && (
+			
+			{svg && (
 				<div 
-					className="mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border border-zinc-800 bg-[#18181b]" 
+					className={`mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border border-zinc-800 bg-[#18181b] transition-opacity duration-200 ${error ? 'opacity-40' : 'opacity-100'}`} 
 					dangerouslySetInnerHTML={{ __html: svg }} 
 				/>
 			)}
