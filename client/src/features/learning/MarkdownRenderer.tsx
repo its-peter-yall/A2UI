@@ -133,6 +133,208 @@ export function Mermaid({ chart }: MermaidProps) {
 	);
 }
 
+interface Vector {
+	name: string;
+	x: number;
+	y: number;
+	color?: string;
+}
+
+interface VectorPlotProps {
+	data: string;
+}
+
+export function VectorPlot({ data }: VectorPlotProps) {
+	const [plotData, setPlotData] = useState<{
+		vectors: Vector[];
+		grid?: boolean;
+		xAxisLabel?: string;
+		yAxisLabel?: string;
+	} | null>(null);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		try {
+			const parsed = JSON.parse(data);
+			if (!parsed.vectors || !Array.isArray(parsed.vectors)) {
+				throw new Error("Missing 'vectors' array");
+			}
+			setPlotData(parsed);
+			setError(null);
+		} catch (err: any) {
+			setError(`Invalid plot data: ${err.message}`);
+		}
+	}, [data]);
+
+	if (error) {
+		return (
+			<div className="text-red-500 text-sm p-4 border border-red-500/20 rounded bg-red-500/5 my-4 font-mono">
+				{error}
+			</div>
+		);
+	}
+
+	if (!plotData) return null;
+
+	const width = 300;
+	const height = 300;
+	const padding = 30;
+	
+	const allX = plotData.vectors.flatMap(v => [0, v.x]);
+	const allY = plotData.vectors.flatMap(v => [0, v.y]);
+	const minX = Math.min(...allX, -2);
+	const maxX = Math.max(...allX, 5);
+	const minY = Math.min(...allY, -2);
+	const maxY = Math.max(...allY, 5);
+	
+	const domainX = [minX - 1, maxX + 1];
+	const domainY = [minY - 1, maxY + 1];
+	
+	const mapX = (val: number) => {
+		return padding + ((val - domainX[0]) / (domainX[1] - domainX[0])) * (width - 2 * padding);
+	};
+	const mapY = (val: number) => {
+		return height - (padding + ((val - domainY[0]) / (domainY[1] - domainY[0])) * (height - 2 * padding));
+	};
+
+	const originX = mapX(0);
+	const originY = mapY(0);
+
+	const gridLines = [];
+	if (plotData.grid !== false) {
+		for (let x = Math.ceil(domainX[0]); x <= Math.floor(domainX[1]); x++) {
+			if (x !== 0) {
+				gridLines.push(
+					<line
+						key={`v-${x}`}
+						x1={mapX(x)}
+						y1={padding}
+						x2={mapX(x)}
+						y2={height - padding}
+						stroke="#27272a"
+						strokeWidth="0.5"
+					/>
+				);
+			}
+		}
+		for (let y = Math.ceil(domainY[0]); y <= Math.floor(domainY[1]); y++) {
+			if (y !== 0) {
+				gridLines.push(
+					<line
+						key={`h-${y}`}
+						x1={padding}
+						y1={mapY(y)}
+						x2={width - padding}
+						y2={mapY(y)}
+						stroke="#27272a"
+						strokeWidth="0.5"
+					/>
+				);
+			}
+		}
+	}
+
+	return (
+		<div className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-800 bg-[#18181b] select-none">
+			<svg width={width} height={height} className="overflow-visible">
+				<defs>
+					{plotData.vectors.map((v, i) => (
+						<marker
+							key={`arrow-${i}`}
+							id={`arrow-${i}`}
+							viewBox="0 0 10 10"
+							refX="6"
+							refY="5"
+							markerWidth="6"
+							markerHeight="6"
+							orient="auto-start-reverse"
+						>
+							<path d="M 0 1.5 L 10 5 L 0 8.5 z" fill={v.color || "#ffb74d"} />
+						</marker>
+					))}
+				</defs>
+
+				{gridLines}
+
+				<line
+					x1={padding}
+					y1={originY}
+					x2={width - padding}
+					y2={originY}
+					stroke="#52525b"
+					strokeWidth="1.5"
+				/>
+				<line
+					x1={originX}
+					y1={padding}
+					x2={originX}
+					y2={height - padding}
+					stroke="#52525b"
+					strokeWidth="1.5"
+				/>
+
+				<text
+					x={width - padding + 5}
+					y={originY + 4}
+					fill="#a1a1aa"
+					fontSize="10"
+					textAnchor="start"
+				>
+					{plotData.xAxisLabel || "x"}
+				</text>
+				<text
+					x={originX}
+					y={padding - 8}
+					fill="#a1a1aa"
+					fontSize="10"
+					textAnchor="middle"
+				>
+					{plotData.yAxisLabel || "y"}
+				</text>
+
+				<text
+					x={originX - 8}
+					y={originY + 12}
+					fill="#52525b"
+					fontSize="8"
+					textAnchor="end"
+				>
+					0
+				</text>
+
+				{plotData.vectors.map((v, i) => {
+					const vx = mapX(v.x);
+					const vy = mapY(v.y);
+					const color = v.color || "#ffb74d";
+					return (
+						<g key={`vec-${i}`}>
+							<line
+								x1={originX}
+								y1={originY}
+								x2={vx}
+								y2={vy}
+								stroke={color}
+								strokeWidth="2.5"
+								markerEnd={`url(#arrow-${i})`}
+							/>
+							<text
+								x={vx + (v.x >= 0 ? 8 : -8)}
+								y={vy + (v.y >= 0 ? -4 : 8)}
+								fill={color}
+								fontSize="12"
+								fontWeight="bold"
+								textAnchor={v.x >= 0 ? "start" : "end"}
+							>
+								{v.name} ({v.x}, {v.y})
+							</text>
+						</g>
+					);
+				})}
+			</svg>
+		</div>
+	);
+}
+
 export interface CodeBlockProps {
 	className?: string;
 	children: React.ReactNode;
@@ -508,10 +710,13 @@ export function MarkdownRenderer({
 								</code>
 							);
 						}
-						const match = /language-(\w+)/.exec(codeClassName || "");
+						const match = /language-([\w-]+)/.exec(codeClassName || "");
 						const lang = match ? match[1] : "";
 						if (lang === "mermaid") {
 							return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+						}
+						if (lang === "vector-plot") {
+							return <VectorPlot data={String(children).replace(/\n$/, "")} />;
 						}
 						return <CodeBlock className={codeClassName}>{children}</CodeBlock>;
 					},
