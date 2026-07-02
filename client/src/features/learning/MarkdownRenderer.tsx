@@ -116,8 +116,8 @@ export function Mermaid({ chart }: MermaidProps) {
 
 	return (
 		<div className="mermaid-wrapper my-6">
-			{/* Hidden rendering target for mermaid */}
-			<div ref={containerRef} className="hidden" />
+			{/* Off-screen rendering target to allow proper text/layout measurement */}
+			<div ref={containerRef} style={{ position: "absolute", top: "-9999px", left: "-9999px", visibility: "hidden" }} />
 			
 			{error && (
 				<div className="text-red-500 text-xs p-3 border border-red-500/20 rounded bg-red-500/5 font-mono whitespace-pre-wrap mb-2">
