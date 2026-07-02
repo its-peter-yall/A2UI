@@ -74,19 +74,20 @@ interface MermaidProps {
 
 export function Mermaid({ chart }: MermaidProps) {
 	const elementId = useRef(`mermaid-${Math.floor(Math.random() * 1000000)}`);
+	const containerRef = useRef<HTMLDivElement>(null);
 	const [svg, setSvg] = useState<string>("");
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		let isMounted = true;
 		const renderChart = async () => {
+			if (!containerRef.current) return;
 			try {
-				// Clear any previous elements created by failed runs
-				const existing = document.getElementById(elementId.current);
-				if (existing) {
-					existing.remove();
-				}
-				const { svg: renderedSvg } = await mermaid.render(elementId.current, chart);
+				const { svg: renderedSvg } = await mermaid.render(
+					elementId.current,
+					chart,
+					containerRef.current
+				);
 				if (isMounted) {
 					setSvg(renderedSvg);
 					setError(null);
@@ -96,40 +97,41 @@ export function Mermaid({ chart }: MermaidProps) {
 				if (isMounted) {
 					setError("Failed to parse Mermaid diagram");
 				}
-				const badElement = document.getElementById(elementId.current);
-				if (badElement) {
-					badElement.remove();
-				}
 			}
 		};
 
-		renderChart();
+		// Render on next tick to ensure ref is mounted
+		const timer = setTimeout(() => {
+			renderChart();
+		}, 0);
+
 		return () => {
 			isMounted = false;
+			clearTimeout(timer);
 		};
 	}, [chart]);
 
-	if (error) {
-		return (
-			<div className="text-red-500 text-sm p-4 border border-red-500/20 rounded bg-red-500/5 my-4 font-mono whitespace-pre-wrap">
-				{error}
-			</div>
-		);
-	}
-
-	if (!svg) {
-		return (
-			<div className="animate-pulse bg-zinc-800/20 h-40 rounded-xl flex items-center justify-center text-xs text-muted-foreground my-4">
-				Rendering diagram...
-			</div>
-		);
-	}
-
 	return (
-		<div 
-			className="mermaid-container flex justify-center overflow-x-auto my-6 p-4 rounded-xl border border-zinc-800 bg-[#18181b]" 
-			dangerouslySetInnerHTML={{ __html: svg }} 
-		/>
+		<div className="mermaid-wrapper my-6">
+			{/* Hidden rendering target for mermaid */}
+			<div ref={containerRef} className="hidden" />
+			{error && (
+				<div className="text-red-500 text-sm p-4 border border-red-500/20 rounded bg-red-500/5 font-mono whitespace-pre-wrap">
+					{error}
+				</div>
+			)}
+			{!error && !svg && (
+				<div className="animate-pulse bg-zinc-800/20 h-40 rounded-xl flex items-center justify-center text-xs text-muted-foreground">
+					Rendering diagram...
+				</div>
+			)}
+			{!error && svg && (
+				<div 
+					className="mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border border-zinc-800 bg-[#18181b]" 
+					dangerouslySetInnerHTML={{ __html: svg }} 
+				/>
+			)}
+		</div>
 	);
 }
 
