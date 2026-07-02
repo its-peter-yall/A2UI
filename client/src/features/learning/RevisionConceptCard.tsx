@@ -335,7 +335,7 @@ export function RevisionConceptCard({
 
 	return (
 		<article
-			className={cn("border rounded-lg overflow-hidden", borderStyle)}
+			className={cn("border rounded-lg overflow-hidden topic-card-content", borderStyle)}
 			data-testid="revision-concept-card"
 		>
 			{/* Card Header */}

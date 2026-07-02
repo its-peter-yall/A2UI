@@ -232,7 +232,7 @@ export function ConceptCard({
 			>
 				<article
 					className={cn(
-						"border rounded-lg overflow-hidden", // Removed transition-all duration-300
+						"border rounded-lg overflow-hidden topic-card-content", // Removed transition-all duration-300
 						statusStyles[node.status],
 						isActive && "ring-2 ring-primary ring-offset-2",
 					)}

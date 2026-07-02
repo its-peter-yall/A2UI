@@ -1,9 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&family=Lexend:wght@100..900&display=swap');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  --font-lexend: "Lexend", sans-serif;
+  --font-fira: "Fira Code", monospace;
+
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -280,4 +284,19 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Scoped font overrides for topic card and chat message content */
+.topic-card-content,
+.chat-message-content {
+  font-family: "Lexend", sans-serif !important;
+}
+
+.topic-card-content code,
+.topic-card-content pre,
+.topic-card-content .font-mono,
+.chat-message-content code,
+.chat-message-content pre,
+.chat-message-content .font-mono {
+  font-family: "Fira Code", monospace !important;
 }

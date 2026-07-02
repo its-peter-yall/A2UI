@@ -353,14 +353,14 @@ export function ChatPanel({
 							{msg.role === "user" ? (
 								<div
 									className={cn(
-										"max-w-[85%] rounded-lg px-3 py-2 text-[15px]",
+										"max-w-[85%] rounded-lg px-3 py-2 text-[15px] chat-message-content",
 										"bg-primary text-primary-foreground"
 									)}
 								>
 									<span>{msg.content}</span>
 								</div>
 							) : (
-								<div className="w-full text-[15px] bg-white dark:bg-muted rounded-lg px-4 py-3 border border-border/10">
+								<div className="w-full text-[15px] bg-white dark:bg-muted rounded-lg px-4 py-3 border border-border/10 chat-message-content">
 									{msg.content ? (
 										<MarkdownRenderer
 											content={msg.content}
