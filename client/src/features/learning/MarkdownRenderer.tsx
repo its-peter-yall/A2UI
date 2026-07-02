@@ -37,16 +37,101 @@
  *    ```
  * ============================================================================
  */
-
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import React, { useState } from "react";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import remarkEmoji from "remark-emoji";
+import rehypeExternalLinks from "rehype-external-links";
+import React, { useState, useEffect, useRef } from "react";
+import "katex/dist/katex.min.css";
 import { MessageCircle, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import mermaid from "mermaid";
+
+// Initialize mermaid for dark mode
+if (typeof window !== "undefined") {
+	mermaid.initialize({
+		startOnLoad: false,
+		theme: "dark",
+		securityLevel: "loose",
+		themeVariables: {
+			background: "#18181b",
+			primaryColor: "#ffb74d",
+			primaryTextColor: "#f4f4f5",
+			lineColor: "#ffb74d",
+		}
+	});
+}
+
+interface MermaidProps {
+	chart: string;
+}
+
+export function Mermaid({ chart }: MermaidProps) {
+	const elementId = useRef(`mermaid-${Math.floor(Math.random() * 1000000)}`);
+	const [svg, setSvg] = useState<string>("");
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let isMounted = true;
+		const renderChart = async () => {
+			try {
+				// Clear any previous elements created by failed runs
+				const existing = document.getElementById(elementId.current);
+				if (existing) {
+					existing.remove();
+				}
+				const { svg: renderedSvg } = await mermaid.render(elementId.current, chart);
+				if (isMounted) {
+					setSvg(renderedSvg);
+					setError(null);
+				}
+			} catch (err: any) {
+				console.error("Mermaid parsing error: ", err);
+				if (isMounted) {
+					setError("Failed to parse Mermaid diagram");
+				}
+				const badElement = document.getElementById(elementId.current);
+				if (badElement) {
+					badElement.remove();
+				}
+			}
+		};
+
+		renderChart();
+		return () => {
+			isMounted = false;
+		};
+	}, [chart]);
+
+	if (error) {
+		return (
+			<div className="text-red-500 text-sm p-4 border border-red-500/20 rounded bg-red-500/5 my-4 font-mono whitespace-pre-wrap">
+				{error}
+			</div>
+		);
+	}
+
+	if (!svg) {
+		return (
+			<div className="animate-pulse bg-zinc-800/20 h-40 rounded-xl flex items-center justify-center text-xs text-muted-foreground my-4">
+				Rendering diagram...
+			</div>
+		);
+	}
+
+	return (
+		<div 
+			className="mermaid-container flex justify-center overflow-x-auto my-6 p-4 rounded-xl border border-zinc-800 bg-[#18181b]" 
+			dangerouslySetInnerHTML={{ __html: svg }} 
+		/>
+	);
+}
 
 export interface CodeBlockProps {
 	className?: string;
@@ -223,8 +308,13 @@ export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
 	return (
 		<span className={cn("prose-inline", className)}>
 			<ReactMarkdown
-				remarkPlugins={[remarkGfm]}
-				rehypePlugins={[rehypeRaw, rehypeSanitize]}
+				remarkPlugins={[remarkGfm, remarkMath, remarkEmoji]}
+				rehypePlugins={[
+					rehypeRaw,
+					rehypeSanitize,
+					rehypeKatex,
+					[rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }]
+				]}
 				allowedElements={[
 					"p",
 					"em",
@@ -336,8 +426,13 @@ export function MarkdownRenderer({
 			)}
 		>
 			<ReactMarkdown
-				remarkPlugins={[remarkGfm]}
-				rehypePlugins={[rehypeRaw, rehypeSanitize]}
+				remarkPlugins={[remarkGfm, remarkMath, remarkEmoji]}
+				rehypePlugins={[
+					rehypeRaw,
+					rehypeSanitize,
+					rehypeKatex,
+					[rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }]
+				]}
 				components={{
 					h2,
 					h3,
@@ -412,6 +507,11 @@ export function MarkdownRenderer({
 									{children}
 								</code>
 							);
+						}
+						const match = /language-(\w+)/.exec(codeClassName || "");
+						const lang = match ? match[1] : "";
+						if (lang === "mermaid") {
+							return <Mermaid chart={String(children).replace(/\n$/, "")} />;
 						}
 						return <CodeBlock className={codeClassName}>{children}</CodeBlock>;
 					},

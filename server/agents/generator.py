@@ -118,6 +118,7 @@ Structure your content for readability:
 - Use *italics* for emphasis on important points
 - Create **bulleted lists** for key points or examples
 - Keep paragraphs short (3-4 sentences maximum)
+- Use **Mermaid diagrams/flowcharts** (using ```mermaid code blocks) for visual demonstration of complex processes or hierarchies when necessary (do not overuse, use only when it adds clear pedagogical value)
 
 ### Tone and Voice
 - Be **enthusiastic and encouraging**—learning should feel exciting

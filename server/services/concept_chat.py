@@ -118,8 +118,9 @@ def build_concept_chat_messages(
             "not covered in the selected sections, answer based on the full "
             "concept content.\n\n"
             "Keep answers concise, clear, and educational. Use examples when "
-            "helpful. If you don't know the answer based on the provided "
-            "content, say so."
+            "helpful. You can produce Mermaid diagrams/flowcharts "
+            "(using ```mermaid code blocks) for better visual demonstration when necessary. "
+            "If you don't know the answer based on the provided content, say so."
         )
     else:
         system_prompt = (
@@ -129,8 +130,10 @@ def build_concept_chat_messages(
             "CONCEPT CONTENT:\n"
             f"{content_markdown}\n\n"
             "Answer the student's question based on this content. Keep answers "
-            "concise, clear, and educational. Use examples when helpful. If "
-            "you don't know the answer based on the provided content, say so."
+            "concise, clear, and educational. Use examples when helpful. "
+            "You can produce Mermaid diagrams/flowcharts "
+            "(using ```mermaid code blocks) for better visual demonstration when necessary. "
+            "If you don't know the answer based on the provided content, say so."
         )
 
     messages: list[dict[str, str]] = [
