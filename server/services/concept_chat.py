@@ -120,6 +120,9 @@ def build_concept_chat_messages(
             "Keep answers concise, clear, and educational. Use examples when "
             "helpful. You can produce Mermaid diagrams/flowcharts "
             "(using ```mermaid code blocks) for better visual demonstration when necessary. "
+            "When using Mermaid, always wrap node labels in double quotes if they contain "
+            "spaces, special characters, or `<br>` line breaks (e.g. `A[\"Label<br>Detail\"]`) "
+            "to avoid parsing errors. "
             "If you don't know the answer based on the provided content, say so."
         )
     else:
@@ -133,6 +136,9 @@ def build_concept_chat_messages(
             "concise, clear, and educational. Use examples when helpful. "
             "You can produce Mermaid diagrams/flowcharts "
             "(using ```mermaid code blocks) for better visual demonstration when necessary. "
+            "When using Mermaid, always wrap node labels in double quotes if they contain "
+            "spaces, special characters, or `<br>` line breaks (e.g. `A[\"Label<br>Detail\"]`) "
+            "to avoid parsing errors. "
             "If you don't know the answer based on the provided content, say so."
         )
 

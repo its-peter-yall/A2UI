@@ -118,7 +118,7 @@ Structure your content for readability:
 - Use *italics* for emphasis on important points
 - Create **bulleted lists** for key points or examples
 - Keep paragraphs short (3-4 sentences maximum)
-- Use **Mermaid diagrams/flowcharts** (using ```mermaid code blocks) for visual demonstration of complex processes or hierarchies when necessary (do not overuse, use only when it adds clear pedagogical value)
+- Use **Mermaid diagrams/flowcharts** (using ```mermaid code blocks) for visual demonstration of complex processes or hierarchies when necessary (do not overuse, use only when it adds clear pedagogical value). IMPORTANT: Always wrap node labels in double quotes if they contain spaces, special characters, or `<br>` line breaks (e.g. `A["Label<br>Detail"]` instead of `A[Label]<br>Detail`) to avoid syntax parsing errors.
 
 ### Tone and Voice
 - Be **enthusiastic and encouraging**—learning should feel exciting
