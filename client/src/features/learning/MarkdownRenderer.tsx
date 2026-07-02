@@ -314,7 +314,7 @@ export function MarkdownRenderer({
 	return (
 		<div
 			className={cn(
-				"prose max-w-none text-base leading-relaxed font-medium",
+				"prose max-w-none text-base leading-relaxed",
 				"dark:prose-invert",
 				// Body Text
 				"prose-p:text-foreground",

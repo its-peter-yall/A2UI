@@ -292,6 +292,21 @@
   font-family: "Lexend", sans-serif !important;
 }
 
+/* Explicitly target body text elements to override Tailwind/Typography defaults */
+.topic-card-content .prose p,
+.topic-card-content .prose li,
+.chat-message-content .prose p,
+.chat-message-content .prose li,
+.chat-message-content > span {
+  font-weight: 400;
+}
+
+/* Restore medium weight for quiz questions or other explicit medium containers */
+.topic-card-content .font-medium p,
+.chat-message-content .font-medium p {
+  font-weight: 500;
+}
+
 .topic-card-content code,
 .topic-card-content pre,
 .topic-card-content .font-mono,
