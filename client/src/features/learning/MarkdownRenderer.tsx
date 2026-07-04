@@ -68,6 +68,32 @@ if (typeof window !== "undefined") {
 	});
 }
 
+/**
+ * Preprocesses a Mermaid chart string to fix common syntax errors.
+ * Specifically, it replaces nested, unescaped double quotes inside node labels with single quotes.
+ * E.g., `A["multimodal LLM<br/>Can "see" image context"]` becomes `A["multimodal LLM<br/>Can 'see' image context"]`
+ */
+export function preprocessMermaid(chart: string): string {
+	const lines = chart.split("\n");
+	const processedLines = lines.map((line) => {
+		// Matches node definitions with double-quoted labels:
+		// Group 1: Node ID
+		// Group 2: Opening shape + quote (e.g. [" or (")
+		// Group 3: Label content (lazy match)
+		// Group 4: Closing quote + shape (e.g. "] or ")
+		// Lookahead: followed by connector, spaces + connector, newline, or end of string
+		const nodeRegex = /(\b\w+)\s*(\[\s*\"|\(\s*\"|\{\s*\"|\(\[\s*\"|\[\(\s*\"|\(\(\s*\"|\[\\\"\s*|\[\/\"\s*|>\s*\")([\s\S]*?)(\"\s*\]|\"\s*\)|\"\s*\}|\"\s*\]\s*\)|\"\s*\)\s*\]|\"\s*\)\s*\)|\"\s*\\\]|\"\s*\/\]|\"\s*\])(?=\s*(?:-->|---|==>|-\.-|--|\n|\r|$))/g;
+
+		return line.replace(nodeRegex, (_match, id, open, content, close) => {
+			// Replace any nested double quotes (escaped or unescaped) with single quotes
+			const cleanContent = content.replace(/\\"/g, "'").replace(/"/g, "'");
+			return `${id}${open}${cleanContent}${close}`;
+		});
+	});
+
+	return processedLines.join("\n");
+}
+
 interface MermaidProps {
 	chart: string;
 }
@@ -83,9 +109,10 @@ export function Mermaid({ chart }: MermaidProps) {
 		const renderChart = async () => {
 			if (!containerRef.current) return;
 			try {
+				const preprocessedChart = preprocessMermaid(chart);
 				const { svg: renderedSvg } = await mermaid.render(
 					elementId.current,
-					chart,
+					preprocessedChart,
 					containerRef.current
 				);
 				if (isMounted) {
