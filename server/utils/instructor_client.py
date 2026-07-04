@@ -52,6 +52,41 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
+def sanitize_json_escapes(s: str) -> str:
+    """Sanitize invalid escape sequences in a JSON string.
+
+    Scans the JSON string and ensures any backslashes are either part of a
+    valid JSON escape sequence (like \\n, \\", \\\\) or are doubled to be
+    valid literal backslashes in JSON.
+    """
+    result = []
+    i = 0
+    n = len(s)
+    while i < n:
+        char = s[i]
+        if char == "\\":
+            if i + 1 < n:
+                next_char = s[i + 1]
+                if next_char in {'"', '\\', '/', 'b', 'f', 'n', 'r', 't'}:
+                    result.append("\\")
+                    result.append(next_char)
+                    i += 2
+                    continue
+                elif next_char == 'u':
+                    if i + 5 < n and all(c in '0123456789abcdefABCDEF' for c in s[i+2:i+6]):
+                        result.append("\\")
+                        result.append("u")
+                        result.append(s[i+2:i+6])
+                        i += 6
+                        continue
+            result.append("\\\\")
+            i += 1
+        else:
+            result.append(char)
+            i += 1
+    return "".join(result)
+
+
 # Temperature and token limits per agent role (model comes from client settings)
 MODEL_CONFIGS = {
     "planner": {
@@ -205,6 +240,18 @@ class InstructorClient:
             timeout=timeout,
             max_retries=0,
         )
+
+        original_create = base_client.chat.completions.create
+
+        async def wrapped_create(*args: Any, **kwargs: Any) -> Any:
+            res = await original_create(*args, **kwargs)
+            if hasattr(res, "choices") and res.choices:
+                message = res.choices[0].message
+                if message.content:
+                    message.content = sanitize_json_escapes(message.content)
+            return res
+
+        base_client.chat.completions.create = wrapped_create
 
         client = instructor.from_openai(
             base_client,

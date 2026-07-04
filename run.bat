@@ -14,7 +14,7 @@ if !errorlevel!==0 (
 
 REM Start Server in a new window
 echo Starting Server (port 8000)...
-start "A2UI Server" cmd /k "cd /d %~dp0 && .venv\Scripts\activate && python -m uvicorn server.main:app --reload --port 8000"
+start "A2UI Server" cmd /k "cd /d %~dp0 && server\.venv\Scripts\activate && python -m uvicorn server.main:app --reload --port 8000"
 REM Wait a moment for server to initialize
 timeout /t 2 /nobreak > nul
 

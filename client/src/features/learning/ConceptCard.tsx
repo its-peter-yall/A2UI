@@ -95,6 +95,23 @@ interface ConceptCardProps {
 	onAskQuestion?: (question: string) => void;
 }
 
+const SkeletonLoader = () => (
+	<div className="space-y-6 animate-pulse" aria-hidden="true">
+		<div className="h-48 bg-muted dark:bg-muted/60 rounded-lg w-full" />
+		<div className="space-y-2">
+			<div className="h-4 bg-muted dark:bg-muted/60 rounded w-1/4" />
+			<div className="h-4 bg-muted dark:bg-muted/60 rounded w-1/3" />
+		</div>
+		<div className="space-y-3">
+			<div className="h-4 bg-muted dark:bg-muted/60 rounded w-full" />
+			<div className="h-4 bg-muted dark:bg-muted/60 rounded w-5/6" />
+			<div className="h-4 bg-muted dark:bg-muted/60 rounded w-2/3" />
+			<div className="h-4 bg-muted dark:bg-muted/60 rounded w-4/5" />
+		</div>
+		<div className="h-8 bg-muted dark:bg-muted/60 rounded w-full mt-4" />
+	</div>
+);
+
 export function ConceptCard({
 	node,
 	isActive = false,
@@ -104,7 +121,6 @@ export function ConceptCard({
 	onContinueToNext,
 	onNextQuiz,
 	onPreviousQuiz,
-	onRegenerate: _onRegenerate,
 	onSkipNode,
 	onPrevious,
 	isRegenerating = false,
@@ -133,7 +149,7 @@ export function ConceptCard({
 			onDelta: (delta) => {
 				setStreamingMarkdown((prev) => prev + delta);
 			},
-			onDone: (_updatedNode) => {
+			onDone: () => {
 				setIsRegeneratingLocal(false);
 				setStreamingMarkdown("");
 				setLocalError(null);
@@ -148,22 +164,6 @@ export function ConceptCard({
 		});
 	};
 
-	const SkeletonLoader = () => (
-		<div className="space-y-6 animate-pulse" aria-hidden="true">
-			<div className="h-48 bg-muted dark:bg-muted/60 rounded-lg w-full" />
-			<div className="space-y-2">
-				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-1/4" />
-				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-1/3" />
-			</div>
-			<div className="space-y-3">
-				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-full" />
-				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-5/6" />
-				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-2/3" />
-				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-4/5" />
-			</div>
-			<div className="h-8 bg-muted dark:bg-muted/60 rounded w-full mt-4" />
-		</div>
-	);
 
 	// Track previous status for animations
 

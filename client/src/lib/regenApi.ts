@@ -134,10 +134,11 @@ export async function streamRegenerateNode({
 				}
 			}
 		}
-	} catch (error: any) {
-		if (error.name === "AbortError") {
+	} catch (error: unknown) {
+		const err = error instanceof Error ? error : new Error(String(error));
+		if (err.name === "AbortError") {
 			return;
 		}
-		onError(error);
+		onError(err);
 	}
 }

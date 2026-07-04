@@ -46,18 +46,14 @@ REM --- Backend setup ---
 echo [1/2] Setting up backend (Python)...
 echo.
 
-if not exist "server\.venv" (
-    echo Creating virtual environment...
-    python -m venv server\.venv
-    if !errorlevel! neq 0 (
-        echo ERROR: Failed to create virtual environment.
-        pause
-        exit /b 1
-    )
-    echo   [OK] Virtual environment created
-) else (
-    echo   [OK] Virtual environment already exists
+echo Creating virtual environment...
+python -m venv server\.venv
+if !errorlevel! neq 0 (
+    echo ERROR: Failed to create virtual environment.
+    pause
+    exit /b 1
 )
+echo   [OK] Virtual environment created
 
 echo Installing Python dependencies...
 call server\.venv\Scripts\activate.bat && pip install -r server\requirements.txt --quiet
