@@ -42,6 +42,7 @@ interface StreamRegenerateParams {
 	onDelta: (delta: string) => void;
 	onDone: (updatedNode: ConceptNode) => void;
 	onError: (error: Error) => void;
+	onStatusChange?: (status: string) => void;
 	signal?: AbortSignal;
 }
 
@@ -57,6 +58,7 @@ export async function streamRegenerateNode({
 	onDelta,
 	onDone,
 	onError,
+	onStatusChange,
 	signal,
 }: StreamRegenerateParams): Promise<void> {
 	try {
@@ -118,12 +120,16 @@ export async function streamRegenerateNode({
 						error?: string;
 						done?: boolean;
 						node?: ConceptNode;
+						status?: string;
 					};
 					if (parsed.error) {
 						throw new Error(parsed.error);
 					}
 					if (parsed.delta) {
 						onDelta(parsed.delta);
+					}
+					if (parsed.status) {
+						onStatusChange?.(parsed.status);
 					}
 					if (parsed.done && parsed.node) {
 						onDone(parsed.node);

@@ -135,6 +135,7 @@ export function ConceptCard({
 	const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
 	const [showRegenConfirm, setShowRegenConfirm] = useState(false);
 	const [isRegeneratingLocal, setIsRegeneratingLocal] = useState(false);
+	const [isGeneratingQuizzes, setIsGeneratingQuizzes] = useState(false);
 	const [streamingMarkdown, setStreamingMarkdown] = useState("");
 	const [localError, setLocalError] = useState<string | null>(null);
 	const queryClient = useQueryClient();
@@ -143,16 +144,23 @@ export function ConceptCard({
 		setIsRegeneratingLocal(true);
 		setStreamingMarkdown("");
 		setLocalError(null);
+		setIsGeneratingQuizzes(false);
 
 		await streamRegenerateNode({
 			nodeId: node.id,
 			onDelta: (delta) => {
 				setStreamingMarkdown((prev) => prev + delta);
 			},
+			onStatusChange: (status) => {
+				if (status === "generating_quizzes") {
+					setIsGeneratingQuizzes(true);
+				}
+			},
 			onDone: () => {
 				setIsRegeneratingLocal(false);
 				setStreamingMarkdown("");
 				setLocalError(null);
+				setIsGeneratingQuizzes(false);
 				queryClient.invalidateQueries({
 					queryKey: ["learningSession", node.learning_session_id],
 				});
@@ -160,6 +168,7 @@ export function ConceptCard({
 			onError: (err) => {
 				setIsRegeneratingLocal(false);
 				setLocalError(err.message || "Failed to regenerate content.");
+				setIsGeneratingQuizzes(false);
 			},
 		});
 	};
@@ -233,8 +242,11 @@ export function ConceptCard({
 		ERROR: "!",
 	};
 
-	// Show refresh button for any non-LOCKED topic node (manual regen)
-	const showRefreshButton = node.status !== "LOCKED";
+	// Show refresh button only for "In Progress" nodes
+	const showRefreshButton =
+		node.status === "VIEWING_EXPLANATION" ||
+		node.status === "IN_QUIZ" ||
+		node.status === "SHOWING_FEEDBACK";
 
 	const handleProceedToQuiz = () => {
 		// Prevent transition if not in VIEWING_EXPLANATION state
@@ -244,10 +256,14 @@ export function ConceptCard({
 	};
 
 	const showCuriosity =
-		!!onAskQuestion && node.status === "VIEWING_EXPLANATION";
+		!!onAskQuestion &&
+		(node.status === "VIEWING_EXPLANATION" ||
+			node.status === "COMPLETED" ||
+			(isRegeneratingLocal && isGeneratingQuizzes));
+	const contentToParse = isRegeneratingLocal ? streamingMarkdown : node.content_markdown;
 	const { mainContent, questions } = showCuriosity
-		? parseCuriosityQuestions(node.content_markdown)
-		: { mainContent: node.content_markdown, questions: [] };
+		? parseCuriosityQuestions(contentToParse)
+		: { mainContent: contentToParse, questions: [] };
 
 	const handleSubmitQuiz = (quizIndex: number) => {
 		if (selectedOptions.size > 0) {
@@ -286,6 +302,7 @@ export function ConceptCard({
 					className={cn(
 						"border rounded-lg overflow-hidden topic-card-content relative", // Added relative class
 						statusStyles[node.status],
+						(isRegenerating || isRegeneratingLocal) && "dark:bg-black",
 						isActive && "ring-2 ring-primary ring-offset-2",
 					)}
 				>
@@ -294,6 +311,7 @@ export function ConceptCard({
 						className={cn(
 							"flex items-center gap-3 p-4 border-b",
 							node.status === "VIEWING_EXPLANATION" ? "bg-white dark:bg-muted" : "bg-card/50",
+							(isRegenerating || isRegeneratingLocal) && "dark:bg-black",
 						)}
 					>
 						<span className="text-xl">{statusIcons[node.status]}</span>
@@ -338,7 +356,7 @@ export function ConceptCard({
 					</div>
 
 					{/* Card Body - State-based content */}
-					<ContentTransition contentKey={`${node.id}-${node.status}-${isRegeneratingLocal}-${!!localError}`}>
+					<ContentTransition contentKey={`${node.id}-${node.status}-${isRegeneratingLocal}-${showRegenConfirm}-${!!localError}`}>
 						<div className="p-4 relative">
 							{/* Confirmation dialog overlay */}
 							{showRegenConfirm && (
@@ -367,8 +385,10 @@ export function ConceptCard({
 								</div>
 							)}
 
-							{/* Local Error state */}
-							{localError ? (
+							{/* Show SkeletonLoader if confirmation is visible */}
+							{showRegenConfirm ? (
+								<SkeletonLoader />
+							) : localError ? (
 								<div className="space-y-4 py-4">
 									<div className="flex items-start gap-3 text-destructive">
 										<span className="text-2xl font-bold">!</span>
@@ -409,6 +429,32 @@ export function ConceptCard({
 								<div className="space-y-4">
 									{streamingMarkdown === "" ? (
 										<SkeletonLoader />
+									) : isGeneratingQuizzes ? (
+										// Explanation fully streamed, quizzes generating
+										<div className="space-y-4">
+											<MarkdownRenderer
+												content={mainContent}
+												selectedHeadingIds={selectedHeadingIds}
+												onToggleHeadingChat={onToggleHeadingChat}
+												enableHeadingChat
+											/>
+											{questions.length > 0 && onAskQuestion && (
+												<CuriositySpark
+													questions={questions}
+													onAskQuestion={onAskQuestion}
+												/>
+											)}
+											<div className="flex justify-between items-center pt-4 border-t">
+												{renderPreviousButton()}
+												<button
+													disabled
+													className="px-4 py-2 bg-primary text-primary-foreground rounded-md opacity-50 cursor-not-allowed transition-colors flex items-center gap-2"
+												>
+													<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground" />
+													<span>Generating quiz...</span>
+												</button>
+											</div>
+										</div>
 									) : (
 										<div className="space-y-4 animate-fade-in">
 											<div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
@@ -650,13 +696,19 @@ export function ConceptCard({
 										<summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
 											Review explanation
 										</summary>
-										<div className="mt-4 pt-4 border-t">
+										<div className="mt-4 pt-4 border-t space-y-4">
 											<MarkdownRenderer
-												content={node.content_markdown}
+												content={mainContent}
 												selectedHeadingIds={selectedHeadingIds}
 												onToggleHeadingChat={onToggleHeadingChat}
 												enableHeadingChat
 											/>
+											{questions.length > 0 && onAskQuestion && (
+												<CuriositySpark
+													questions={questions}
+													onAskQuestion={onAskQuestion}
+												/>
+											)}
 										</div>
 									</details>
 									<div className="flex justify-between items-center pt-4 border-t">

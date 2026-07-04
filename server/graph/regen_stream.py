@@ -128,7 +128,10 @@ async def stream_regenerate_node_generator(
                 topic, prev_summary, next_summary
             )
             full_system_prompt = generator_agent._build_system_prompt()
-            messages = [{"role": "user", "content": user_message}]
+            messages = [
+                {"role": "system", "content": full_system_prompt},
+                {"role": "user", "content": user_message},
+            ]
 
             api_key = llm_context.api_key
             model_override = llm_context.model
@@ -194,6 +197,8 @@ async def stream_regenerate_node_generator(
             new_content_markdown = last_content
 
         if run_quizzer:
+            payload = {"status": "generating_quizzes"}
+            yield f"data: {json.dumps(payload)}\n\n"
             # Quizzer is fast and structured, run directly
             new_quiz_set = await quizzer_agent.generate_quiz_set(
                 topic=topic,
