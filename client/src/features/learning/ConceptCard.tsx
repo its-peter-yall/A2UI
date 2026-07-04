@@ -59,6 +59,8 @@ import type {
 	QuizCardHidden,
 } from "@/types/learning";
 import { getVisibleQuiz } from "@/types/learning";
+import { useQueryClient } from "@tanstack/react-query";
+import { streamRegenerateNode } from "@/lib/regenApi";
 import { MarkdownRenderer, InlineMarkdown } from "./MarkdownRenderer";
 import { QuizFeedback } from "./QuizFeedback";
 import { useQuizFeedback } from "./useQuizFeedback";
@@ -102,7 +104,7 @@ export function ConceptCard({
 	onContinueToNext,
 	onNextQuiz,
 	onPreviousQuiz,
-	onRegenerate,
+	onRegenerate: _onRegenerate,
 	onSkipNode,
 	onPrevious,
 	isRegenerating = false,
@@ -115,6 +117,53 @@ export function ConceptCard({
 	onAskQuestion,
 }: ConceptCardProps) {
 	const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
+	const [showRegenConfirm, setShowRegenConfirm] = useState(false);
+	const [isRegeneratingLocal, setIsRegeneratingLocal] = useState(false);
+	const [streamingMarkdown, setStreamingMarkdown] = useState("");
+	const [localError, setLocalError] = useState<string | null>(null);
+	const queryClient = useQueryClient();
+
+	const startStreamingRegen = async () => {
+		setIsRegeneratingLocal(true);
+		setStreamingMarkdown("");
+		setLocalError(null);
+
+		await streamRegenerateNode({
+			nodeId: node.id,
+			onDelta: (delta) => {
+				setStreamingMarkdown((prev) => prev + delta);
+			},
+			onDone: (_updatedNode) => {
+				setIsRegeneratingLocal(false);
+				setStreamingMarkdown("");
+				setLocalError(null);
+				queryClient.invalidateQueries({
+					queryKey: ["learningSession", node.learning_session_id],
+				});
+			},
+			onError: (err) => {
+				setIsRegeneratingLocal(false);
+				setLocalError(err.message || "Failed to regenerate content.");
+			},
+		});
+	};
+
+	const SkeletonLoader = () => (
+		<div className="space-y-6 animate-pulse" aria-hidden="true">
+			<div className="h-48 bg-muted dark:bg-muted/60 rounded-lg w-full" />
+			<div className="space-y-2">
+				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-1/4" />
+				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-1/3" />
+			</div>
+			<div className="space-y-3">
+				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-full" />
+				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-5/6" />
+				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-2/3" />
+				<div className="h-4 bg-muted dark:bg-muted/60 rounded w-4/5" />
+			</div>
+			<div className="h-8 bg-muted dark:bg-muted/60 rounded w-full mt-4" />
+		</div>
+	);
 
 	// Track previous status for animations
 
@@ -235,7 +284,7 @@ export function ConceptCard({
 			>
 				<article
 					className={cn(
-						"border rounded-lg overflow-hidden topic-card-content", // Removed transition-all duration-300
+						"border rounded-lg overflow-hidden topic-card-content relative", // Added relative class
 						statusStyles[node.status],
 						isActive && "ring-2 ring-primary ring-offset-2",
 					)}
@@ -273,13 +322,13 @@ export function ConceptCard({
 							{showRefreshButton && (
 								<button
 									type="button"
-									onClick={() => onRegenerate?.(node.id)}
-									disabled={isRegenerating}
+									onClick={() => setShowRegenConfirm(true)}
+									disabled={isRegenerating || isRegeneratingLocal}
 									title="Regenerate the content"
 									aria-label="Regenerate the content"
 									className={cn(
 										"p-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-										isRegenerating && "animate-spin",
+										(isRegenerating || isRegeneratingLocal) && "animate-spin",
 									)}
 								>
 									<RefreshCw className="w-5 h-5" />
@@ -289,8 +338,94 @@ export function ConceptCard({
 					</div>
 
 					{/* Card Body - State-based content */}
-					<ContentTransition contentKey={`${node.id}-${node.status}`}>
-						<div className="p-4">
+					<ContentTransition contentKey={`${node.id}-${node.status}-${isRegeneratingLocal}-${!!localError}`}>
+						<div className="p-4 relative">
+							{/* Confirmation dialog overlay */}
+							{showRegenConfirm && (
+								<div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center">
+									<h4 className="font-semibold text-lg mb-2 text-foreground">Regenerate Topic Content?</h4>
+									<p className="text-sm text-muted-foreground mb-6 max-w-sm">
+										This will overwrite the current explanation and quizzes. You will need to complete the quiz again to master this topic.
+									</p>
+									<div className="flex gap-4">
+										<button
+											onClick={() => {
+												setShowRegenConfirm(false);
+												startStreamingRegen();
+											}}
+											className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 font-medium text-sm transition-colors"
+										>
+											Regenerate
+										</button>
+										<button
+											onClick={() => setShowRegenConfirm(false)}
+											className="px-4 py-2 border rounded-md hover:bg-muted font-medium text-sm transition-colors"
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* Local Error state */}
+							{localError ? (
+								<div className="space-y-4 py-4">
+									<div className="flex items-start gap-3 text-destructive">
+										<span className="text-2xl font-bold">!</span>
+										<div>
+											<span className="font-semibold text-lg text-destructive">
+												Regeneration failed
+											</span>
+											<p className="text-sm text-muted-foreground mt-1">
+												We encountered an error while regenerating this topic:
+											</p>
+											<p className="text-xs text-muted-foreground mt-2 font-mono bg-destructive/10 p-2 rounded border border-destructive/20 max-w-full overflow-auto">
+												{localError}
+											</p>
+										</div>
+									</div>
+									<div className="flex gap-3 pt-4 border-t">
+										<button
+											onClick={() => {
+												setLocalError(null);
+												startStreamingRegen();
+											}}
+											className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 font-medium text-sm transition-colors"
+										>
+											Retry
+										</button>
+										<button
+											onClick={() => {
+												setLocalError(null);
+											}}
+											className="px-4 py-2 border rounded-md hover:bg-muted font-medium text-sm transition-colors"
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							) : isRegeneratingLocal ? (
+								// Local streaming/loading state
+								<div className="space-y-4">
+									{streamingMarkdown === "" ? (
+										<SkeletonLoader />
+									) : (
+										<div className="space-y-4 animate-fade-in">
+											<div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+												<div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary" />
+												<span>Streaming new explanation...</span>
+											</div>
+											<MarkdownRenderer
+												content={streamingMarkdown}
+												selectedHeadingIds={selectedHeadingIds}
+												onToggleHeadingChat={onToggleHeadingChat}
+												enableHeadingChat
+											/>
+										</div>
+									)}
+								</div>
+							) : (
+								<>
 							{/* LOCKED state */}
 							{node.status === "LOCKED" && (
 								<div className="text-center py-8 text-muted-foreground">
@@ -563,11 +698,11 @@ export function ConceptCard({
 									)}
 									<div className="flex gap-3">
 										<button
-											onClick={() => onRegenerate?.(node.id)}
-											disabled={isRegenerating}
+											onClick={() => setShowRegenConfirm(true)}
+											disabled={isRegenerating || isRegeneratingLocal}
 											className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
 										>
-											{isRegenerating ? "Regenerating..." : "Retry Generation"}
+											{isRegenerating || isRegeneratingLocal ? "Regenerating..." : "Retry Generation"}
 										</button>
 										{canSkip && (
 											<button
@@ -594,6 +729,8 @@ export function ConceptCard({
 										</details>
 									)}
 								</div>
+							)}
+							</>
 							)}
 						</div>
 					</ContentTransition>

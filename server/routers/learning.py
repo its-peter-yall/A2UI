@@ -1093,6 +1093,36 @@ async def regenerate_node_endpoint(
 
 
 @router.post(
+    "/nodes/{node_id}/regenerate/stream",
+    summary="Stream node regeneration",
+    description="Stream explanation regeneration, then generate new quizzes and return updated node.",
+)
+async def stream_regenerate_node_endpoint(
+    node_id: str,
+    request: Request,
+    step: Optional[str] = Query(
+        default=None,
+        description=(
+            "Optional regen step override for ERROR nodes only. "
+            "One of GENERATOR, QUIZZER, BOTH."
+        ),
+    ),
+    llm_context: LLMContext = Depends(get_llm_context),
+) -> StreamingResponse:
+    """Stream regeneration of content and quizzes for a concept node."""
+    from server.graph.regen_stream import stream_regenerate_node_generator
+
+    return StreamingResponse(
+        stream_regenerate_node_generator(
+            node_id=node_id,
+            llm_context=llm_context,
+            regen_step_override=step.upper() if step else None,
+        ),
+        media_type="text/event-stream",
+    )
+
+
+@router.post(
     "/sessions/{session_id}/nodes/{node_id}/chat",
     summary="Concept chat assistant",
     description=(
