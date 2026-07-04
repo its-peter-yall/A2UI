@@ -698,10 +698,12 @@ export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
 	);
 }
 
+const EMPTY_ARRAY: string[] = [];
+
 export function MarkdownRenderer({
 	content,
 	className,
-	selectedHeadingIds = [],
+	selectedHeadingIds = EMPTY_ARRAY,
 	onToggleHeadingChat,
 	enableHeadingChat = false,
 }: MarkdownRendererProps) {
