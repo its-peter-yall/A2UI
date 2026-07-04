@@ -228,7 +228,7 @@ export function ConceptCard({
 		VIEWING_EXPLANATION: "border-primary bg-white dark:bg-muted",
 		IN_QUIZ: "border-primary bg-card",
 		SHOWING_FEEDBACK: "border-amber-500 bg-card",
-		COMPLETED: "border-green-500 bg-card",
+		COMPLETED: "border-green-500 bg-white dark:bg-muted",
 		ERROR: "border-destructive bg-destructive/10",
 	};
 
@@ -310,7 +310,7 @@ export function ConceptCard({
 					<div
 						className={cn(
 							"flex items-center gap-3 p-4 border-b",
-							node.status === "VIEWING_EXPLANATION" ? "bg-white dark:bg-muted" : "bg-card/50",
+							(node.status === "VIEWING_EXPLANATION" || node.status === "COMPLETED") ? "bg-white dark:bg-muted" : "bg-card/50",
 							(isRegenerating || isRegeneratingLocal) && "dark:bg-black",
 						)}
 					>

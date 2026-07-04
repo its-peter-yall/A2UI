@@ -54,6 +54,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import mermaid from "mermaid";
 import { preprocessMermaid } from "./mermaidUtils";
+import { useTheme } from "@/hooks/useTheme";
 
 // Initialize mermaid for dark mode
 if (typeof window !== "undefined") {
@@ -84,12 +85,39 @@ export function Mermaid({ chart }: MermaidProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [isZoomed, setIsZoomed] = useState(false);
 
+	const { theme } = useTheme();
+	const isDark = theme === "system"
+		? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+		: theme === "dark";
+
 	useEffect(() => {
 		let isMounted = true;
 		const renderChart = async () => {
 			if (!containerRef.current) return;
 			try {
 				const preprocessedChart = preprocessMermaid(chart);
+
+				// Configure Mermaid dynamically based on light/dark mode before rendering
+				mermaid.initialize({
+					startOnLoad: false,
+					theme: isDark ? "dark" : "default",
+					securityLevel: "loose",
+					themeVariables: isDark 
+						? {
+								background: "#18181b",
+								primaryColor: "#ffb74d",
+								primaryTextColor: "#f4f4f5",
+								lineColor: "#ffb74d",
+						  }
+						: {
+								background: "#fafafa",
+								primaryColor: "#ffb74d",
+								primaryTextColor: "#18181b",
+								lineColor: "#ffb74d",
+								textColor: "#18181b",
+						  }
+				});
+
 				const { svg: renderedSvg } = await mermaid.render(
 					elementId.current,
 					preprocessedChart,
@@ -119,7 +147,7 @@ export function Mermaid({ chart }: MermaidProps) {
 			isMounted = false;
 			clearTimeout(timer);
 		};
-	}, [chart]);
+	}, [chart, isDark]);
 
 	// Close on escape key
 	useEffect(() => {
@@ -154,7 +182,11 @@ export function Mermaid({ chart }: MermaidProps) {
 			
 			{svg && (
 				<div 
-					className={`mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border border-zinc-800 bg-[#18181b] transition-all duration-200 cursor-zoom-in hover:border-zinc-700/80 ${error ? 'opacity-40' : 'opacity-100'}`} 
+					className={cn(
+						"mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border transition-all duration-200 cursor-zoom-in",
+						"border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] hover:border-zinc-300 dark:hover:border-zinc-700/80",
+						error ? 'opacity-40' : 'opacity-100'
+					)}
 					dangerouslySetInnerHTML={{ __html: svg }} 
 					onClick={() => setIsZoomed(true)}
 				/>
@@ -169,12 +201,12 @@ export function Mermaid({ chart }: MermaidProps) {
 					}}
 				>
 					<div 
-						className="relative w-full max-w-4xl md:max-w-5xl max-h-[90vh] bg-[#18181b] border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
+						className="relative w-full max-w-4xl md:max-w-5xl max-h-[90vh] bg-zinc-50 dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
 						onClick={() => setIsZoomed(false)}
 					>
 						<button
 							type="button"
-							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
+							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-200/80 dark:bg-zinc-900/80 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
 							onClick={() => setIsZoomed(false)}
 							aria-label="Close diagram"
 						>
@@ -223,6 +255,11 @@ export function VectorPlot({ data }: VectorPlotProps) {
 	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isZoomed, setIsZoomed] = useState(false);
+
+	const { theme } = useTheme();
+	const isDark = theme === "system"
+		? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches)
+		: theme === "dark";
 
 	useEffect(() => {
 		try {
@@ -287,6 +324,11 @@ export function VectorPlot({ data }: VectorPlotProps) {
 	const originX = mapX(0);
 	const originY = mapY(0);
 
+	const gridStroke = isDark ? "#27272a" : "#e4e4e7";
+	const axisStroke = isDark ? "#52525b" : "#a1a1aa";
+	const axisTextFill = isDark ? "#a1a1aa" : "#71717a";
+	const originTextFill = isDark ? "#52525b" : "#a1a1aa";
+
 	const gridLines: React.ReactNode[] = [];
 	if (plotData.grid !== false) {
 		for (let x = Math.ceil(domainX[0]); x <= Math.floor(domainX[1]); x++) {
@@ -298,7 +340,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 						y1={paddingY}
 						x2={mapX(x)}
 						y2={height - paddingY}
-						stroke="#27272a"
+						stroke={gridStroke}
 						strokeWidth="0.5"
 					/>
 				);
@@ -313,7 +355,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 						y1={mapY(y)}
 						x2={width - paddingX}
 						y2={mapY(y)}
-						stroke="#27272a"
+						stroke={gridStroke}
 						strokeWidth="0.5"
 					/>
 				);
@@ -355,7 +397,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					y1={originY}
 					x2={width - paddingX}
 					y2={originY}
-					stroke="#52525b"
+					stroke={axisStroke}
 					strokeWidth="1.5"
 				/>
 				<line
@@ -363,14 +405,14 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					y1={paddingY}
 					x2={originX}
 					y2={height - paddingY}
-					stroke="#52525b"
+					stroke={axisStroke}
 					strokeWidth="1.5"
 				/>
 
 				<text
 					x={width - paddingX + 5}
 					y={originY + 4}
-					fill="#a1a1aa"
+					fill={axisTextFill}
 					fontSize="10"
 					textAnchor="start"
 				>
@@ -379,7 +421,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 				<text
 					x={originX}
 					y={paddingY - 8}
-					fill="#a1a1aa"
+					fill={axisTextFill}
 					fontSize="10"
 					textAnchor="middle"
 				>
@@ -389,7 +431,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 				<text
 					x={originX - 8}
 					y={originY + 12}
-					fill="#52525b"
+					fill={originTextFill}
 					fontSize="8"
 					textAnchor="end"
 				>
@@ -400,6 +442,19 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					const vx = mapX(v.x);
 					const vy = mapY(v.y);
 					const color = v.color || "#ffb74d";
+					
+					// Split name by <br> or <br/> tags to support multi-line vector labels
+					const nameLines = v.name.split(/<br\s*\/?>/i);
+					const lines = [...nameLines];
+					// Append coordinates to the last line
+					lines[lines.length - 1] = `${lines[lines.length - 1]} (${v.x}, ${v.y})`;
+					
+					const textAnchor = v.x >= 0 ? "start" : "end";
+					const textX = vx + (v.x >= 0 ? 8 : -8);
+					const lineHeight = 14;
+					const totalHeight = (lines.length - 1) * lineHeight;
+					const startY = vy + (v.y >= 0 ? -4 : 8) - (v.y >= 0 ? totalHeight : 0);
+
 					return (
 						<g key={`vec-${i}`}>
 							<line
@@ -412,14 +467,22 @@ export function VectorPlot({ data }: VectorPlotProps) {
 								markerEnd={`url(#arrow-${i}${idSuffix})`}
 							/>
 							<text
-								x={vx + (v.x >= 0 ? 8 : -8)}
-								y={vy + (v.y >= 0 ? -4 : 8)}
+								x={textX}
+								y={startY}
 								fill={color}
-								fontSize="12"
+								fontSize="11"
 								fontWeight="bold"
-								textAnchor={v.x >= 0 ? "start" : "end"}
+								textAnchor={textAnchor}
 							>
-								{v.name} ({v.x}, {v.y})
+								{lines.map((line, idx) => (
+									<tspan
+										key={idx}
+										x={textX}
+										dy={idx === 0 ? 0 : lineHeight}
+									>
+										{line}
+									</tspan>
+								))}
 							</text>
 						</g>
 					);
@@ -430,7 +493,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 
 	return (
 		<div 
-			className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-800 bg-[#18181b] select-none cursor-zoom-in hover:border-zinc-700/80 transition-all duration-200"
+			className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] select-none cursor-zoom-in hover:border-zinc-300 dark:hover:border-zinc-700/80 transition-all duration-200"
 			onClick={() => setIsZoomed(true)}
 		>
 			{renderSvg(false)}
@@ -444,12 +507,12 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					}}
 				>
 					<div 
-						className="relative w-full max-w-xl md:max-w-2xl bg-[#18181b] border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
+						className="relative w-full max-w-xl md:max-w-2xl bg-zinc-50 dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
 						onClick={() => setIsZoomed(false)}
 					>
 						<button
 							type="button"
-							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
+							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-200/80 dark:bg-zinc-900/80 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
 							onClick={() => setIsZoomed(false)}
 							aria-label="Close graph"
 						>

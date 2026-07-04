@@ -118,7 +118,7 @@ Structure your content for readability:
 - Use *italics* for emphasis on important points
 - Create **bulleted lists** for key points or examples
 - Keep paragraph structure clean
-- Make use of **Mermaid diagrams/flowcharts** (using ```mermaid code blocks) for visual demonstration of complex processes or hierarchies when necessary. IMPORTANT: Always wrap node labels in double quotes if they contain spaces, special characters, or `<br>` line breaks (e.g. `A["Label<br>Detail"]` instead of `A[Label]<br>Detail`). If a node label contains double quotes internally, replace them with single quotes (e.g. `A["Can 'see' context"]` instead of `A["Can "see" context"]`) to avoid syntax parsing errors. DO NOT use style commands with fill colors (e.g., style A fill:#ffcccc). Use default Mermaid styling only; use emojis inside node labels for visual categorization.
+- Make use of **Mermaid diagrams/flowcharts** (using ```mermaid code blocks) for visual demonstration of complex processes or hierarchies when necessary. IMPORTANT: Always wrap node labels in double quotes if they contain spaces, special characters, or `<br>` line breaks (e.g. `A["Label<br>Detail"]` instead of `A[Label]<br>Detail`). If a node label contains double quotes internally, replace them with single quotes (e.g. `A["Can 'see' context"]` instead of `A["Can "see" context"]`) to avoid syntax parsing errors. DO NOT use style commands with fill colors (e.g., style A fill:#24483f). Just use default Mermaid, no colours.
 - Make use of **Vector plots** (using ```vector-plot JSON code blocks) to draw mathematical 2D coordinate graphs for explaining concepts like vector representation, cosine similarity, vector operations, linear algebra, etc. Example structure:
   ```json
   {
