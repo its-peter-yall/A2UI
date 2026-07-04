@@ -125,10 +125,28 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(body["nodes"], list)
         self.assertGreater(len(body["nodes"]), 0)
 
+    @patch("server.routers.learning.learning_manager.get_concept_node")
     @patch("server.routers.learning.regenerate_failed_node")
     def test_regenerate_calls_regen_function(
-        self, mock_regen: AsyncMock,
+        self, mock_regen: AsyncMock, mock_get: MagicMock,
     ) -> None:
+        mock_get.return_value = {
+            "id": "node-1",
+            "learning_session_id": "session-1",
+            "sequence_index": 0,
+            "title": "Topic 0",
+            "status": "ERROR",
+            "error_message": "fail",
+            "retry_available": True,
+            "failed_step": None,
+            "complexity": "Basic",
+            "content_markdown": "",
+            "summary_for_context": None,
+            "key_terms": None,
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+            "quiz": None,
+        }
         mock_regen.return_value = {
             "id": "node-1",
             "learning_session_id": "session-1",
@@ -152,10 +170,28 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         mock_regen.assert_awaited_once()
 
+    @patch("server.routers.learning.learning_manager.get_concept_node")
     @patch("server.routers.learning.regenerate_failed_node", new_callable=AsyncMock)
     def test_regenerate_endpoint_passes_step_query(
-        self, mock_regen: AsyncMock,
+        self, mock_regen: AsyncMock, mock_get: MagicMock,
     ) -> None:
+        mock_get.return_value = {
+            "id": "n1",
+            "learning_session_id": "s1",
+            "sequence_index": 0,
+            "title": "t",
+            "status": "ERROR",
+            "error_message": "fail",
+            "retry_available": True,
+            "failed_step": None,
+            "complexity": "Intermediate",
+            "summary_for_context": "sum",
+            "key_terms": ["a", "b"],
+            "content_markdown": "c",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+            "quiz": None,
+        }
         mock_regen.return_value = {
             "id": "n1",
             "learning_session_id": "s1",
@@ -184,10 +220,20 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
         kwargs = mock_regen.call_args.kwargs
         self.assertEqual(kwargs["regen_step"], "QUIZZER")
 
+    @patch("server.routers.learning.learning_manager.get_concept_node")
     @patch("server.routers.learning.regenerate_failed_node", new_callable=AsyncMock)
     def test_regenerate_endpoint_invalid_step_returns_400(
-        self, mock_regen: AsyncMock,
+        self, mock_regen: AsyncMock, mock_get: MagicMock,
     ) -> None:
+        mock_get.return_value = {
+            "id": "n1",
+            "learning_session_id": "s1",
+            "sequence_index": 0,
+            "title": "t",
+            "status": "ERROR",
+            "content_markdown": "c",
+            "quiz": None,
+        }
         client = _client()
 
         response = client.post(

@@ -184,3 +184,114 @@ async def regenerate_failed_node(
         run_quizzer,
     )
     return updated_node
+
+
+async def regenerate_topic_node(
+    node_id: str,
+    llm_context: Optional[LLMContext] = None,
+) -> Optional[Dict[str, Any]]:
+    """Re-generate content for any non-LOCKED, non-ERROR topic node.
+
+    Runs both generator and quizzer agents unconditionally. Resets node
+    status based on position in the sequence. Bypasses the normal state-
+    machine validation because manual regeneration is an intentional
+    overwrite, not a user-progression transition.
+
+    Args:
+        node_id: Identifier of the node to regenerate.
+        llm_context: Optional LLM provider context.
+
+    Returns:
+        Updated node dict on success, None on failure.
+
+    Raises:
+        LookupError: If node_id does not exist.
+        ValueError: If node is LOCKED or ERROR (use regenerate_failed_node
+            for ERROR nodes instead).
+    """
+    node = learning_manager.get_concept_node(node_id)
+
+    if not node:
+        raise LookupError(f"Node not found: {node_id}")
+
+    if node.get("status") == NodeStatus.LOCKED.value:
+        raise ValueError(f"Node {node_id} is LOCKED; cannot regenerate")
+
+    if node.get("status") == NodeStatus.ERROR.value:
+        raise ValueError(
+            f"Node {node_id} is ERROR; use error retry endpoint instead"
+        )
+
+    session_id = node["learning_session_id"]
+    sequence_index = node["sequence_index"]
+    title = node["title"]
+
+    all_nodes = learning_manager.get_session_nodes(session_id)
+
+    prev_summary: Optional[str] = None
+    next_summary: Optional[str] = None
+    previous_status: Optional[str] = None
+
+    for sibling in all_nodes:
+        if sibling["sequence_index"] == sequence_index - 1:
+            prev_summary = sibling["title"]
+            previous_status = sibling["status"]
+        elif sibling["sequence_index"] == sequence_index + 1:
+            next_summary = sibling["title"]
+
+    quiz_count = 1
+    quiz_payload = node.get("quiz")
+    if quiz_payload and isinstance(quiz_payload, dict):
+        quizzes = quiz_payload.get("quizzes")
+        if quizzes and isinstance(quizzes, list):
+            quiz_count = len(quizzes)
+
+    topic = TopicNode(
+        index=sequence_index,
+        title=title,
+        summary_for_context=node.get("summary_for_context") or title,
+        key_terms=node.get("key_terms") or ["concept", "topic"],
+        complexity=node.get("complexity", "Intermediate"),
+        quiz_count=quiz_count,
+    )
+
+    content: GeneratedContent = (
+        await generator_agent.generate_explanation(
+            topic=topic,
+            prev_summary=prev_summary,
+            next_summary=next_summary,
+            llm_context=llm_context,
+        )
+    )
+    new_content_markdown = content.content_markdown
+
+    new_quiz_set: Optional[QuizSet] = await quizzer_agent.generate_quiz_set(
+        topic=topic,
+        content=new_content_markdown,
+        quiz_count=quiz_count,
+        llm_context=llm_context,
+    )
+
+    new_status = NodeStatus.LOCKED
+    if sequence_index == 0:
+        new_status = NodeStatus.VIEWING_EXPLANATION
+    elif previous_status == NodeStatus.COMPLETED.value:
+        new_status = NodeStatus.VIEWING_EXPLANATION
+
+    updated_node = learning_manager.replace_node_content(
+        node_id=node_id,
+        content_markdown=new_content_markdown,
+        status=new_status,
+        quiz_set=new_quiz_set,
+    )
+
+    if not updated_node:
+        logger.error("Node vanished during regen: %s", node_id)
+        return None
+
+    logger.info(
+        "Regenerated topic node %s (status=%s)",
+        node_id,
+        new_status.value,
+    )
+    return updated_node

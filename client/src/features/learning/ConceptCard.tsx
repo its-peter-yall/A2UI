@@ -51,7 +51,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, RefreshCw } from "lucide-react";
 import type {
 	ConceptNode,
 	NodeStatus,
@@ -184,6 +184,9 @@ export function ConceptCard({
 		ERROR: "!",
 	};
 
+	// Show refresh button for any non-LOCKED topic node (manual regen)
+	const showRefreshButton = node.status !== "LOCKED";
+
 	const handleProceedToQuiz = () => {
 		// Prevent transition if not in VIEWING_EXPLANATION state
 		if (node.status === "VIEWING_EXPLANATION") {
@@ -263,9 +266,26 @@ export function ConceptCard({
 								{node.status.replace(/_/g, " ")}
 							</span>
 						</div>
-						<span className="text-sm text-muted-foreground">
-							#{node.sequence_index + 1}
-						</span>
+						<div className="flex items-center gap-1">
+							<span className="text-sm text-muted-foreground">
+								#{node.sequence_index + 1}
+							</span>
+							{showRefreshButton && (
+								<button
+									type="button"
+									onClick={() => onRegenerate?.(node.id)}
+									disabled={isRegenerating}
+									title="Regenerate the content"
+									aria-label="Regenerate the content"
+									className={cn(
+										"p-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+										isRegenerating && "animate-spin",
+									)}
+								>
+									<RefreshCw className="w-5 h-5" />
+								</button>
+							)}
+						</div>
 					</div>
 
 					{/* Card Body - State-based content */}

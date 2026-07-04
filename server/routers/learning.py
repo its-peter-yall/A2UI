@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 
 from server.database.learning_persistence import learning_manager
 from server.graph.build import get_graph
-from server.graph.regen import regenerate_failed_node
+from server.graph.regen import regenerate_failed_node, regenerate_topic_node
 from server.schemas.learning import (
     ConceptChatRequest,
     ConceptNodeResponse,
@@ -1004,7 +1004,11 @@ def previous_quiz(node_id: str) -> ConceptNodeResponse:
     "/nodes/{node_id}/regenerate",
     response_model=ConceptNodeResponse,
     summary="Regenerate node",
-    description="Regenerate content for a failed/error node.",
+    description=(
+        "Regenerate content for a concept node. "
+        "ERROR nodes: partial regen based on failed_step. "
+        "Non-ERROR nodes: full regen of content + quizzes."
+    ),
 )
 async def regenerate_node_endpoint(
     node_id: str,
@@ -1012,13 +1016,35 @@ async def regenerate_node_endpoint(
     step: Optional[str] = Query(
         default=None,
         description=(
-            "Optional regen step override. One of GENERATOR, QUIZZER, BOTH. "
+            "Optional regen step override for ERROR nodes only. "
+            "One of GENERATOR, QUIZZER, BOTH. "
             "If omitted, uses the node's stored failed_step."
         ),
     ),
     llm_context: LLMContext = Depends(get_llm_context),
 ) -> ConceptNodeResponse:
-    """Regenerate content for a failed concept node."""
+    """Regenerate content for a concept node.
+    
+    Auto-detects path based on node status:
+    - ERROR nodes → regenerate_failed_node (existing partial-regen)
+    - Non-ERROR, non-LOCKED → regenerate_topic_node (full regen)
+    - LOCKED → 400 error
+    """
+    from server.database.learning_persistence import learning_manager
+
+    node = learning_manager.get_concept_node(node_id)
+    if not node:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Concept node not found: {node_id}",
+        )
+
+    if node.get("status") == NodeStatus.LOCKED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot regenerate a LOCKED node. Complete the previous topic first.",
+        )
+
     VALID_STEPS = {"GENERATOR", "QUIZZER", "BOTH"}
     if step is not None and step.upper() not in VALID_STEPS:
         raise HTTPException(
@@ -1027,11 +1053,18 @@ async def regenerate_node_endpoint(
             f"{', '.join(sorted(VALID_STEPS))}",
         )
     try:
-        updated_node = await regenerate_failed_node(
-            node_id=node_id,
-            llm_context=llm_context,
-            regen_step=step.upper() if step else None,
-        )
+        if node.get("status") == NodeStatus.ERROR.value:
+            updated_node = await regenerate_failed_node(
+                node_id=node_id,
+                llm_context=llm_context,
+                regen_step=step.upper() if step else None,
+            )
+        else:
+            updated_node = await regenerate_topic_node(
+                node_id=node_id,
+                llm_context=llm_context,
+            )
+
         if updated_node is None:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

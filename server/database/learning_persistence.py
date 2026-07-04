@@ -1778,6 +1778,109 @@ class LearningManager:
         finally:
             conn.close()
 
+    def replace_node_content(
+        self,
+        node_id: str,
+        content_markdown: str,
+        status: NodeStatus,
+        quiz_set: Optional[QuizSet] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Replace node content atomically without state-machine validation.
+
+        Used by manual topic regeneration where IN_QUIZ / SHOWING_FEEDBACK /
+        COMPLETED nodes must reset to VIEWING_EXPLANATION. Clears error
+        state fields.
+
+        Args:
+            node_id: Target concept node.
+            content_markdown: New explanation content.
+            status: Target status (typically VIEWING_EXPLANATION or LOCKED).
+            quiz_set: New quiz set. None deletes existing quiz data.
+
+        Returns:
+            Updated node dict, or None if node does not exist.
+        """
+        conn = self._get_connection()
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM concept_nodes WHERE id = ?",
+                (node_id,),
+            )
+            if not cursor.fetchone():
+                return None
+
+            cursor.execute(
+                """
+                UPDATE concept_nodes
+                SET content_markdown = ?, status = ?,
+                    error_message = NULL, retry_available = 0,
+                    failed_step = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (content_markdown, status.value, now, node_id),
+            )
+
+            # Handle quiz data
+            if quiz_set is not None:
+                quiz_payload = json.dumps(quiz_set.model_dump())
+                cursor.execute(
+                    "SELECT id FROM quiz_data WHERE node_id = ?",
+                    (node_id,),
+                )
+                quiz_row = cursor.fetchone()
+                if quiz_row:
+                    cursor.execute(
+                        """
+                        UPDATE quiz_data
+                        SET payload = ?, format_version = 1,
+                            shuffle_seed = ?, current_index = ?,
+                            updated_at = ?
+                        WHERE node_id = ?
+                        """,
+                        (
+                            quiz_payload,
+                            quiz_set.shuffle_seed,
+                            quiz_set.current_index,
+                            now,
+                            node_id,
+                        ),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO quiz_data (
+                            id, node_id, payload, format_version,
+                            shuffle_seed, current_index, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            str(uuid.uuid4()),
+                            node_id,
+                            quiz_payload,
+                            1,
+                            quiz_set.shuffle_seed,
+                            quiz_set.current_index,
+                            now,
+                            now,
+                        ),
+                    )
+            else:
+                cursor.execute(
+                    "DELETE FROM quiz_data WHERE node_id = ?",
+                    (node_id,),
+                )
+
+            conn.commit()
+            return self._get_node_by_id(node_id, conn)
+        except sqlite3.Error as e:
+            logger.error(f"Error replacing node content: {e}")
+            raise
+        finally:
+            conn.close()
+
     @staticmethod
     def _is_valid_transition(
         current_status: NodeStatus, next_status: NodeStatus
