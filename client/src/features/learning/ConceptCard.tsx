@@ -248,6 +248,9 @@ export function ConceptCard({
 		node.status === "IN_QUIZ" ||
 		node.status === "SHOWING_FEEDBACK";
 
+	const isLoadingPhase =
+		isRegenerating || (isRegeneratingLocal && streamingMarkdown === "");
+
 	const handleProceedToQuiz = () => {
 		// Prevent transition if not in VIEWING_EXPLANATION state
 		if (node.status === "VIEWING_EXPLANATION") {
@@ -302,7 +305,7 @@ export function ConceptCard({
 					className={cn(
 						"border rounded-lg overflow-hidden topic-card-content relative", // Added relative class
 						statusStyles[node.status],
-						(isRegenerating || isRegeneratingLocal) && "dark:bg-black",
+						isLoadingPhase && "dark:bg-black",
 						isActive && "ring-2 ring-primary ring-offset-2",
 					)}
 				>
@@ -311,7 +314,7 @@ export function ConceptCard({
 						className={cn(
 							"flex items-center gap-3 p-4 border-b",
 							(node.status === "VIEWING_EXPLANATION" || node.status === "COMPLETED") ? "bg-white dark:bg-muted" : "bg-card/50",
-							(isRegenerating || isRegeneratingLocal) && "dark:bg-black",
+							isLoadingPhase && "dark:bg-black",
 						)}
 					>
 						<span className="text-xl">{statusIcons[node.status]}</span>
