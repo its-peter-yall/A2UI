@@ -54,19 +54,19 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import mermaid from "mermaid";
 import { preprocessMermaid } from "./mermaidUtils";
-import { useTheme } from "@/hooks/useTheme";
 
-// Initialize mermaid for dark mode
+// Initialize mermaid for light mode
 if (typeof window !== "undefined") {
 	mermaid.initialize({
 		startOnLoad: false,
-		theme: "dark",
+		theme: "default",
 		securityLevel: "loose",
 		themeVariables: {
-			background: "#18181b",
+			background: "#fafafa",
 			primaryColor: "#ffb74d",
-			primaryTextColor: "#f4f4f5",
+			primaryTextColor: "#18181b",
 			lineColor: "#ffb74d",
+			textColor: "#18181b",
 		}
 	});
 }
@@ -85,11 +85,6 @@ export function Mermaid({ chart }: MermaidProps) {
 	const [error, setError] = useState<string | null>(null);
 	const [isZoomed, setIsZoomed] = useState(false);
 
-	const { theme } = useTheme();
-	const isDark = theme === "system"
-		? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-		: theme === "dark";
-
 	useEffect(() => {
 		let isMounted = true;
 		const renderChart = async () => {
@@ -97,25 +92,18 @@ export function Mermaid({ chart }: MermaidProps) {
 			try {
 				const preprocessedChart = preprocessMermaid(chart);
 
-				// Configure Mermaid dynamically based on light/dark mode before rendering
+				// Configure Mermaid to always render in light mode
 				mermaid.initialize({
 					startOnLoad: false,
-					theme: isDark ? "dark" : "default",
+					theme: "default",
 					securityLevel: "loose",
-					themeVariables: isDark 
-						? {
-								background: "#18181b",
-								primaryColor: "#ffb74d",
-								primaryTextColor: "#f4f4f5",
-								lineColor: "#ffb74d",
-						  }
-						: {
-								background: "#fafafa",
-								primaryColor: "#ffb74d",
-								primaryTextColor: "#18181b",
-								lineColor: "#ffb74d",
-								textColor: "#18181b",
-						  }
+					themeVariables: {
+						background: "#fafafa",
+						primaryColor: "#ffb74d",
+						primaryTextColor: "#18181b",
+						lineColor: "#ffb74d",
+						textColor: "#18181b",
+					}
 				});
 
 				const { svg: renderedSvg } = await mermaid.render(
@@ -147,7 +135,7 @@ export function Mermaid({ chart }: MermaidProps) {
 			isMounted = false;
 			clearTimeout(timer);
 		};
-	}, [chart, isDark]);
+	}, [chart]);
 
 	// Close on escape key
 	useEffect(() => {
@@ -165,6 +153,30 @@ export function Mermaid({ chart }: MermaidProps) {
 
 	return (
 		<div className="mermaid-wrapper my-6">
+			<style>{`
+				.mermaid-zoomed-container {
+					width: 100%;
+				}
+				.mermaid-zoomed-container svg {
+					width: 100% !important;
+					max-width: 100% !important;
+					height: auto !important;
+					max-height: 75vh !important;
+				}
+				.mermaid-container text,
+				.mermaid-container span,
+				.mermaid-container div,
+				.mermaid-container a,
+				.mermaid-container p,
+				.mermaid-zoomed-container text,
+				.mermaid-zoomed-container span,
+				.mermaid-zoomed-container div,
+				.mermaid-zoomed-container a,
+				.mermaid-zoomed-container p {
+					fill: #18181b !important;
+					color: #18181b !important;
+				}
+			`}</style>
 			{/* Off-screen rendering target to allow proper text/layout measurement */}
 			<div ref={containerRef} style={{ position: "absolute", top: "-9999px", left: "-9999px", visibility: "hidden" }} />
 			
@@ -184,7 +196,7 @@ export function Mermaid({ chart }: MermaidProps) {
 				<div 
 					className={cn(
 						"mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border transition-all duration-200 cursor-zoom-in",
-						"border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] hover:border-zinc-300 dark:hover:border-zinc-700/80",
+						"border-zinc-200 bg-zinc-50 hover:border-zinc-300 text-zinc-900",
 						error ? 'opacity-40' : 'opacity-100'
 					)}
 					dangerouslySetInnerHTML={{ __html: svg }} 
@@ -201,12 +213,12 @@ export function Mermaid({ chart }: MermaidProps) {
 					}}
 				>
 					<div 
-						className="relative w-full max-w-4xl md:max-w-5xl max-h-[90vh] bg-zinc-50 dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
+						className="relative w-full max-w-4xl md:max-w-5xl max-h-[90vh] bg-zinc-50 border border-zinc-200 rounded-2xl p-6 md:p-8 shadow-2xl flex items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200 text-zinc-900"
 						onClick={() => setIsZoomed(false)}
 					>
 						<button
 							type="button"
-							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-200/80 dark:bg-zinc-900/80 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
+							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-200/80 hover:bg-zinc-300 text-zinc-600 hover:text-zinc-800 transition-colors cursor-pointer focus:outline-none z-10"
 							onClick={() => setIsZoomed(false)}
 							aria-label="Close diagram"
 						>
@@ -216,17 +228,6 @@ export function Mermaid({ chart }: MermaidProps) {
 							className="mermaid-zoomed-container flex justify-center w-full" 
 							dangerouslySetInnerHTML={{ __html: svg }} 
 						/>
-						<style>{`
-							.mermaid-zoomed-container {
-								width: 100%;
-							}
-							.mermaid-zoomed-container svg {
-								width: 100% !important;
-								max-width: 100% !important;
-								height: auto !important;
-								max-height: 75vh !important;
-							}
-						`}</style>
 					</div>
 				</div>,
 				document.body
@@ -255,11 +256,6 @@ export function VectorPlot({ data }: VectorPlotProps) {
 	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isZoomed, setIsZoomed] = useState(false);
-
-	const { theme } = useTheme();
-	const isDark = theme === "system"
-		? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-		: theme === "dark";
 
 	useEffect(() => {
 		try {
@@ -324,10 +320,10 @@ export function VectorPlot({ data }: VectorPlotProps) {
 	const originX = mapX(0);
 	const originY = mapY(0);
 
-	const gridStroke = isDark ? "#27272a" : "#e4e4e7";
-	const axisStroke = isDark ? "#52525b" : "#a1a1aa";
-	const axisTextFill = isDark ? "#a1a1aa" : "#71717a";
-	const originTextFill = isDark ? "#52525b" : "#a1a1aa";
+	const gridStroke = "#e4e4e7";
+	const axisStroke = "#a1a1aa";
+	const axisTextFill = "#71717a";
+	const originTextFill = "#a1a1aa";
 
 	const gridLines: React.ReactNode[] = [];
 	if (plotData.grid !== false) {
@@ -493,7 +489,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 
 	return (
 		<div 
-			className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-[#18181b] select-none cursor-zoom-in hover:border-zinc-300 dark:hover:border-zinc-700/80 transition-all duration-200"
+			className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-200 bg-zinc-50 select-none cursor-zoom-in hover:border-zinc-300 transition-all duration-200 text-zinc-900"
 			onClick={() => setIsZoomed(true)}
 		>
 			{renderSvg(false)}
@@ -507,12 +503,12 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					}}
 				>
 					<div 
-						className="relative w-full max-w-xl md:max-w-2xl bg-zinc-50 dark:bg-[#18181b] border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
+						className="relative w-full max-w-xl md:max-w-2xl bg-zinc-50 border border-zinc-200 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200 text-zinc-900"
 						onClick={() => setIsZoomed(false)}
 					>
 						<button
 							type="button"
-							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-200/80 dark:bg-zinc-900/80 hover:bg-zinc-300 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
+							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-200/80 hover:bg-zinc-300 text-zinc-600 hover:text-zinc-800 transition-colors cursor-pointer focus:outline-none z-10"
 							onClick={() => setIsZoomed(false)}
 							aria-label="Close graph"
 						>
