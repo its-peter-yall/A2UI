@@ -31,6 +31,7 @@ USAGE:
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,6 +39,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from server.agents.base import BaseAgent
 from server.schemas.learning import TopicNode
 from server.schemas.llm import LLMContext
+from server.utils.mermaid_validator import validate_mermaid_code
 
 
 logger = logging.getLogger(__name__)
@@ -273,18 +275,59 @@ class GeneratorAgent(BaseAgent):
             f"'{topic.title}'"
         )
 
-        content = await self.generate(
-            response_model=GeneratedContent,
-            user_message=user_message,
-            llm_context=llm_context,
+        max_attempts = 3
+        current_attempt = 1
+        last_error = None
+        active_user_message = user_message
+
+        while current_attempt <= max_attempts:
+            content = await self.generate(
+                response_model=GeneratedContent,
+                user_message=active_user_message,
+                llm_context=llm_context,
+            )
+
+            mermaid_blocks = re.findall(
+                r"```mermaid\s*\n(.*?)\n```", content.content_markdown, re.DOTALL
+            )
+
+            invalid_block_err = None
+            for idx, block in enumerate(mermaid_blocks):
+                err = validate_mermaid_code(block)
+                if err:
+                    invalid_block_err = f"Mermaid Block #{idx + 1} is invalid: {err}"
+                    break
+
+            if not invalid_block_err:
+                logger.info(
+                    f"GeneratorAgent created content for '{topic.title}' "
+                    f"with {len(content.key_takeaways)} takeaways (attempt {current_attempt})"
+                )
+                return content
+
+            logger.warning(
+                f"GeneratorAgent attempt {current_attempt} generated invalid Mermaid syntax: {invalid_block_err}"
+            )
+
+            # Prepare feedback message for the next attempt
+            active_user_message = (
+                f"{user_message}\n\n"
+                f"--- RETRY FEEDBACK (ATTEMPT {current_attempt}/{max_attempts}) ---\n"
+                f"Your previous response had a Mermaid diagram rendering/parsing error:\n"
+                f"{invalid_block_err}\n\n"
+                f"Please correct the Mermaid diagram syntax. Make sure:\n"
+                f"1. You do not define two nodes on the same line without a connector/arrow or newline.\n"
+                f"2. Every node definition has valid opening and closing shapes (e.g. `A[\"Label\"] --> B[\"Label\"]`).\n"
+                f"3. You do not place double quotes inside double-quoted labels (use single quotes internally instead, e.g. `A[\"Can 'see' context\"]`).\n"
+                f"Please regenerate the entire response with the corrected content."
+            )
+
+            last_error = invalid_block_err
+            current_attempt += 1
+
+        logger.error(
+            f"GeneratorAgent failed to generate valid Mermaid diagram after {max_attempts} attempts. Last error: {last_error}"
         )
-
-        logger.info(
-            f"GeneratorAgent created content for '{topic.title}' "
-            f"with {len(content.key_takeaways)} takeaways"
-        )
-
-
         return content
 
     def _build_user_message(
