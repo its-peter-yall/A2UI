@@ -45,13 +45,15 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkEmoji from "remark-emoji";
 import rehypeExternalLinks from "rehype-external-links";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
+import { createPortal } from "react-dom";
 import "katex/dist/katex.min.css";
-import { MessageCircle, Copy, Check } from "lucide-react";
+import { MessageCircle, Copy, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import mermaid from "mermaid";
+import { preprocessMermaid } from "./mermaidUtils";
 
 // Initialize mermaid for dark mode
 if (typeof window !== "undefined") {
@@ -68,41 +70,19 @@ if (typeof window !== "undefined") {
 	});
 }
 
-/**
- * Preprocesses a Mermaid chart string to fix common syntax errors.
- * Specifically, it replaces nested, unescaped double quotes inside node labels with single quotes.
- * E.g., `A["multimodal LLM<br/>Can "see" image context"]` becomes `A["multimodal LLM<br/>Can 'see' image context"]`
- */
-export function preprocessMermaid(chart: string): string {
-	const lines = chart.split("\n");
-	const processedLines = lines.map((line) => {
-		// Matches node definitions with double-quoted labels:
-		// Group 1: Node ID
-		// Group 2: Opening shape + quote (e.g. [" or (")
-		// Group 3: Label content (lazy match)
-		// Group 4: Closing quote + shape (e.g. "] or ")
-		// Lookahead: followed by connector, spaces + connector, newline, or end of string
-		const nodeRegex = /(\b\w+)\s*(\[\s*\"|\(\s*\"|\{\s*\"|\(\[\s*\"|\[\(\s*\"|\(\(\s*\"|\[\\\"\s*|\[\/\"\s*|>\s*\")([\s\S]*?)(\"\s*\]|\"\s*\)|\"\s*\}|\"\s*\]\s*\)|\"\s*\)\s*\]|\"\s*\)\s*\)|\"\s*\\\]|\"\s*\/\]|\"\s*\])(?=\s*(?:-->|---|==>|-\.-|--|\n|\r|$))/g;
-
-		return line.replace(nodeRegex, (_match, id, open, content, close) => {
-			// Replace any nested double quotes (escaped or unescaped) with single quotes
-			const cleanContent = content.replace(/\\"/g, "'").replace(/"/g, "'");
-			return `${id}${open}${cleanContent}${close}`;
-		});
-	});
-
-	return processedLines.join("\n");
-}
+// Helper functions moved to external utility files to satisfy react-refresh component-only export requirements.
 
 interface MermaidProps {
 	chart: string;
 }
 
 export function Mermaid({ chart }: MermaidProps) {
-	const elementId = useRef(`mermaid-${Math.floor(Math.random() * 1000000)}`);
+	const uniqueId = useId().replace(/:/g, "-");
+	const elementId = useRef(`mermaid-${uniqueId}`);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [svg, setSvg] = useState<string>("");
 	const [error, setError] = useState<string | null>(null);
+	const [isZoomed, setIsZoomed] = useState(false);
 
 	useEffect(() => {
 		let isMounted = true;
@@ -119,7 +99,7 @@ export function Mermaid({ chart }: MermaidProps) {
 					setSvg(renderedSvg);
 					setError(null);
 				}
-			} catch (err: any) {
+			} catch (err) {
 				console.error("Mermaid parsing error: ", err);
 				if (containerRef.current) {
 					containerRef.current.innerHTML = "";
@@ -141,6 +121,20 @@ export function Mermaid({ chart }: MermaidProps) {
 		};
 	}, [chart]);
 
+	// Close on escape key
+	useEffect(() => {
+		if (!isZoomed) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.stopPropagation();
+				e.preventDefault();
+				setIsZoomed(false);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown, true);
+		return () => window.removeEventListener("keydown", handleKeyDown, true);
+	}, [isZoomed]);
+
 	return (
 		<div className="mermaid-wrapper my-6">
 			{/* Off-screen rendering target to allow proper text/layout measurement */}
@@ -160,9 +154,50 @@ export function Mermaid({ chart }: MermaidProps) {
 			
 			{svg && (
 				<div 
-					className={`mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border border-zinc-800 bg-[#18181b] transition-opacity duration-200 ${error ? 'opacity-40' : 'opacity-100'}`} 
+					className={`mermaid-container flex justify-center overflow-x-auto p-4 rounded-xl border border-zinc-800 bg-[#18181b] transition-all duration-200 cursor-zoom-in hover:border-zinc-700/80 ${error ? 'opacity-40' : 'opacity-100'}`} 
 					dangerouslySetInnerHTML={{ __html: svg }} 
+					onClick={() => setIsZoomed(true)}
 				/>
+			)}
+
+			{isZoomed && svg && createPortal(
+				<div 
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 md:p-8 cursor-zoom-out select-none animate-in fade-in duration-200"
+					onClick={(e) => {
+						e.stopPropagation();
+						setIsZoomed(false);
+					}}
+				>
+					<div 
+						className="relative w-full max-w-4xl md:max-w-5xl max-h-[90vh] bg-[#18181b] border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
+						onClick={() => setIsZoomed(false)}
+					>
+						<button
+							type="button"
+							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
+							onClick={() => setIsZoomed(false)}
+							aria-label="Close diagram"
+						>
+							<X className="h-5 w-5" />
+						</button>
+						<div 
+							className="mermaid-zoomed-container flex justify-center w-full" 
+							dangerouslySetInnerHTML={{ __html: svg }} 
+						/>
+						<style>{`
+							.mermaid-zoomed-container {
+								width: 100%;
+							}
+							.mermaid-zoomed-container svg {
+								width: 100% !important;
+								max-width: 100% !important;
+								height: auto !important;
+								max-height: 75vh !important;
+							}
+						`}</style>
+					</div>
+				</div>,
+				document.body
 			)}
 		</div>
 	);
@@ -187,6 +222,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 		yAxisLabel?: string;
 	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [isZoomed, setIsZoomed] = useState(false);
 
 	useEffect(() => {
 		try {
@@ -196,10 +232,25 @@ export function VectorPlot({ data }: VectorPlotProps) {
 			}
 			setPlotData(parsed);
 			setError(null);
-		} catch (err: any) {
-			setError(`Invalid plot data: ${err.message}`);
+		} catch (err) {
+			const errMsg = err instanceof Error ? err.message : String(err);
+			setError(`Invalid plot data: ${errMsg}`);
 		}
 	}, [data]);
+
+	// Close on escape key
+	useEffect(() => {
+		if (!isZoomed) return;
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.stopPropagation();
+				e.preventDefault();
+				setIsZoomed(false);
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown, true);
+		return () => window.removeEventListener("keydown", handleKeyDown, true);
+	}, [isZoomed]);
 
 	if (error) {
 		return (
@@ -211,9 +262,10 @@ export function VectorPlot({ data }: VectorPlotProps) {
 
 	if (!plotData) return null;
 
-	const width = 300;
+	const width = 380;
 	const height = 300;
-	const padding = 30;
+	const paddingX = 70;
+	const paddingY = 30;
 	
 	const allX = plotData.vectors.flatMap(v => [0, v.x]);
 	const allY = plotData.vectors.flatMap(v => [0, v.y]);
@@ -226,16 +278,16 @@ export function VectorPlot({ data }: VectorPlotProps) {
 	const domainY = [minY - 1, maxY + 1];
 	
 	const mapX = (val: number) => {
-		return padding + ((val - domainX[0]) / (domainX[1] - domainX[0])) * (width - 2 * padding);
+		return paddingX + ((val - domainX[0]) / (domainX[1] - domainX[0])) * (width - 2 * paddingX);
 	};
 	const mapY = (val: number) => {
-		return height - (padding + ((val - domainY[0]) / (domainY[1] - domainY[0])) * (height - 2 * padding));
+		return height - (paddingY + ((val - domainY[0]) / (domainY[1] - domainY[0])) * (height - 2 * paddingY));
 	};
 
 	const originX = mapX(0);
 	const originY = mapY(0);
 
-	const gridLines = [];
+	const gridLines: React.ReactNode[] = [];
 	if (plotData.grid !== false) {
 		for (let x = Math.ceil(domainX[0]); x <= Math.floor(domainX[1]); x++) {
 			if (x !== 0) {
@@ -243,9 +295,9 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					<line
 						key={`v-${x}`}
 						x1={mapX(x)}
-						y1={padding}
+						y1={paddingY}
 						x2={mapX(x)}
-						y2={height - padding}
+						y2={height - paddingY}
 						stroke="#27272a"
 						strokeWidth="0.5"
 					/>
@@ -257,9 +309,9 @@ export function VectorPlot({ data }: VectorPlotProps) {
 				gridLines.push(
 					<line
 						key={`h-${y}`}
-						x1={padding}
+						x1={paddingX}
 						y1={mapY(y)}
-						x2={width - padding}
+						x2={width - paddingX}
 						y2={mapY(y)}
 						stroke="#27272a"
 						strokeWidth="0.5"
@@ -269,14 +321,21 @@ export function VectorPlot({ data }: VectorPlotProps) {
 		}
 	}
 
-	return (
-		<div className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-800 bg-[#18181b] select-none">
-			<svg width={width} height={height} className="overflow-visible">
+	const renderSvg = (zoomed: boolean) => {
+		const idSuffix = zoomed ? "-zoomed" : "";
+		return (
+			<svg 
+				viewBox={`0 0 ${width} ${height}`} 
+				className={cn(
+					"w-full h-auto overflow-visible transition-all duration-200",
+					zoomed ? "max-w-[500px]" : "max-w-[380px]"
+				)}
+			>
 				<defs>
 					{plotData.vectors.map((v, i) => (
 						<marker
-							key={`arrow-${i}`}
-							id={`arrow-${i}`}
+							key={`arrow-${i}${idSuffix}`}
+							id={`arrow-${i}${idSuffix}`}
 							viewBox="0 0 10 10"
 							refX="6"
 							refY="5"
@@ -292,24 +351,24 @@ export function VectorPlot({ data }: VectorPlotProps) {
 				{gridLines}
 
 				<line
-					x1={padding}
+					x1={paddingX}
 					y1={originY}
-					x2={width - padding}
+					x2={width - paddingX}
 					y2={originY}
 					stroke="#52525b"
 					strokeWidth="1.5"
 				/>
 				<line
 					x1={originX}
-					y1={padding}
+					y1={paddingY}
 					x2={originX}
-					y2={height - padding}
+					y2={height - paddingY}
 					stroke="#52525b"
 					strokeWidth="1.5"
 				/>
 
 				<text
-					x={width - padding + 5}
+					x={width - paddingX + 5}
 					y={originY + 4}
 					fill="#a1a1aa"
 					fontSize="10"
@@ -319,7 +378,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 				</text>
 				<text
 					x={originX}
-					y={padding - 8}
+					y={paddingY - 8}
 					fill="#a1a1aa"
 					fontSize="10"
 					textAnchor="middle"
@@ -350,7 +409,7 @@ export function VectorPlot({ data }: VectorPlotProps) {
 								y2={vy}
 								stroke={color}
 								strokeWidth="2.5"
-								markerEnd={`url(#arrow-${i})`}
+								markerEnd={`url(#arrow-${i}${idSuffix})`}
 							/>
 							<text
 								x={vx + (v.x >= 0 ? 8 : -8)}
@@ -366,6 +425,43 @@ export function VectorPlot({ data }: VectorPlotProps) {
 					);
 				})}
 			</svg>
+		);
+	};
+
+	return (
+		<div 
+			className="flex flex-col items-center justify-center my-6 p-4 rounded-xl border border-zinc-800 bg-[#18181b] select-none cursor-zoom-in hover:border-zinc-700/80 transition-all duration-200"
+			onClick={() => setIsZoomed(true)}
+		>
+			{renderSvg(false)}
+
+			{isZoomed && createPortal(
+				<div 
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 md:p-8 cursor-zoom-out select-none animate-in fade-in duration-200"
+					onClick={(e) => {
+						e.stopPropagation();
+						setIsZoomed(false);
+					}}
+				>
+					<div 
+						className="relative w-full max-w-xl md:max-w-2xl bg-[#18181b] border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-2xl flex flex-col items-center justify-center overflow-auto cursor-zoom-out animate-in zoom-in-95 duration-200"
+						onClick={() => setIsZoomed(false)}
+					>
+						<button
+							type="button"
+							className="absolute top-4 right-4 p-2 rounded-full bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer focus:outline-none z-10"
+							onClick={() => setIsZoomed(false)}
+							aria-label="Close graph"
+						>
+							<X className="h-5 w-5" />
+						</button>
+						<div className="w-full flex items-center justify-center">
+							{renderSvg(true)}
+						</div>
+					</div>
+				</div>,
+				document.body
+			)}
 		</div>
 	);
 }
