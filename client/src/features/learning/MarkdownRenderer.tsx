@@ -45,7 +45,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkEmoji from "remark-emoji";
 import rehypeExternalLinks from "rehype-external-links";
-import React, { useState, useEffect, useRef, useId } from "react";
+import React, { useState, useEffect, useRef, useId, useMemo } from "react";
 import { createPortal } from "react-dom";
 import "katex/dist/katex.min.css";
 import { MessageCircle, Copy, Check, X } from "lucide-react";
@@ -638,6 +638,37 @@ interface InlineMarkdownProps {
 }
 
 export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
+	const inlineComponents = useMemo(() => ({
+		p({ children }: React.HTMLAttributes<HTMLParagraphElement>) {
+			return <>{children}</>;
+		},
+		code({
+			className: codeClassName,
+			children,
+			...props
+		}: React.HTMLAttributes<HTMLElement>) {
+			const isInline = !codeClassName;
+			if (isInline) {
+				return (
+					<code
+						className={cn(
+							"bg-primary/10 text-primary px-1 py-0.5 rounded font-mono text-[13px]",
+							codeClassName,
+						)}
+						{...props}
+					>
+						{children}
+					</code>
+				);
+			}
+			return (
+				<code className={codeClassName} {...props}>
+					{children}
+				</code>
+			);
+		},
+	}), []);
+
 	return (
 		<span className={cn("prose-inline", className)}>
 			<ReactMarkdown
@@ -659,36 +690,7 @@ export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
 					"span",
 				]}
 				unwrapDisallowed
-				components={{
-					p({ children }) {
-						return <>{children}</>;
-					},
-					code({
-						className: codeClassName,
-						children,
-						...props
-					}: React.HTMLAttributes<HTMLElement>) {
-						const isInline = !codeClassName;
-						if (isInline) {
-							return (
-								<code
-									className={cn(
-										"bg-primary/10 text-primary px-1 py-0.5 rounded font-mono text-[13px]",
-										codeClassName,
-									)}
-									{...props}
-								>
-									{children}
-								</code>
-							);
-						}
-						return (
-							<code className={codeClassName} {...props}>
-								{children}
-							</code>
-						);
-					},
-				}}
+				components={inlineComponents}
 			>
 				{content}
 			</ReactMarkdown>
@@ -703,36 +705,127 @@ export function MarkdownRenderer({
 	onToggleHeadingChat,
 	enableHeadingChat = false,
 }: MarkdownRendererProps) {
-	const h2 = createHeadingComponent(
+	const h2 = useMemo(() => createHeadingComponent(
 		2,
 		selectedHeadingIds,
 		onToggleHeadingChat,
 		enableHeadingChat,
-	);
-	const h3 = createHeadingComponent(
+	), [selectedHeadingIds, onToggleHeadingChat, enableHeadingChat]);
+
+	const h3 = useMemo(() => createHeadingComponent(
 		3,
 		selectedHeadingIds,
 		onToggleHeadingChat,
 		enableHeadingChat,
-	);
-	const h4 = createHeadingComponent(
+	), [selectedHeadingIds, onToggleHeadingChat, enableHeadingChat]);
+
+	const h4 = useMemo(() => createHeadingComponent(
 		4,
 		selectedHeadingIds,
 		onToggleHeadingChat,
 		enableHeadingChat,
-	);
-	const h5 = createHeadingComponent(
+	), [selectedHeadingIds, onToggleHeadingChat, enableHeadingChat]);
+
+	const h5 = useMemo(() => createHeadingComponent(
 		5,
 		selectedHeadingIds,
 		onToggleHeadingChat,
 		enableHeadingChat,
-	);
-	const h6 = createHeadingComponent(
+	), [selectedHeadingIds, onToggleHeadingChat, enableHeadingChat]);
+
+	const h6 = useMemo(() => createHeadingComponent(
 		6,
 		selectedHeadingIds,
 		onToggleHeadingChat,
 		enableHeadingChat,
-	);
+	), [selectedHeadingIds, onToggleHeadingChat, enableHeadingChat]);
+
+	const markdownComponents = useMemo(() => ({
+		h2,
+		h3,
+		h4,
+		h5,
+		h6,
+		table({ children, ...props }: React.TableHTMLAttributes<HTMLTableElement>) {
+			return (
+				<div 
+					className="w-full overflow-x-auto border border-foreground/15 rounded-xl max-w-full shadow-sm"
+					style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}
+				>
+					<table className="min-w-full divide-y divide-foreground/15 text-[14px] table-auto border-collapse m-0!" {...props}>
+						{children}
+					</table>
+				</div>
+			);
+		},
+		thead({ children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
+			return (
+				<thead className="bg-muted/40" {...props}>
+					{children}
+				</thead>
+			);
+		},
+		tbody({ children, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
+			return (
+				<tbody className="divide-y divide-foreground/10" {...props}>
+					{children}
+				</tbody>
+			);
+		},
+		tr({ children, ...props }: React.HTMLAttributes<HTMLTableRowElement>) {
+			return (
+				<tr className="hover:bg-muted/10 transition-colors" {...props}>
+					{children}
+				</tr>
+			);
+		},
+		th({ children, ...props }: React.ThHTMLAttributes<HTMLTableHeaderCellElement>) {
+			return (
+				<th className="px-4 py-3 text-left font-bold text-primary border-b border-r border-foreground/20 last:border-r-0 uppercase tracking-wider text-[12px] whitespace-nowrap" {...props}>
+					{children}
+				</th>
+			);
+		},
+		td({ children, ...props }: React.TdHTMLAttributes<HTMLTableDataCellElement>) {
+			return (
+				<td className="px-4 py-3 text-foreground/90 border-b border-r border-foreground/10 last:border-r-0 align-middle leading-relaxed" {...props}>
+					{children}
+				</td>
+			);
+		},
+		pre({ children }: React.HTMLAttributes<HTMLPreElement>) {
+			return <>{children}</>;
+		},
+		code({
+			className: codeClassName,
+			children,
+			...props
+		}: React.HTMLAttributes<HTMLElement>) {
+			const isInline = !codeClassName;
+			if (isInline) {
+				return (
+					<code
+						className={cn(
+							"bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono text-[14px]",
+							codeClassName,
+						)}
+						{...props}
+					>
+						{children}
+					</code>
+				);
+			}
+			const match = /language-([\w-]+)/.exec(codeClassName || "");
+			const lang = match ? match[1] : "";
+			if (lang === "mermaid") {
+				return <Mermaid chart={String(children).replace(/\n$/, "")} />;
+			}
+			if (lang === "vector-plot") {
+				return <VectorPlot data={String(children).replace(/\n$/, "")} />;
+			}
+			return <CodeBlock className={codeClassName}>{children}</CodeBlock>;
+		},
+	}), [h2, h3, h4, h5, h6]);
 
 	return (
 		<div
@@ -766,92 +859,7 @@ export function MarkdownRenderer({
 					rehypeKatex,
 					[rehypeExternalLinks, { target: "_blank", rel: ["noopener", "noreferrer"] }]
 				]}
-				components={{
-					h2,
-					h3,
-					h4,
-					h5,
-					h6,
-					table({ children, ...props }) {
-						return (
-							<div 
-								className="w-full overflow-x-auto border border-foreground/15 rounded-xl max-w-full shadow-sm"
-								style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}
-							>
-								<table className="min-w-full divide-y divide-foreground/15 text-[14px] table-auto border-collapse m-0!" {...props}>
-									{children}
-								</table>
-							</div>
-						);
-					},
-					thead({ children, ...props }) {
-						return (
-							<thead className="bg-muted/40" {...props}>
-								{children}
-							</thead>
-						);
-					},
-					tbody({ children, ...props }) {
-						return (
-							<tbody className="divide-y divide-foreground/10" {...props}>
-								{children}
-							</tbody>
-						);
-					},
-					tr({ children, ...props }) {
-						return (
-							<tr className="hover:bg-muted/10 transition-colors" {...props}>
-								{children}
-							</tr>
-						);
-					},
-					th({ children, ...props }) {
-						return (
-							<th className="px-4 py-3 text-left font-bold text-primary border-b border-r border-foreground/20 last:border-r-0 uppercase tracking-wider text-[12px] whitespace-nowrap" {...props}>
-								{children}
-							</th>
-						);
-					},
-					td({ children, ...props }) {
-						return (
-							<td className="px-4 py-3 text-foreground/90 border-b border-r border-foreground/10 last:border-r-0 align-middle leading-relaxed" {...props}>
-								{children}
-							</td>
-						);
-					},
-					pre({ children }) {
-						return <>{children}</>;
-					},
-					code({
-						className: codeClassName,
-						children,
-						...props
-					}: React.HTMLAttributes<HTMLElement>) {
-						const isInline = !codeClassName;
-						if (isInline) {
-							return (
-								<code
-									className={cn(
-										"bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono text-[14px]",
-										codeClassName,
-									)}
-									{...props}
-								>
-									{children}
-								</code>
-							);
-						}
-						const match = /language-([\w-]+)/.exec(codeClassName || "");
-						const lang = match ? match[1] : "";
-						if (lang === "mermaid") {
-							return <Mermaid chart={String(children).replace(/\n$/, "")} />;
-						}
-						if (lang === "vector-plot") {
-							return <VectorPlot data={String(children).replace(/\n$/, "")} />;
-						}
-						return <CodeBlock className={codeClassName}>{children}</CodeBlock>;
-					},
-				}}
+				components={markdownComponents}
 			>
 				{content}
 			</ReactMarkdown>
