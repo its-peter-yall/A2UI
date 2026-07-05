@@ -29,6 +29,7 @@ Orients agentic coding assistants. Follow commands, style rules below; match loc
   - `src/providers/`: React context providers
   - `src/types/`: TypeScript type definitions
 - `server/`: FastAPI backend with Pydantic v2
+  - `.venv/`: Python dependencies
   - `agents/`: AI agent pipeline (Planner, Generator, Quizzer)
   - `database/`: SQLite persistence layer
   - `routers/`: REST API endpoints
