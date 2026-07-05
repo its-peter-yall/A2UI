@@ -1,434 +1,427 @@
-# Implementation Plan: Manual Topic Node Content Regeneration
+# Implementation Plan: Table of Contents & Progress Bar Refactoring
 
-## Overview
-
-Allow users to manually regenerate any topic node's content (explanation + quizzes) on-demand via a refresh button in the concept card header. The existing ERROR-state retry flow stays untouched (Non-Goal #1).
+This document describes the step-by-step implementation plan for refactoring the course progress indicators and introducing a structured Table of Contents (TOC) feature. The changes align with the codebase conventions and satisfy all requirements outlined in [goal.md](file:///D:/Peter/A2UI/docs/goal.md).
 
 ---
 
-## Architecture Summary
+## 1. Design & UI Specifications
 
-| Layer  | Component                  | Change                                                            |
-| ------ | -------------------------- | ----------------------------------------------------------------- |
-| Server | `regen.py`                 | Add `regenerate_topic_node()` — runs both agents unconditionally |
-| Server | `learning_persistence.py`  | Add `replace_node_content()` — bypasses state-machine validation  |
-| Server | `routers/learning.py`      | Branch on new `?manual=true` query param                          |
-| Client | `lib/learningApi.ts`       | `regenerateNode()` sends `manual=true`                            |
-| Client | `features/learning/ConceptCard.tsx` | Add `RefreshCw` icon button in card header                |
+### A. Table of Contents Modal
+The Table of Contents displays as a beautiful glassmorphic modal overlay. It provides structured overview and navigation capabilities for the course.
 
-`LearningPathContainer.tsx` and `useLearningMutations.ts` need **no changes** — both already wire `onRegenerate` and `isRegenerating` through to `ConceptCard`.
+#### Styling Tokens (Tailwind 4.x)
+- **Backdrop Overlay**: `fixed inset-0 z-50 bg-black/60 backdrop-blur-sm p-4 flex items-center justify-center`
+- **Modal Container**: `bg-card/95 backdrop-blur-md border border-border shadow-2xl rounded-xl p-6 w-full max-w-4xl max-h-[85vh] flex flex-col focus:outline-none relative`
+- **Topic Status Badge Styles**:
+  - *Mastered*: `bg-emerald-500/10 text-emerald-400 border border-emerald-500/20`
+  - *In Progress*: `bg-amber-500/10 text-amber-400 border border-amber-500/20`
+  - *Locked*: `bg-zinc-800/50 text-zinc-500 border border-zinc-700/30`
+- **Complexity Badge Styles**:
+  - *Basic*: `bg-emerald-500/10 text-emerald-400 border border-emerald-500/20`
+  - *Intermediate*: `bg-amber-500/10 text-amber-400 border border-amber-500/20`
+  - *Advanced*: `bg-rose-500/10 text-rose-400 border border-rose-500/20`
+
+#### Exact Column Layout
+We use a standard HTML `<table>` or grid system nested in a scrollable body wrapper (`overflow-y-auto h-[480px] max-h-[480px] pr-2 scrollbar-thin`):
+1. **Column 1 (`Topic #` / `w-[10%]` / `text-center`)**: Displays the 1-based topic index (`#1`, `#2`, etc.).
+2. **Column 2 (`Topic Name` / `w-[50%]`)**: Displayed as a button/link. If the topic is unlocked, clicking navigates to the topic and closes the modal. If locked, it displays as muted text.
+3. **Column 3 (`Quizzes` / `w-[15%]` / `text-center`)**: Shows the total count of quizzes in this topic.
+4. **Column 4 (`Difficulty` / `w-[15%]` / `text-center`)**: Displays a badge of complexity (Basic, Intermediate, Advanced).
+5. **Column 5 (`Status` / `w-[10%]` / `text-center`)**: Displays status indicator (Mastered / In Progress / Locked).
+
+#### Topic Pagination & Scrolling Height Constraints
+To display exactly **10 topics at once**, we set the row height to a fixed value (e.g. `h-[48px]`) and the table body container height to exactly `480px` (`h-[480px]`). Any additional topics are scrolled to view.
+
+#### Scroll-to-View Handling
+When the modal opens, the active topic row should be automatically scrolled into view. We handle this using a React `ref` pointing to the row of the current active topic:
+```tsx
+const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+
+useEffect(() => {
+  if (isOpen && activeRowRef.current) {
+    activeRowRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }
+}, [isOpen]);
+```
 
 ---
 
-## Critical Constraint: State-Machine Transition Validation
+### B. Glowing Green Progress Bar
+The old step-by-step navigation progress bar (`o---o---o`) and its pagination controls are removed. It is replaced with a single, high-fidelity glowing progress bar.
 
-`LearningManager._is_valid_transition` (`server/database/learning_persistence.py:1782`) blocks these transitions:
-
-| From                | To                  | Allowed? |
-| ------------------- | ------------------- | -------- |
-| `VIEWING_EXPLANATION` | `VIEWING_EXPLANATION` | yes (same) |
-| `IN_QUIZ`             | `VIEWING_EXPLANATION` | **NO**   |
-| `SHOWING_FEEDBACK`    | `VIEWING_EXPLANATION` | **NO**   |
-| `COMPLETED`           | `VIEWING_EXPLANATION` | **NO**   |
-
-Manual regen must reset `IN_QUIZ` / `SHOWING_FEEDBACK` / `COMPLETED` → `VIEWING_EXPLANATION`. Solution: a new persistence method `replace_node_content()` that writes content + status atomically **without** invoking `_is_valid_transition`. Existing `update_node_content()` stays untouched (used by `regenerate_failed_node` which only transitions from `ERROR` — already allowed).
-
----
-
-## Phase 1 — Server: Extend Regeneration for Any Topic Node
-
-### 1.1 `server/graph/regen.py` — Add `regenerate_topic_node()`
-
-**Location:** Append new function after `regenerate_failed_node` (line 186).
-
-**Signature:**
-
-```python
-async def regenerate_topic_node(
-    node_id: str,
-    llm_context: Optional[LLMContext] = None,
-) -> Optional[Dict[str, Any]]:
-```
-
-**Behavior:**
-
-1. Fetch node via `learning_manager.get_concept_node(node_id)` (line 71 reference).
-2. Raise `LookupError` if node missing.
-3. Raise `ValueError` if `node["status"] == NodeStatus.LOCKED.value` ("Node is locked; cannot regenerate").
-4. Raise `ValueError` if `node["status"] == NodeStatus.ERROR.value` ("Use error retry endpoint for ERROR nodes"). This keeps the two paths disjoint.
-5. Derive session context (lines 95–111 reference): `prev_summary`, `next_summary`, `previous_status` from siblings.
-6. Compute `quiz_count` from existing quiz payload (lines 112–117 reference) — preserves the user's existing quiz count preference.
-7. Build `TopicNode` (lines 119–126 reference).
-8. **Always** run generator agent (mirrors lines 140–149, but unconditional):
-   ```python
-   content = await generator_agent.generate_explanation(
-       topic=topic, prev_summary=prev_summary,
-       next_summary=next_summary, llm_context=llm_context,
-   )
-   new_content_markdown = content.content_markdown
-   ```
-9. **Always** run quizzer agent (mirrors lines 151–157, but unconditional):
-   ```python
-   new_quiz_set = await quizzer_agent.generate_quiz_set(
-       topic=topic, content=new_content_markdown,
-       quiz_count=quiz_count, llm_context=llm_context,
-   )
-   ```
-10. Compute new status (lines 159–163 reference):
-    ```python
-    new_status = NodeStatus.LOCKED
-    if sequence_index == 0:
-        new_status = NodeStatus.VIEWING_EXPLANATION
-    elif previous_status == NodeStatus.COMPLETED.value:
-        new_status = NodeStatus.VIEWING_EXPLANATION
-    ```
-11. Call `learning_manager.replace_node_content(...)` (new method — see 1.2) with `node_id`, `content_markdown`, `status=new_status`, `quiz_set=new_quiz_set`.
-12. Log success + return updated node dict (mirror lines 175–185).
-
-**Imports:** Reuse existing imports (lines 24–38) — no new symbols needed.
-
-**Why a separate function (not extension of `regenerate_failed_node`):**
-- Keeps the failed-node retry logic intact (Non-Goal #1).
-- Manual regen has different validation rules (no `retry_available` check, no `failed_step` branching).
-- Easier to test in isolation.
+#### Structure & Glow Styling
+The glowing bar consists of an outer track and an animated inner fill:
+- **Outer Track**: `h-3 bg-zinc-800/80 rounded-full relative overflow-hidden shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] border border-zinc-700/20`
+- **Inner Fill**: A Framer Motion `motion.div` with an emerald-to-green gradient and neon box shadow:
+  ```tsx
+  <motion.div
+    className="h-full bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-400 rounded-full relative shadow-[0_0_12px_rgba(34,197,94,0.8)]"
+    initial={{ width: 0 }}
+    animate={{ width: `${percent}%` }}
+    transition={{ duration: 0.5, ease: "easeOut" }}
+  >
+    {/* Inner shimmer sweep */}
+    <span className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.15)_50%,transparent_100%)] animate-[shimmer_2s_infinite] rounded-full pointer-events-none" />
+  </motion.div>
+  ```
+- **Outer Glow Backdrop**: An optional secondary `div` blurred behind the main track for extreme glow:
+  ```tsx
+  <div
+    className="absolute top-2 left-0 h-3.5 bg-green-500/15 blur-[3px] rounded-full pointer-events-none transition-all duration-500"
+    style={{ width: `${percent}%` }}
+  />
+  ```
 
 ---
 
-### 1.2 `server/database/learning_persistence.py` — Add `replace_node_content()`
+## 2. Code Modifications
 
-**Location:** Insert after `update_node_content` (line 1624) — before `delete_revision_session`.
-
-**Signature:**
-
-```python
-def replace_node_content(
-    self,
-    node_id: str,
-    content_markdown: str,
-    status: NodeStatus,
-    quiz_set: Optional[QuizSet] = None,
-) -> Optional[Dict[str, Any]]:
-```
-
-**Why a new method (not a flag on `update_node_content`):**
-- Manual regen is semantically different: it's an intentional overwrite, not a state-machine transition.
-- Keeps `update_node_content`'s validation contract intact for all other callers (`regenerate_failed_node`, course graph nodes).
-- Single-purpose function = single test surface.
-
-**Implementation outline (mirrors `update_node_content` lines 1641–1780 but skips validation):**
-
-1. Open connection, get cursor (lines 1641–1644 reference).
-2. Check node exists:
-   ```sql
-   SELECT id FROM concept_nodes WHERE id = ?
-   ```
-   Return `None` if missing (same semantics as `update_node_content`).
-3. UPDATE content + status:
-   ```sql
-   UPDATE concept_nodes
-   SET content_markdown = ?, status = ?, error_message = NULL,
-       retry_available = 0, failed_step = NULL, updated_at = ?
-   WHERE id = ?
-   ```
-   Note: also clears `error_message`, `retry_available`, `failed_step` so a manually regenerated node shows clean state.
-4. **Quiz handling** — mirror lines 1686–1780 from `update_node_content`:
-   - If `quiz_set is not None`: upsert into `quiz_data` with `format_version=1`, new `shuffle_seed` from quiz_set, `current_index` from quiz_set.
-   - If `quiz_set is None`: delete existing `quiz_data` rows for the node.
-5. Commit, return updated node dict via `_get_node_by_id` (line 1681 reference helper, around line 1900+).
-6. Handle `sqlite3.Error` → log + re-raise (mirrors line 1656+ error pattern).
-
-**No `_is_valid_transition` call.** No `current_status == status` check.
-
----
-
-### 1.3 `server/routers/learning.py` — Branch on `?manual=true`
-
-**Location:** `regenerate_node_endpoint` (lines 1003–1059).
-
-**Change:** Add `manual: bool = Query(default=False, ...)` parameter and branch logic.
-
-**New signature:**
-
-```python
-async def regenerate_node_endpoint(
-    node_id: str,
-    request: Request,
-    step: Optional[str] = Query(default=None, ...),
-    manual: bool = Query(
-        default=False,
-        description=(
-            "If true, regenerate any non-LOCKED, non-ERROR node "
-            "(manual refresh). If false, only ERROR nodes are eligible "
-            "(failed-step retry)."
-        ),
-    ),
-    llm_context: LLMContext = Depends(get_llm_context),
-) -> ConceptNodeResponse:
-```
-
-**New imports (around line 45):**
-
-```python
-from server.graph.regen import regenerate_failed_node, regenerate_topic_node
-```
-
-**New branch (replace body of existing function):**
-
-```python
-try:
-    if manual:
-        # Manual regen: any non-LOCKED, non-ERROR node
-        updated_node = await regenerate_topic_node(
-            node_id=node_id,
-            llm_context=llm_context,
-        )
-    else:
-        # Existing error-retry path
-        updated_node = await regenerate_failed_node(
-            node_id=node_id,
-            llm_context=llm_context,
-            regen_step=step.upper() if step else None,
-        )
-
-    if updated_node is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Regeneration failed unexpectedly",
-        )
-    response_node = _apply_node_visibility(updated_node)
-    return ConceptNodeResponse(**response_node)
-except LookupError:
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Concept node not found: {node_id}",
-    )
-except ValueError as e:
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=str(e),
-    )
-except HTTPException:
-    raise
-except Exception as e:
-    logger.error("Error regenerating node %s: %s", node_id, e)
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Internal server error",
-    )
-```
-
-**Update endpoint docstring (lines 1003–1008):**
-
-```python
-summary="Regenerate node",
-description=(
-    "Regenerate content for a concept node. "
-    "Without manual=true: only ERROR nodes (failed-step retry). "
-    "With manual=true: any non-LOCKED, non-ERROR node (full regen)."
-),
-```
-
-**`step` param validation:** The current `VALID_STEPS` block (lines 1022–1028) only applies to the ERROR path. When `manual=true`, the `step` param is ignored. Keep the validation block where it is — it doesn't reject anything that matters for the manual path.
-
----
-
-### 1.4 `client/src/lib/learningApi.ts` — Send `manual=true`
-
-**Location:** `regenerateNode` (lines 218–228).
-
-**Change:** Add `params` with `manual: 'true'` to the request config.
-
-**New signature:**
-
-```typescript
-export const regenerateNode = async (
-  nodeId: string,
-  signal?: AbortSignal
-): Promise<ConceptNode> => {
-  const response = await api.post<ConceptNode>(
-    `/learning/nodes/${nodeId}/regenerate?manual=true`,
-    null,
-    { signal }
-  );
-  return response.data;
-};
-```
-
-**Rationale:** Sending `manual=true` unconditionally from this client function means both the existing ERROR retry button (in ConceptCard line 546) and the new manual refresh button (Phase 2) flow through the server's manual branch. Server-side branching (Phase 1.3) preserves the old ERROR partial-regen behavior when `status == ERROR`, so Non-Goal #1 is still respected.
-
-**Why no signature change:** ConceptCard calls `regenerate(nodeId)` → `regenerateMutation.mutate(nodeId)` → `regenerateNode(nodeId)`. Keeping the function signature stable means `useLearningMutations.ts` needs no changes.
-
----
-
-## Phase 2 — Client: Add Refresh Button to ConceptCard
-
-### 2.1 `client/src/features/learning/ConceptCard.tsx`
-
-**Three edits:**
-
-#### 2.1.1 Add `RefreshCw` to lucide import
-
-**Location:** Line 54.
-
-**Before:**
-```typescript
-import { ChevronLeft } from "lucide-react";
-```
-
-**After:**
-```typescript
-import { ChevronLeft, RefreshCw } from "lucide-react";
-```
-
-#### 2.1.2 Add `isManualRegen` condition (for render gating)
-
-**Location:** Inside `ConceptCard` function body, near other status checks (around line 175, after `statusIcons` definition).
-
-**Add:**
-```typescript
-// Show refresh button for any non-LOCKED topic node
-const showRefreshButton = node.status !== "LOCKED";
-```
-
-Per goal.md, the refresh button is visible for `VIEWING_EXPLANATION`, `IN_QUIZ`, `SHOWING_FEEDBACK`, `COMPLETED`. The `LOCKED` exclusion is exact; ERROR is intentionally excluded too (ERROR has its own "Retry Generation" button at line 545).
-
-#### 2.1.3 Render RefreshCw button in card header
-
-**Location:** Card header div (lines 241–269), inside the right-side area next to the `#sequence_index + 1` span.
-
-**Insert (after the `<span>#{node.sequence_index + 1}</span>` closing tag at line 268):**
+### A. [TableOfContentsModal.tsx](file:///D:/Peter/A2UI/client/src/features/learning/TableOfContentsModal.tsx) (New Component)
+Create a new file containing the Table of Contents modal component.
 
 ```tsx
-{showRefreshButton && (
-  <button
-    type="button"
-    onClick={() => onRegenerate?.(node.id)}
-    disabled={isRegenerating}
-    title="Regenerate the content"
-    aria-label="Regenerate the content"
-    className={cn(
-      "p-1.5 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-      isRegenerating && "animate-spin"
-    )}
-  >
-    <RefreshCw className="w-4 h-4" />
-  </button>
-)}
+import { useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, Lock, CheckCircle2, PlayCircle, HelpCircle } from "lucide-react";
+import type { ConceptNode } from "@/types/learning";
+import { cn } from "@/lib/utils";
+
+interface TableOfContentsModalProps {
+	isOpen: boolean;
+	onClose: () => void;
+	nodes: ConceptNode[];
+	currentNodeId?: string;
+	onSelectTopic: (index: number) => void;
+}
+
+function getNumQuizzes(node: ConceptNode): number {
+	if (node.quiz_set) return node.quiz_set.quizzes.length;
+	if (node.quiz_set_hidden) return node.quiz_set_hidden.total_quizzes || node.quiz_set_hidden.quizzes.length;
+	if (node.quiz || node.quiz_hidden) return 1;
+	return 0;
+}
+
+export function TableOfContentsModal({
+	isOpen,
+	onClose,
+	nodes,
+	currentNodeId,
+	onSelectTopic,
+}: TableOfContentsModalProps) {
+	const modalRef = useRef<HTMLDivElement>(null);
+	const activeRowRef = useRef<HTMLTableRowElement | null>(null);
+
+	// Focus trap & Escape key
+	useEffect(() => {
+		if (!isOpen) return;
+		const previousActiveElement = document.activeElement as HTMLElement | null;
+		
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") {
+				onClose();
+				return;
+			}
+			if (event.key !== "Tab") return;
+
+			const focusableSelector = 'button, [href], [tabindex]:not([tabindex="-1"])';
+			const focusableElements = modalRef.current?.querySelectorAll<HTMLElement>(focusableSelector);
+			if (!focusableElements || focusableElements.length === 0) return;
+
+			const firstElement = focusableElements[0];
+			const lastElement = focusableElements[focusableElements.length - 1];
+
+			if (event.shiftKey) {
+				if (document.activeElement === firstElement) {
+					event.preventDefault();
+					lastElement.focus();
+				}
+			} else {
+				if (document.activeElement === lastElement) {
+					event.preventDefault();
+					firstElement.focus();
+				}
+			}
+		};
+
+		modalRef.current?.focus();
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+			previousActiveElement?.focus();
+		};
+	}, [isOpen, onClose]);
+
+	// Auto-scroll active row into view
+	useEffect(() => {
+		if (isOpen && activeRowRef.current) {
+			activeRowRef.current.scrollIntoView({
+				behavior: "smooth",
+				block: "nearest",
+			});
+		}
+	}, [isOpen]);
+
+	if (!isOpen) return null;
+
+	return (
+		<AnimatePresence>
+			<motion.div
+				className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+				initial={{ opacity: 0 }}
+				animate={{ opacity: 1 }}
+				exit={{ opacity: 0 }}
+				onClick={(e) => e.target === e.currentTarget && onClose()}
+			>
+				<motion.div
+					ref={modalRef}
+					role="dialog"
+					aria-modal="true"
+					aria-label="Table of Contents"
+					tabIndex={-1}
+					className="relative w-full max-w-4xl bg-card/95 backdrop-blur-md border border-border shadow-2xl rounded-xl p-6 flex flex-col focus:outline-none"
+					initial={{ scale: 0.95, opacity: 0 }}
+					animate={{ scale: 1, opacity: 1 }}
+					exit={{ scale: 0.95, opacity: 0 }}
+					transition={{ type: "spring", stiffness: 300, damping: 25 }}
+				>
+					{/* Close Button */}
+					<button
+						onClick={onClose}
+						className="absolute top-4 right-4 p-2 rounded-md hover:bg-muted text-muted-foreground transition-colors"
+						aria-label="Close modal"
+					>
+						<X className="w-5 h-5" />
+					</button>
+
+					{/* Title */}
+					<h2 className="text-xl font-bold text-foreground mb-4">Table of Contents</h2>
+
+					{/* Table Container - Fits exactly 10 items (approx. 48px per row + headers) */}
+					<div className="overflow-x-auto border border-border/60 rounded-lg bg-muted/20">
+						<table className="w-full border-collapse text-left text-sm">
+							<thead>
+								<tr className="border-b border-border/60 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider h-10">
+									<th className="px-4 w-[10%] text-center">#</th>
+									<th className="px-4 w-[50%]">Topic Name</th>
+									<th className="px-4 w-[15%] text-center">Quizzes</th>
+									<th className="px-4 w-[15%] text-center">Difficulty</th>
+									<th className="px-4 w-[10%] text-center">Status</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-border/40 overflow-y-auto block max-h-[480px] w-full">
+								{nodes.map((node, index) => {
+									const isCurrent = node.id === currentNodeId;
+									const isLocked = node.status === "LOCKED";
+									const isCompleted = node.status === "COMPLETED";
+									const isInProgress = !isCompleted && !isLocked && node.status !== "ERROR";
+									const numQuizzes = getNumQuizzes(node);
+
+									let statusLabel = "In Progress";
+									let statusBadgeClass = "bg-amber-500/10 text-amber-400 border border-amber-500/20";
+									let statusIcon = <PlayCircle className="w-4 h-4" />;
+									if (isLocked) {
+										statusLabel = "Locked";
+										statusBadgeClass = "bg-zinc-800/50 text-zinc-500 border border-zinc-700/30";
+										statusIcon = <Lock className="w-4 h-4" />;
+									} else if (isCompleted) {
+										statusLabel = "Mastered";
+										statusBadgeClass = "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+										statusIcon = <CheckCircle2 className="w-4 h-4" />;
+									} else if (node.status === "ERROR") {
+										statusLabel = "In Progress";
+										statusIcon = <HelpCircle className="w-4 h-4" />;
+									}
+
+									const complexityBadgeClass = 
+										node.complexity === "Advanced" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
+										node.complexity === "Intermediate" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+										"bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+
+									return (
+										<tr
+											key={node.id}
+											ref={isCurrent ? activeRowRef : undefined}
+											className={cn(
+												"h-12 block table-row hover:bg-muted/10 transition-colors",
+												isCurrent && "bg-primary/5 border-l-2 border-primary"
+											)}
+										>
+											<td className="px-4 text-center font-mono text-muted-foreground w-[10%]">
+												#{node.sequence_index + 1}
+											</td>
+											<td className="px-4 w-[50%]">
+												{!isLocked ? (
+													<button
+														onClick={() => {
+															onSelectTopic(index);
+															onClose();
+														}}
+														className="text-left font-medium text-primary hover:underline cursor-pointer"
+													>
+														{node.title}
+													</button>
+												) : (
+													<span className="text-muted-foreground font-medium flex items-center gap-1.5 cursor-not-allowed">
+														{node.title}
+													</span>
+												)}
+											</td>
+											<td className="px-4 text-center text-muted-foreground w-[15%]">
+												{numQuizzes}
+											</td>
+											<td className="px-4 text-center w-[15%]">
+												{node.complexity && (
+													<span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", complexityBadgeClass)}>
+														{node.complexity}
+													</span>
+												)}
+											</td>
+											<td className="px-4 w-[10%]">
+												<div className="flex justify-center">
+													<span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1", statusBadgeClass)} title={statusLabel}>
+														{statusIcon}
+														<span>{statusLabel}</span>
+													</span>
+												</div>
+											</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					</div>
+
+					{/* Bottom Legends & Key (Moved from Progress Bar) */}
+					<div className="flex items-center gap-6 mt-6 pt-4 border-t border-border/60 text-xs text-muted-foreground select-none">
+						<span className="font-semibold text-foreground">Status Legend:</span>
+						<div className="flex items-center gap-1.5">
+							<span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+							<span>Mastered</span>
+						</div>
+						<div className="flex items-center gap-1.5">
+							<span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.5)] animate-pulse" />
+							<span>In progress</span>
+						</div>
+						<div className="flex items-center gap-1.5">
+							<span className="w-2.5 h-2.5 rounded-full bg-zinc-600" />
+							<span>Locked</span>
+						</div>
+					</div>
+				</motion.div>
+			</motion.div>
+		</AnimatePresence>
+	);
+}
 ```
 
-**Notes:**
-- `title` attribute provides the tooltip natively (per spec — "using a simple title attribute or tooltip").
-- `aria-label` mirrors the tooltip for screen readers.
-- `animate-spin` Tailwind class gives the spinner animation when `isRegenerating` is true (Phase 2 spec).
-- `disabled={isRegenerating}` prevents double-clicks during in-flight requests.
-- `onClick` calls existing `onRegenerate?.(node.id)` — wired through `LearningPathContainer.tsx:850` → `regenerate` from `useLearningMutations` → `regenerateMutation` → `regenerateNode` (with new `?manual=true`) → server endpoint.
-
 ---
 
-### 2.2 No Changes Required
+### B. [ProgressBar.tsx](file:///D:/Peter/A2UI/client/src/features/learning/ProgressBar.tsx) (Refactoring)
+Remove the old navigation controls/steps and replace them with the single glowing green progress bar.
 
-**`client/src/features/learning/LearningPathContainer.tsx`** — Already passes `onRegenerate={regenerate}` and `isRegenerating={isRegenerating}` to `<ConceptCard>` at lines 850–851. No edits.
+```tsx
+import { cn } from "@/lib/utils";
+import type { ConceptNode } from "@/types/learning";
+import { motion } from "framer-motion";
 
-**`client/src/features/learning/useLearningMutations.ts`** — `regenerateMutation` (line 397) and `regenerate` convenience function (line 483) already call `regenerateNode(nodeId)`. The new `?manual=true` query param is encapsulated inside `learningApi.ts`, so the hook stays unchanged.
+interface ProgressBarProps {
+	nodes: ConceptNode[];
+	className?: string;
+}
 
----
+export function ProgressBar({ nodes, className }: ProgressBarProps) {
+	const completedCount = nodes.filter((n) => n.status === "COMPLETED").length;
+	const percent = nodes.length > 0 ? (completedCount / nodes.length) * 100 : 0;
 
-## Phase 3 — Verification
+	return (
+		<div className={cn("w-full select-none", className)}>
+			{/* Progress text with screen reader context */}
+			<div className="flex items-center justify-between mb-3 text-sm">
+				<span className="text-muted-foreground font-semibold">Course Progress</span>
+				<span className="font-semibold text-muted-foreground" aria-live="polite">
+					<span className="sr-only">Course completion: </span>
+					{completedCount} / {nodes.length} mastered ({Math.round(percent)}%)
+				</span>
+			</div>
 
-### 3.1 Client Build + Lint
-
-```powershell
-cd client
-npm run lint
-npm run build
+			{/* Glowing Progress Bar Track */}
+			<div className="relative w-full py-2">
+				<div className="w-full h-3.5 bg-zinc-800/80 rounded-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.6)] border border-zinc-700/20 overflow-hidden relative">
+					<motion.div
+						className="h-full bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-400 rounded-full relative shadow-[0_0_12px_rgba(34,197,94,0.8)]"
+						initial={{ width: 0 }}
+						animate={{ width: `${percent}%` }}
+						transition={{ duration: 0.5, ease: "easeOut" }}
+					>
+						{/* Subtle Inner shimmer sweep */}
+						<span className="absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.15)_50%,transparent_100%)] animate-[shimmer_2s_infinite] rounded-full pointer-events-none" />
+					</motion.div>
+				</div>
+				{/* Soft Outer Neon Glow Overlay */}
+				<div
+					className="absolute top-2 left-0 h-3.5 bg-green-500/15 blur-[3px] rounded-full pointer-events-none transition-all duration-500"
+					style={{ width: `${percent}%` }}
+				/>
+			</div>
+		</div>
+	);
+}
 ```
 
-Expected: zero TypeScript errors, zero ESLint errors.
+---
 
-**Specific checks:**
-- `ConceptCard.tsx` compiles with new `RefreshCw` import + new button JSX.
-- `learningApi.ts` URL change is a string literal — should be transparent to the type checker.
+### C. [ConceptCard.tsx](file:///D:/Peter/A2UI/client/src/features/learning/ConceptCard.tsx) (Prop Coordination)
+Accept `onOpenTOC` as an optional prop and render a meticulous "Table of Contents" button inside the card header for non-quiz screens (`VIEWING_EXPLANATION` or `COMPLETED`).
 
-### 3.2 Server Tests
+```tsx
+// Inside ConceptCardProps Interface:
+onOpenTOC?: () => void;
 
-```powershell
-cd server
-python -m unittest server.tests.test_regen
-python -m unittest server.tests.test_learning_graph_router
-python -m unittest server.tests.test_learning_persistence
-python -m unittest
+// Inside ConceptCard component, render in the Header section (around line 352-371):
+<div className="flex items-center gap-2">
+  {onOpenTOC && (node.status === "VIEWING_EXPLANATION" || node.status === "COMPLETED") && (
+    <button
+      type="button"
+      onClick={onOpenTOC}
+      className={cn(
+        "px-2.5 py-1.5 rounded-lg text-xs font-semibold select-none transition-all duration-200 cursor-pointer flex items-center gap-1.5",
+        "border border-border/80 text-muted-foreground bg-card hover:bg-accent/40 focus:outline-none focus:ring-1 focus:ring-primary"
+      )}
+      title="Open Table of Contents"
+    >
+      <span className="text-[10px]">☰</span>
+      <span>Contents</span>
+    </button>
+  )}
+  <span className="text-sm text-muted-foreground">
+    #{node.sequence_index + 1}
+  </span>
+  ...
+</div>
 ```
 
-**Critical regression tests:**
-- `test_regenerate_calls_regen_function` (line 128 in `test_learning_graph_router.py`) — still passes because endpoint signature is backward-compatible (default `manual=false`).
-- `test_regenerate_endpoint_passes_step_query` (line 155) — still passes (manual=false path unchanged).
-- `test_regenerate_endpoint_invalid_step_returns_400` (line 187) — still passes.
-- All `RegenFunctionTests` in `test_regen.py` — still pass because `regenerate_failed_node` body is untouched.
+---
 
-### 3.3 New Test Coverage (Recommended, Not Strictly Required)
+### E. [LearningPathContainer.tsx](file:///D:/Peter/A2UI/client/src/features/learning/LearningPathContainer.tsx) (Orchestration)
+Integrate the Table of Contents modal state, bind navigation triggers, and hook up the callbacks.
 
-If extending the test suite (optional, recommended):
-
-**Add to `test_regen.py`:**
-- `RegenerateTopicNodeTests` class with cases:
-  - Rejects LOCKED nodes (`ValueError`).
-  - Rejects ERROR nodes (`ValueError`).
-  - Succeeds for VIEWING_EXPLANATION → VIEWING_EXPLANATION (or LOCKED if first/prev not complete).
-  - Succeeds for IN_QUIZ → VIEWING_EXPLANATION (state-machine bypass).
-  - Succeeds for COMPLETED → VIEWING_EXPLANATION.
-  - Succeeds for SHOWING_FEEDBACK → VIEWING_EXPLANATION.
-  - Calls both generator and quizzer agents (unconditional).
-
-**Add to `test_learning_graph_router.py`:**
-- `test_regenerate_endpoint_manual_true_calls_topic_node` — verify manual branch.
-- `test_regenerate_endpoint_manual_true_locked_returns_400`.
-- `test_regenerate_endpoint_manual_true_error_returns_400`.
-
-These additions are optional — the goal.md did not explicitly request test coverage, but the `.planning/codebase/TESTING.md` TDD workflow recommends it.
-
-### 3.4 Manual Smoke Test (Post-Build)
-
-1. Start backend: `cd server && python -m uvicorn server.main:app --reload --port 8000`
-2. Start frontend: `cd client && npm run dev`
-3. Generate a new course, wait for first node to reach VIEWING_EXPLANATION.
-4. Hover over the new RefreshCw button — confirm tooltip "Regenerate the content".
-5. Click it — confirm spinner animation, then node content + quiz are replaced.
-6. Navigate to a node in IN_QUIZ — click RefreshCw — confirm it resets to VIEWING_EXPLANATION with new content.
-7. Navigate to a COMPLETED node — click RefreshCw — confirm it resets to VIEWING_EXPLANATION with new content.
-8. Verify a LOCKED node shows no RefreshCw button (only on the previous carousel slide position).
+1. **Imports**: Import `TableOfContentsModal` and required icons.
+2. **State**: Add state `const [isTOCOpen, setIsTOCOpen] = useState(false);`
+3. **ConceptCard integration**: Pass `onOpenTOC={() => setIsTOCOpen(true)}` to `<ConceptCard />`.
+4. **Modal rendering**: Render `<TableOfContentsModal />` component just above `<ToastContainer />`.
+5. **Progress Bar properties**: Simplify parameters passed to `<ProgressBar />` (removing `currentNodeId` and `onNodeClick` since they are no longer required for step nodes).
 
 ---
 
-## Risk + Edge Cases
+## 3. Execution Phases
 
-| Risk                                                        | Mitigation                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| State-machine bypass allows unintended overwrites          | `replace_node_content` is a separate method — only callable from regen flow                 |
-| `IN_QUIZ`/`COMPLETED` regen clears in-flight quiz attempts  | Acceptable — user explicitly clicked refresh; old attempts stay in `quiz_attempts` history |
-| Quiz `shuffle_seed` regenerated → user gets different order | Expected — new content = new quiz = new seed; consistent with full re-gen                   |
-| Long regeneration (>30s default axios timeout)              | Client already passes `signal?: AbortSignal`; server timeout is not an issue here          |
-| User spams RefreshCw on multiple nodes simultaneously       | `disabled={isRegenerating}` per button only protects per-node; global protection via existing `isAnyLoading` UI overlay (line 872) |
-
----
-
-## Files Changed Summary
-
-| File                                                    | Lines Changed (approx) | Nature                  |
-| ------------------------------------------------------- | ---------------------- | ----------------------- |
-| `server/graph/regen.py`                                 | +60 new function       | New `regenerate_topic_node()` |
-| `server/database/learning_persistence.py`               | +80 new method         | New `replace_node_content()` |
-| `server/routers/learning.py`                            | ~15 (imports + signature + branch) | Endpoint branch on `?manual=true` |
-| `client/src/features/learning/ConceptCard.tsx`          | ~25 (import + render)   | New RefreshCw button    |
-| `client/src/lib/learningApi.ts`                         | 1 line                 | URL now includes `?manual=true` |
-
-Total: ~180 lines of new code. No deletions. No renames.
-
----
-
-## Non-Goals Reminder
-
-Per `docs/goal.md`:
-
-1. ❌ Do NOT change the ERROR-state regenerate flow — preserved: `manual=false` path keeps calling `regenerate_failed_node` with original `failed_step` logic. ERROR + `manual=true` → server returns 400 (Phase 1.3 branch).
-2. ❌ Do NOT change quiz attempt history, revision data — preserved: `quiz_attempts` table untouched; only `concept_nodes` and `quiz_data` rows updated.
-3. ❌ Do NOT add confirmation dialog — refresh is a direct action on click (single `onClick` handler in Phase 2.1.3).
+| Phase | Description | Key Deliverables |
+|---|---|---|
+| **Phase 1** | Create Table of Contents component | `TableOfContentsModal.tsx` completed with focus trap, exact columns, scrolling body, and status legends. |
+| **Phase 2** | Refactor Progress Bar component | `ProgressBar.tsx` refactored to single glowing green bar without pagination or step-by-step nodes. |
+| **Phase 3** | Integrate Table of Contents in main layout | `LearningPathContainer.tsx` modified to hold modal states, update imports, and handle navigation clicks. |
+| **Phase 4** | Add Entry button in Concept Card | `ConceptCard.tsx` header updated to show Table of Contents trigger button on explanation/mastered screens. |
+| **Phase 5** | Verification & Clean compilation | Run full build (`npm run build` / `npm run lint`) to confirm TypeScript type-safety and ensure no styling glitches. |
