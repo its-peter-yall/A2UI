@@ -1,43 +1,30 @@
-# Goal: Manual Topic Node Content Regeneration
+# Goal: Table of Contents & Progress Bar Refactoring
 
 ## Objective
+Implement a "Table of Contents" feature (like in books) that allows users to view all topics, their metadata, and navigate directly to unlocked topics. Replace the existing navigation progress bar with a single glowing green progress bar.
 
-Add ability to manually regenerate topic node contents (explanation + quizzes) on-demand via a refresh button on each topic card.
+## Requirements
 
-## Current State
+### Table of Contents (TOC)
+- **Access**: Accessible via a meticulous "Table of Contents" button on any "Topic" (non-quiz) node/screen.
+- **Window/Modal Layout**:
+  - Displays as a beautiful modal or popup.
+  - Showcases a table with columns:
+    1. Topic-number/order (`#1`, `#2`, etc.)
+    2. Topic-name (clickable link/button to navigate to the topic, if unlocked)
+    3. number-of-quizzes (number of quizzes in the topic)
+    4. difficulty-level (the difficulty/complexity of the topic: Basic, Intermediate, Advanced)
+    5. Status (Mastered / In Progress / Locked)
+  - Displays exactly 10 topics at once; any additional topics are scrolled to view.
+  - Contains legends/color key explaining the status indications (Mastered, In Progress, Locked) moved from the progress bar.
+- **Interactivity**: Clicking on an unlocked topic in the list navigates the carousel/course directly to that topic.
 
-- Server has `POST /learning/nodes/{id}/regenerate` endpoint
-- Only works for ERROR-status nodes via `regenerate_failed_node()`
-- Client has `regenerateNode` API call + `regenerateMutation` in `useLearningMutations`
-- ConceptCard already wires `onRegenerate` for ERROR-state retry button
+### Progress Bar Refactoring
+- **Removal**: Remove the old step-by-step navigation bar (`o---o---o`) and its pagination controls.
+- **Replacement**: Replace it with a single glowing green bar that fills according to the overall percentage completed (`completedCount / nodes.length * 100`).
+- **Legends**: The status legends must be removed from the progress bar area and placed inside the Table of Contents window.
 
-## What Needs to Change
-
-### Server (`server/graph/regen.py`)
-- `regenerate_failed_node()` blocks non-ERROR nodes with ValueError
-- Need new function (or extended) to regenerate any topic node regardless of status
-- Should re-run generator agent (content) + quizzer agent (quiz set)
-- Should reset node status to appropriate unlocked state
-- Endpoint should accept a flag/param for manual regen vs error retry
-
-### Server (`server/routers/learning.py`)
-- Extend `POST /nodes/{id}/regenerate` endpoint to accept `?manual=true`
-- When manual=true, allow regeneration of any non-LOCKED node
-- Return updated ConceptNodeResponse
-
-### Client (`client/src/features/learning/ConceptCard.tsx`)
-- Add RefreshCw icon button in card header
-- Tooltip: "Regenerate the content"
-- Only visible for non-LOCKED topic nodes (VIEWING_EXPLANATION, IN_QUIZ, SHOWING_FEEDBACK, COMPLETED)
-- Wire to existing `onRegenerate` prop
-
-### Client (`client/src/features/learning/LearningPathContainer.tsx`)
-- No changes needed — already passes `onRegenerate` and `isRegenerating` to ConceptCard
-
-### Client (`client/src/features/learning/useLearningMutations.ts`)
-- No changes needed — `regenerateMutation` already calls `regenerateNode` API
-
-## Non-Goals
-- Do NOT change the ERROR-state regenerate flow (existing "Retry Generation" button stays)
-- Do NOT change quiz attempt history, revision data
-- Do NOT add confirmation dialog (direct action on click)
+## Files to Modify
+- `client/src/features/learning/ProgressBar.tsx`: Refactor to display only the single glowing green progress bar. Remove pagination and step nodes.
+- `client/src/features/learning/LearningPathContainer.tsx`: Add Table of Contents button, modal/dialog window, state handling for TOC open/close, navigation triggers, and update imports.
+- `client/src/features/learning/ConceptCard.tsx` (optional, if any button or prop is passed): Coordinate.
