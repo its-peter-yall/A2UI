@@ -1,34 +1,26 @@
-# Final Report: Manual Topic Node Content Regeneration
+# Final Report: Table of Contents & Progress Bar Refactoring
 
 ## Objective
-
-Add ability to regenerate topic node contents on-demand via refresh button on topic cards.
+Implement a "Table of Contents" (TOC) feature like in books, allowing manual navigation directly to any unlocked node/topic in the course. Replace the old step-by-step navigation bar with a single glowing green progress bar indicating completion percentage. Move the status legends to the Table of Contents window.
 
 ## Plan
-
-See `docs/plan.md` (commit `48fcfe6`).
+See [plan.md](file:///D:/Peter/A2UI/docs/plan.md) (commit `e6d6f4eca79520ad4032348f690ca5b910e05669`).
 
 ## Code Changes
 
-| File | Change | Lines |
-|------|--------|-------|
-| `server/database/learning_persistence.py` | New `replace_node_content()` — bypasses state-machine validation for manual regen | +103 |
-| `server/graph/regen.py` | New `regenerate_topic_node()` — runs generator + quizzer unconditionally, resets status | +111 |
-| `server/routers/learning.py` | Endpoint auto-detects node status: ERROR → existing partial regen, non-ERROR → full regen, LOCKED → 400 | +51/-16 |
-| `client/src/features/learning/ConceptCard.tsx` | RefreshCw button in card header with tooltip "Regenerate the content", visible on non-LOCKED nodes | +28 |
-| `server/tests/test_learning_graph_router.py` | Updated 3 tests to mock `get_concept_node` | +52 |
+| File | Change | Purpose |
+|------|--------|---------|
+| [TableOfContentsModal.tsx](file:///D:/Peter/A2UI/client/src/features/learning/TableOfContentsModal.tsx) | **New file** | Renders glassmorphic modal with 5 columns: `#`, `Topic Name`, `Quizzes`, `Difficulty`, and `Status`. Fits exactly 10 visible items (scrolling the rest) and includes status legends. Handles focus traps and scrolls active row into view. |
+| [TableOfContentsModal.test.tsx](file:///D:/Peter/A2UI/client/src/features/learning/TableOfContentsModal.test.tsx) | **New file** | Tests rendering, unlocked topic clicks, locked restrictions, Escape key triggers, and focus trap. |
+| [ProgressBar.tsx](file:///D:/Peter/A2UI/client/src/features/learning/ProgressBar.tsx) | **Modified** | Replaced old paginated step navigation with a single emerald-to-green glowing bar indicating overall progress percentage. Removed old legends. |
+| [ProgressBar.test.tsx](file:///D:/Peter/A2UI/client/src/features/learning/ProgressBar.test.tsx) | **New file** | Tests percentage calculation and verifies removal of the old navigation controls/legends. |
+| [LearningPathContainer.tsx](file:///D:/Peter/A2UI/client/src/features/learning/LearningPathContainer.tsx) | **Modified** | Integrates TOC modal state, coordinates navigation callbacks, simplifies props passed to `ProgressBar`, and mounts the modal. |
+| [ConceptCard.tsx](file:///D:/Peter/A2UI/client/src/features/learning/ConceptCard.tsx) | **Modified** | Adds a meticulous "Contents" button in the card header for non-quiz screens (`VIEWING_EXPLANATION` and `COMPLETED`). |
 
-## Key Design Decisions
-
-- **No client API changes**: `learningApi.ts` and `useLearningMutations.ts` unchanged. Server auto-detects node status to route between error retry vs manual regen.
-- **State-machine bypass**: `replace_node_content()` method writes content + status atomically without invoking `_is_valid_transition`, since manual regen must reset IN_QUIZ/COMPLETED → VIEWING_EXPLANATION.
-- **Non-Goal preservation**: ERROR nodes still use `regenerate_failed_node` with partial-regen based on `failed_step`. ERROR + manual-regen path rejected with 400.
-
-## Verification
-
-- **Client**: `npm run lint` — zero new errors (all 22 pre-existing). `npm run build` — success (tsc + vite).
-- **Server**: 56/56 tests pass (0 failures, 0 errors).
+## Verification & Compilation
+- **Linter**: `npm run lint` completed successfully with 0 errors/warnings.
+- **Tests**: `npm run test` completed with all 19 tests passing.
+- **Vite Build**: `npm run build` compiled client bundles successfully without any type errors.
 
 ## Commit
-
-Commit `13fbd7d` — `feat: manual topic node regeneration with refresh button`
+Commit `72518fcea45feae455918b09dec55df22c80f66a` — `feat: Table of Contents modal and glowing green progress bar`
