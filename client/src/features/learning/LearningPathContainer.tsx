@@ -66,6 +66,7 @@ import { ChatPanel } from "./ChatPanel";
 import { LearningErrorBoundary } from "./LearningErrorBoundary";
 import { MasteryCelebration } from "./animations/MasteryCelebration";
 import { ProgressBar } from "./ProgressBar";
+import { TableOfContentsModal } from "./TableOfContentsModal";
 import {
 	carouselSlideVariants,
 	carouselSlideReducedMotionVariants,
@@ -121,6 +122,7 @@ export function LearningPathContainer({
 
 	// Chat panel state
 	const [isChatOpen, setIsChatOpen] = useState(false);
+	const [isTOCOpen, setIsTOCOpen] = useState(false);
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
 	const [prefillMessage, setPrefillMessage] = useState<string>("");
 	// Stable nodeId for chat — only updates when user explicitly opens chat,
@@ -761,13 +763,6 @@ export function LearningPathContainer({
 							{/* Progress bar using specialized component */}
 							<ProgressBar
 								nodes={session.nodes}
-								currentNodeId={currentSlideNode?.id}
-								onNodeClick={(nodeId) => {
-									const index = session.nodes.findIndex((n) => n.id === nodeId);
-									if (index >= 0) {
-										goToSlide(index);
-									}
-								}}
 							/>
 
 							{/* Mastery celebration overlay */}
@@ -837,6 +832,7 @@ export function LearningPathContainer({
 												)}
 												<ConceptCard
 													node={currentSlideNode}
+													onOpenTOC={() => setIsTOCOpen(true)}
 													isActive={currentSlideNode.id === activeNodeId}
 													quizResult={quizResults[currentSlideNode.id]}
 													onProceedToQuiz={handleProceedToQuiz}
@@ -946,6 +942,14 @@ export function LearningPathContainer({
 				<MessageCircle className="h-6 w-6" />
 			</button>
 			)}
+
+			<TableOfContentsModal
+				isOpen={isTOCOpen}
+				onClose={() => setIsTOCOpen(false)}
+				nodes={session.nodes}
+				currentNodeId={currentSlideNode?.id}
+				onSelectTopic={goToSlide}
+			/>
 
 			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
 		</>

@@ -93,6 +93,7 @@ interface ConceptCardProps {
 	selectedHeadingIds?: string[];
 	onToggleHeadingChat?: (headingId: string) => void;
 	onAskQuestion?: (question: string) => void;
+	onOpenTOC?: () => void;
 }
 
 const SkeletonLoader = () => (
@@ -144,6 +145,7 @@ export function ConceptCard({
 	selectedHeadingIds = [],
 	onToggleHeadingChat,
 	onAskQuestion,
+	onOpenTOC,
 }: ConceptCardProps) {
 	const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
 	const [showRegenConfirm, setShowRegenConfirm] = useState(false);
@@ -349,7 +351,21 @@ export function ConceptCard({
 								{node.status.replace(/_/g, " ")}
 							</span>
 						</div>
-						<div className="flex items-center gap-1">
+						<div className="flex items-center gap-2">
+							{onOpenTOC && (node.status === "VIEWING_EXPLANATION" || node.status === "COMPLETED") && (
+								<button
+									type="button"
+									onClick={onOpenTOC}
+									className={cn(
+										"px-2.5 py-1.5 rounded-lg text-xs font-semibold select-none transition-all duration-200 cursor-pointer flex items-center gap-1.5",
+										"border border-border/80 text-muted-foreground bg-card hover:bg-accent/40 focus:outline-none focus:ring-1 focus:ring-primary"
+									)}
+									title="Open Table of Contents"
+								>
+									<span className="text-[10px]">☰</span>
+									<span>Contents</span>
+								</button>
+							)}
 							<span className="text-sm text-muted-foreground">
 								#{node.sequence_index + 1}
 							</span>
