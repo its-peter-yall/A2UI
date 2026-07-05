@@ -51,7 +51,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronLeft, RefreshCw } from "lucide-react";
+import { ChevronLeft, RefreshCw, List } from "lucide-react";
 import type {
 	ConceptNode,
 	NodeStatus,
@@ -357,13 +357,13 @@ export function ConceptCard({
 									type="button"
 									onClick={onOpenTOC}
 									className={cn(
-										"px-2.5 py-1.5 rounded-lg text-xs font-semibold select-none transition-all duration-200 cursor-pointer flex items-center gap-1.5",
+										"px-4 py-2 rounded-lg text-base font-semibold select-none transition-all duration-200 cursor-pointer flex items-center gap-2",
 										"border border-border/80 text-muted-foreground bg-card hover:bg-accent/40 focus:outline-none focus:ring-1 focus:ring-primary"
 									)}
 									title="Open Table of Contents"
 								>
-									<span className="text-[10px]">☰</span>
-									<span>Contents</span>
+									<List className="w-5 h-5" />
+									<span>See all Topics</span>
 								</button>
 							)}
 							<span className="text-sm text-muted-foreground">
