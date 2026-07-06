@@ -174,6 +174,26 @@ def _apply_node_visibility(node: dict, include_flags: bool = False) -> dict:
     response_node["quiz_hidden"] = None
     response_node["quiz_set_hidden"] = None
 
+    raw_quiz = node.get("quiz")
+    total_quizzes = None
+    if raw_quiz:
+        if isinstance(raw_quiz, dict):
+            if "quizzes" in raw_quiz:
+                total_quizzes = len(raw_quiz["quizzes"])
+            elif "question" in raw_quiz:
+                total_quizzes = 1
+
+        if total_quizzes is None:
+            complexity = node.get("complexity")
+            if complexity == "Basic":
+                total_quizzes = 1
+            elif complexity == "Advanced":
+                total_quizzes = 3
+            else:
+                total_quizzes = 2
+
+    response_node["total_quizzes"] = total_quizzes
+
     if include_flags and not content_visible:
         response_node["content_markdown"] = ""
 

@@ -107,6 +107,7 @@ export interface ConceptNode {
 	error_message: string | null;
 	retry_available: boolean;
 	complexity?: Complexity;
+	total_quizzes?: number | null;
 	quiz: QuizCard | null;
 	quiz_set: QuizSet | null;
 	quiz_hidden: QuizCardHidden | null;

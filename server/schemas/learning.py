@@ -622,7 +622,7 @@ class ConceptNodeBase(BaseModel):
     sequence_index: int = Field(..., description="Order of the node", ge=0)
     title: str = Field(..., description="Concept title", min_length=1)
     content_markdown: str = Field(
-        ..., description="Markdown content for the concept", min_length=1
+        "", description="Markdown content for the concept"
     )
     status: NodeStatus = Field(
         default=NodeStatus.LOCKED, description="Current status of the node"
@@ -680,6 +680,9 @@ class ConceptNodeResponse(ResponseBase, TimestampMixin, ConceptNodeBase):
     )
     complexity: Optional[Literal["Basic", "Intermediate", "Advanced"]] = Field(
         default=None, description="Topic complexity rating (matches TopicNode type)"
+    )
+    total_quizzes: Optional[int] = Field(
+        default=None, description="Total number of quizzes for this node"
     )
 
     def get_visible_quiz(

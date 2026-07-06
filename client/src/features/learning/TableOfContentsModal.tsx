@@ -47,6 +47,7 @@ interface TableOfContentsModalProps {
 }
 
 function getNumQuizzes(node: ConceptNode): string | number {
+	if (node.total_quizzes !== undefined && node.total_quizzes !== null) return node.total_quizzes;
 	if (node.quiz_set) return node.quiz_set.quizzes.length;
 	if (node.quiz_set_hidden) return node.quiz_set_hidden.total_quizzes || node.quiz_set_hidden.quizzes.length;
 	if (node.quiz || node.quiz_hidden) return 1;
