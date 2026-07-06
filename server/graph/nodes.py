@@ -146,6 +146,23 @@ async def planner_node(
     )
     _record_session_id(runtime, session["id"])
 
+    for index, topic in enumerate(outline.topics):
+        initial_status = (
+            NodeStatus.VIEWING_EXPLANATION
+            if index == 0
+            else NodeStatus.LOCKED
+        )
+        learning_manager.create_concept_node(
+            session_id=session["id"],
+            sequence_index=index,
+            title=topic.title,
+            content_markdown="",
+            status=initial_status,
+            complexity=topic.complexity,
+            summary_for_context=topic.summary_for_context,
+            key_terms=topic.key_terms,
+        )
+
     logger.info(
         "Planner completed: '%s' with %s topics in %.2fms",
         outline.course_title,
@@ -191,6 +208,8 @@ def fan_out_generators(state: CourseState) -> list[Send]:
     sends: list[Send] = []
 
     for index, topic in enumerate(outline.topics):
+        if index >= 3:
+            continue
         if topic.index != index:
             logger.warning(
                 "Topic index mismatch: list index does not match topic index",
@@ -333,17 +352,27 @@ async def quizzer_node(
         if sequence_index == 0
         else NodeStatus.LOCKED
     )
-    node = learning_manager.create_concept_node(
-        session_id=session_id,
-        sequence_index=sequence_index,
-        title=topic.title,
-        content_markdown=content_markdown,
-        status=initial_status,
-        quiz_set=quiz_set,
-        complexity=topic.complexity,
-        summary_for_context=topic.summary_for_context,
-        key_terms=topic.key_terms,
-    )
+    nodes = learning_manager.get_session_nodes(session_id)
+    node_data = next((n for n in nodes if n["sequence_index"] == sequence_index), None)
+    if not node_data:
+        node = learning_manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=sequence_index,
+            title=topic.title,
+            content_markdown=content_markdown,
+            status=initial_status,
+            quiz_set=quiz_set,
+            complexity=topic.complexity,
+            summary_for_context=topic.summary_for_context,
+            key_terms=topic.key_terms,
+        )
+    else:
+        node = learning_manager.update_node_content(
+            node_id=node_data["id"],
+            content_markdown=content_markdown,
+            status=initial_status,
+            quiz_set=quiz_set,
+        )
     generation_ms = (time.perf_counter() - start_time) * 1000
     return {
         "topic_results": [
@@ -399,20 +428,32 @@ async def quizzer_error_handler(
         error.error,
         sequence_index,
     )
-    node = learning_manager.create_concept_node(
-        session_id=session_id,
-        sequence_index=sequence_index,
-        title=topic.title,
-        content_markdown=state.get("content_markdown", ""),
-        status=NodeStatus.ERROR,
-        quiz=None,
-        error_message=str(error.error),
-        retry_available=True,
-        complexity=topic.complexity,
-        summary_for_context=topic.summary_for_context,
-        key_terms=topic.key_terms,
-        failed_step=FailedStep.QUIZZER,
-    )
+    nodes = learning_manager.get_session_nodes(session_id)
+    node_data = next((n for n in nodes if n["sequence_index"] == sequence_index), None)
+    if not node_data:
+        node = learning_manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=sequence_index,
+            title=topic.title,
+            content_markdown=state.get("content_markdown", ""),
+            status=NodeStatus.ERROR,
+            quiz=None,
+            error_message=str(error.error),
+            retry_available=True,
+            complexity=topic.complexity,
+            summary_for_context=topic.summary_for_context,
+            key_terms=topic.key_terms,
+            failed_step=FailedStep.QUIZZER,
+        )
+    else:
+        node = learning_manager.update_node_content(
+            node_id=node_data["id"],
+            content_markdown=state.get("content_markdown", ""),
+            status=NodeStatus.ERROR,
+            error_message=str(error.error),
+            retry_available=True,
+            failed_step=FailedStep.QUIZZER,
+        )
     return {
         "topic_results": [
             {
@@ -442,20 +483,32 @@ def _persist_partial_failure(
         failed_step.value,
         error_message,
     )
-    node = learning_manager.create_concept_node(
-        session_id=session_id,
-        sequence_index=sequence_index,
-        title=topic.title,
-        content_markdown=content_markdown,
-        status=NodeStatus.ERROR,
-        quiz=None,
-        error_message=error_message,
-        retry_available=True,
-        complexity=topic.complexity,
-        summary_for_context=topic.summary_for_context,
-        key_terms=topic.key_terms,
-        failed_step=failed_step,
-    )
+    nodes = learning_manager.get_session_nodes(session_id)
+    node_data = next((n for n in nodes if n["sequence_index"] == sequence_index), None)
+    if not node_data:
+        node = learning_manager.create_concept_node(
+            session_id=session_id,
+            sequence_index=sequence_index,
+            title=topic.title,
+            content_markdown=content_markdown,
+            status=NodeStatus.ERROR,
+            quiz=None,
+            error_message=error_message,
+            retry_available=True,
+            complexity=topic.complexity,
+            summary_for_context=topic.summary_for_context,
+            key_terms=topic.key_terms,
+            failed_step=failed_step,
+        )
+    else:
+        node = learning_manager.update_node_content(
+            node_id=node_data["id"],
+            content_markdown=content_markdown,
+            status=NodeStatus.ERROR,
+            error_message=error_message,
+            retry_available=True,
+            failed_step=failed_step,
+        )
     return {
         "topic_results": [
             {

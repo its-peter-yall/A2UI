@@ -569,7 +569,7 @@ class FanOutTests(unittest.IsolatedAsyncioTestCase):
 
         sends = fan_out_generators(state)
 
-        self.assertEqual(len(sends), 5)
+        self.assertEqual(len(sends), 3)
         self.assertTrue(all(isinstance(s, Send) for s in sends))
         self.assertTrue(all(s.node == "generator_node" for s in sends))
 
@@ -596,8 +596,8 @@ class FanOutTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(sends[0].arg["prev_summary"], "Start")
         self.assertEqual(sends[0].arg["next_summary"], topics[1].summary_for_context)
-        self.assertEqual(sends[4].arg["prev_summary"], topics[3].summary_for_context)
-        self.assertEqual(sends[4].arg["next_summary"], "End")
+        self.assertEqual(sends[2].arg["prev_summary"], topics[1].summary_for_context)
+        self.assertEqual(sends[2].arg["next_summary"], topics[3].summary_for_context)
 
     def test_fan_out_quizzers_creates_send_per_result(self) -> None:
         generator_results = [
@@ -642,13 +642,22 @@ class NewGraphBuildTests(unittest.IsolatedAsyncioTestCase):
     async def test_full_graph_with_split_nodes(self) -> None:
         manager = MagicMock()
         manager.create_learning_session.return_value = _session()
-        manager.create_concept_node.side_effect = [
+        
+        nodes_created = [
             _node(0, NodeStatus.VIEWING_EXPLANATION),
             _node(1),
             _node(2),
             _node(3),
             _node(4),
         ]
+        manager.create_concept_node.side_effect = nodes_created
+        manager.get_session_nodes.return_value = nodes_created
+        manager.update_node_content.side_effect = [
+            _node(0, NodeStatus.VIEWING_EXPLANATION),
+            _node(1, NodeStatus.LOCKED),
+            _node(2, NodeStatus.LOCKED),
+        ]
+        
         graph = build_graph()
 
         with (
@@ -679,8 +688,8 @@ class NewGraphBuildTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("session", result)
         self.assertIn("nodes", result)
         self.assertIn("metrics", result)
-        self.assertEqual(len(result["nodes"]), 5)
-        self.assertEqual(result["session"]["total_nodes"], 5)
+        self.assertEqual(len(result["nodes"]), 3)
+        self.assertEqual(result["session"]["total_nodes"], 3)
 
     async def test_generator_failure_produces_error_result(self) -> None:
         """Generator error handler produces ERROR result for quizzer consumption."""

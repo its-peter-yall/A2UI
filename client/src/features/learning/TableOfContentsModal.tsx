@@ -46,17 +46,12 @@ interface TableOfContentsModalProps {
 	onSelectTopic: (index: number) => void;
 }
 
-function getNumQuizzes(node: ConceptNode): number {
+function getNumQuizzes(node: ConceptNode): string | number {
 	if (node.quiz_set) return node.quiz_set.quizzes.length;
 	if (node.quiz_set_hidden) return node.quiz_set_hidden.total_quizzes || node.quiz_set_hidden.quizzes.length;
 	if (node.quiz || node.quiz_hidden) return 1;
 	
-	// Fallback to expected count based on complexity since server hides/does not generate quiz data for locked/viewing topics
-	if (node.complexity === "Basic") return 1;
-	if (node.complexity === "Intermediate") return 2;
-	if (node.complexity === "Advanced") return 3;
-	
-	return 0;
+	return "-";
 }
 
 export function TableOfContentsModal({

@@ -87,7 +87,9 @@ def _client() -> TestClient:
 class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
     """Tests for graph-only router behavior."""
 
-    def test_generate_always_uses_graph(self) -> None:
+    @patch("server.routers.learning.learning_manager.get_session_nodes")
+    def test_generate_always_uses_graph(self, mock_get_nodes: MagicMock) -> None:
+        mock_get_nodes.return_value = _result()["nodes"]
         client = _client()
         graph = AsyncMock()
         graph.ainvoke.return_value = _result()
@@ -106,7 +108,9 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
         )
         graph.ainvoke.assert_awaited_once()
 
-    def test_generate_response_shape(self) -> None:
+    @patch("server.routers.learning.learning_manager.get_session_nodes")
+    def test_generate_response_shape(self, mock_get_nodes: MagicMock) -> None:
+        mock_get_nodes.return_value = _result()["nodes"]
         client = _client()
         graph = AsyncMock()
         graph.ainvoke.return_value = _result()
