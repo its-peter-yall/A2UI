@@ -38,6 +38,7 @@ from openai import AsyncOpenAI
 
 from server.database.learning_persistence import learning_manager
 from server.schemas.learning import ConceptChatMessage
+from server.utils.prompt_cache import apply_openrouter_cache_control
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ def build_concept_chat_messages(
     content_markdown: str,
     selected_heading_ids: List[str],
     node_title: str,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Construct the full message list for the LLM chat request.
 
     Builds a system prompt with concept content and heading context,
@@ -174,7 +175,7 @@ def build_concept_chat_messages(
             "If you don't know the answer based on the provided content, say so."
         )
 
-    messages: list[dict[str, str]] = [
+    messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt},
     ]
 
@@ -234,6 +235,11 @@ async def stream_concept_chat(
         selected_heading_ids=selected_heading_ids,
         node_title=node_title,
     )
+
+    # Enable OpenRouter prompt caching for cacheable model families by
+    # marking the stable system prefix with an explicit cache_control
+    # breakpoint. No-op for General Compute and auto-caching providers.
+    messages = apply_openrouter_cache_control(messages, provider, model_slug)
 
     logger.info(
         "Starting concept chat stream: model=%s, history_msgs=%d",

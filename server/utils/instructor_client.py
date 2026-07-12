@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Optional, Type, TypeVar, cast
 
 import instructor
 from openai import AsyncOpenAI
@@ -46,6 +46,7 @@ from tenacity import (
 
 from server.config import settings
 from server.schemas.llm import AIProviderEnum
+from server.utils.prompt_cache import apply_openrouter_cache_control
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +204,7 @@ class InstructorClient:
         config = MODEL_CONFIGS[role]
 
         # Build message list with optional system prompt
-        full_messages = []
+        full_messages: list[dict[str, Any]] = []
         if system_prompt:
             full_messages.append({"role": "system", "content": system_prompt})
         full_messages.extend(messages)
@@ -215,6 +216,13 @@ class InstructorClient:
                 f"Select a model in Settings before generating."
             )
         model_slug = model_override.strip()
+
+        # Enable OpenRouter prompt caching for cacheable model families by
+        # marking the stable system prefix with a cache_control breakpoint.
+        # No-op for General Compute and auto-caching providers.
+        full_messages = apply_openrouter_cache_control(
+            full_messages, provider.value, model_slug
+        )
 
         # Build OpenRouter parameters
         temperature = config.get("temperature", 0.5)
@@ -268,7 +276,7 @@ class InstructorClient:
             response = await client.chat.completions.create(
                 model=model_slug,
                 response_model=response_model,
-                messages=full_messages,
+                messages=cast(Any, full_messages),
                 temperature=temperature,
                 max_tokens=max_tokens,
                 extra_body=extra_body if extra_body else None,
