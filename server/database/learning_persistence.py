@@ -88,6 +88,8 @@ class LearningManager:
                     user_id TEXT,
                     query TEXT NOT NULL,
                     course_title TEXT NOT NULL,
+                    mode TEXT NOT NULL DEFAULT 'auto',
+                    resolved_mode TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -258,7 +260,12 @@ class LearningManager:
             conn.close()
 
     def create_learning_session(
-        self, query: str, course_title: str, user_id: Optional[str] = None
+        self,
+        query: str,
+        course_title: str,
+        user_id: Optional[str] = None,
+        mode: str = "auto",
+        resolved_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         conn = self._get_connection()
         try:
@@ -267,10 +274,22 @@ class LearningManager:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO learning_sessions (id, user_id, query, course_title, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO learning_sessions (
+                    id, user_id, query, course_title, mode, resolved_mode,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, user_id, query, course_title, now, now),
+                (
+                    session_id,
+                    user_id,
+                    query,
+                    course_title,
+                    mode,
+                    resolved_mode,
+                    now,
+                    now,
+                ),
             )
             conn.commit()
             logger.info(f"Created learning session: {session_id}")
@@ -279,6 +298,8 @@ class LearningManager:
                 "user_id": user_id,
                 "query": query,
                 "course_title": course_title,
+                "mode": mode,
+                "resolved_mode": resolved_mode,
                 "created_at": now,
                 "updated_at": now,
                 "total_nodes": 0,
@@ -301,6 +322,8 @@ class LearningManager:
                     ls.user_id,
                     ls.query,
                     ls.course_title,
+                    ls.mode,
+                    ls.resolved_mode,
                     ls.last_active_node_id,
                     ls.created_at,
                     ls.updated_at,
@@ -321,6 +344,8 @@ class LearningManager:
                 "user_id": row["user_id"],
                 "query": row["query"],
                 "course_title": row["course_title"],
+                "mode": row["mode"],
+                "resolved_mode": row["resolved_mode"],
                 "last_active_node_id": row["last_active_node_id"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
@@ -3028,6 +3053,16 @@ class LearningManager:
         if "last_active_node_id" not in existing_columns:
             cursor.execute(
                 "ALTER TABLE learning_sessions ADD COLUMN last_active_node_id TEXT"
+            )
+        if "mode" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions "
+                "ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'"
+            )
+        if "resolved_mode" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions "
+                "ADD COLUMN resolved_mode TEXT"
             )
 
     def _ensure_node_timestamp_columns(self, conn: sqlite3.Connection) -> None:
