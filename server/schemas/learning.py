@@ -76,6 +76,38 @@ class FailedStep(str, Enum):
     BOTH = "BOTH"  # both steps failed (or atomic regen requested)
 
 
+LearningDepthMode = Literal["auto", "lite", "full"]
+ResolvedDepthMode = Literal["lite", "full"]
+
+MODE_TOPIC_BOUNDS: dict[str, tuple[int, int]] = {
+    "lite": (3, 10),
+    "full": (10, 30),
+}
+
+MAX_COURSE_TOPICS = 30
+
+
+def validate_topic_count_for_mode(
+    outline: "CourseOutline",
+    mode: ResolvedDepthMode,
+) -> bool:
+    """Return True if outline topic count is within mode bounds.
+
+    Args:
+        outline: Course outline whose topics will be counted.
+        mode: Resolved depth mode (lite or full).
+
+    Returns:
+        True when topic count is within MODE_TOPIC_BOUNDS for mode.
+    """
+    bounds = MODE_TOPIC_BOUNDS.get(mode)
+    if bounds is None:
+        return False
+    min_topics, max_topics = bounds
+    count = len(outline.topics)
+    return min_topics <= count <= max_topics
+
+
 class QuizDifficulty(str, Enum):
     """Difficulty levels for quiz cards."""
 
@@ -592,15 +624,23 @@ class CourseOutline(BaseModel):
     course_title: str = Field(..., description="Title of the course", min_length=1)
     topics: List[TopicNode] = Field(
         ...,
-        description="Ordered list of topic nodes (minimum 5 topics required)",
-        min_length=5,
+        description=(
+            "Ordered list of topic nodes "
+            f"(minimum 3, maximum {MAX_COURSE_TOPICS})"
+        ),
+        min_length=3,
+        max_length=MAX_COURSE_TOPICS,
     )
 
     @field_validator("topics")
     @classmethod
     def validate_topics(cls, topics: List[TopicNode]) -> List[TopicNode]:
-        if len(topics) < 5:
-            raise ValueError("CourseOutline requires at least 5 topics")
+        if len(topics) < 3:
+            raise ValueError("CourseOutline requires at least 3 topics")
+        if len(topics) > MAX_COURSE_TOPICS:
+            raise ValueError(
+                f"CourseOutline supports at most {MAX_COURSE_TOPICS} topics"
+            )
         # Validate contiguous indices (0, 1, 2, ...) match list order
         for i, topic in enumerate(topics):
             if topic.index != i:
@@ -729,6 +769,14 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
     last_active_node_id: Optional[str] = Field(
         default=None,
         description="ID of the last active node for resume",
+    )
+    mode: Optional[LearningDepthMode] = Field(
+        default=None,
+        description="User-selected depth mode (auto|lite|full)",
+    )
+    resolved_mode: Optional[ResolvedDepthMode] = Field(
+        default=None,
+        description="Effective depth mode after routing (lite|full)",
     )
 
 
