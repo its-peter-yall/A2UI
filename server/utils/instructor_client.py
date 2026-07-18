@@ -102,6 +102,10 @@ MODEL_CONFIGS = {
         "temperature": 0.2,
         "max_tokens": 8000,
     },
+    "depth_router": {
+        "temperature": 0.0,
+        "max_tokens": 256,
+    },
 }
 
 
