@@ -30,10 +30,14 @@ USAGE:
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
 from server.agents.base import BaseAgent
-from server.schemas.learning import CourseOutline
+from server.schemas.learning import (
+    CourseOutline,
+    MODE_TOPIC_BOUNDS,
+    validate_topic_count_for_mode,
+)
 from server.schemas.llm import LLMContext
 
 
@@ -65,12 +69,8 @@ When breaking down a user's query into sub-concepts:
 
 3. **Atomic Focus**: Each topic should cover ONE key idea. If a topic has multiple sub-components, it should be split.
 
-4. **Adaptive Topic Scaling**: Scale topic count to the complexity and breadth of the query:
-   - **Simple/focused topics** (e.g., "Photosynthesis basics", "What is gravity?"): 5-7 topics
-   - **Moderate domains** (e.g., "Newtonian Laws", "Cell biology"): 8-15 topics
-   - **Advanced/expansive domains** (e.g., "Quantum computing architecture", "Machine learning from scratch"): 15-30+ topics
-
-   The core objective is to produce a COMPLETE and THOROUGH course. A learner should finish the course as a near-expert with no remaining foundational gaps. It is always better to have more focused, atomic topics than fewer overloaded ones. When in doubt, add more topics.
+4. **Mode Constraints** (authoritative for topic count — override any other count guidance):
+{mode_template}
 
 5. **Summary for Context**: The `summary_for_context` field is CRITICAL. This summary will be injected into prompts for:
    - The Generator Agent (to write explanations that connect to prior topics)
@@ -107,7 +107,7 @@ The quiz_count determines how many assessment questions the learner must pass be
 
 Generate a CourseOutline with:
 - `course_title`: A clear, descriptive title for the learning path
-- `topics`: An ordered list of TopicNode objects (minimum 5)
+- `topics`: An ordered list of TopicNode objects (count MUST follow Mode Constraints)
 
 Each TopicNode must include:
 - `index`: Sequential index starting from 0
@@ -290,12 +290,67 @@ Topics (20):
 Remember: Your output directly determines the quality of the entire learning experience. Be precise, be pedagogically sound, and always prioritize learner comprehension. When in doubt, decompose further — more focused topics always beat fewer overloaded ones."""
 
 
+LITE_TEMPLATE = """
+You are in LITE mode.
+- Produce between 3 and 10 topics (inclusive).
+- Prefer 3–7 for very small concepts; use up to 10 only if needed for clarity.
+- Favor Basic/Intermediate complexity; Advanced only if essential.
+- Prefer quiz_count 1–2.
+- Goal: complete coverage of a narrow subject without over-expansion.
+"""
+
+FULL_TEMPLATE = """
+You are in FULL mode.
+- Produce between 10 and 30 topics (inclusive).
+- Prefer atomic, granular topics for complete mastery.
+- Use varied complexity (Basic → Intermediate → Advanced).
+- Map quiz_count to complexity as in base rules.
+- Goal: thorough near-expert path with no foundational gaps.
+"""
+
+MODE_TEMPLATES: dict[str, str] = {
+    "lite": LITE_TEMPLATE.strip(),
+    "full": FULL_TEMPLATE.strip(),
+}
+
+
+class OutlineTopicCountError(ValueError):
+    """Raised when course outline topic count is outside mode bounds."""
+
+    def __init__(
+        self,
+        mode: str,
+        count: int,
+        min_topics: int,
+        max_topics: int,
+    ) -> None:
+        self.mode = mode
+        self.count = count
+        self.min_topics = min_topics
+        self.max_topics = max_topics
+        super().__init__(
+            f"Course outline has {count} topics; {mode} mode requires "
+            f"{min_topics}-{max_topics} topics"
+        )
+
+
+def build_planner_system_prompt(mode: Literal["lite", "full"]) -> str:
+    """Return base planner prompt with mode template injected."""
+    template = MODE_TEMPLATES[mode]
+    marker = "{mode_template}"
+    if marker not in PLANNER_SYSTEM_PROMPT:
+        return (
+            f"{PLANNER_SYSTEM_PROMPT}\n\n## Mode Constraints\n{template}"
+        )
+    return PLANNER_SYSTEM_PROMPT.replace(marker, template)
+
+
 class PlannerAgent(BaseAgent):
     """
     Planner Agent for decomposing user queries into structured learning paths.
 
     Uses the KLI (Knowledge-Learning-Instruction) framework to break down
-    complex topics into sequenced concept nodes (minimum 5) that form a coherent
+    complex topics into sequenced concept nodes that form a coherent
     curriculum for retrieval-based learning.
 
     The Planner is the first agent in the generation pipeline. Its output
@@ -326,44 +381,115 @@ class PlannerAgent(BaseAgent):
         query: str,
         context: Optional[dict] = None,
         llm_context: Optional[LLMContext] = None,
+        mode: Literal["lite", "full"] = "full",
     ) -> CourseOutline:
-        """
-        Generate a structured learning path (CourseOutline) for a user query.
-
-        Decomposes the query into sequenced TopicNodes (minimum 5) following the
-        KLI framework and prerequisite ordering constraints.
+        """Generate CourseOutline for query under resolved depth mode.
 
         Args:
-            query: The user's learning query (e.g., "Newtonian Laws")
-            context: Optional additional context for prompt augmentation
-            llm_context: Optional OpenRouter context
+            query: User learning query.
+            context: Optional prompt context.
+            llm_context: OpenRouter/provider context.
+            mode: Resolved depth mode (lite or full). Never auto.
 
         Returns:
-            CourseOutline containing course_title and ordered topics
+            Valid CourseOutline within mode topic bounds.
 
         Raises:
-            Exception: If generation fails after retries
+            OutlineTopicCountError: After one replan still out of bounds.
+            Exception: Upstream generation failures.
         """
+        if mode not in MODE_TEMPLATES:
+            raise ValueError(f"Invalid planner mode: {mode}")
+
+        system_prompt = build_planner_system_prompt(mode)
         user_message = (
             "Create a structured learning path for the following topic:\n\n"
-            f"{query}"
+            f"{query}\n\n"
+            f"Mode: {mode}. Follow Mode Constraints for topic count."
         )
 
-        logger.info(f"PlannerAgent generating curriculum for: {query}")
+        logger.info(
+            "PlannerAgent generating curriculum for: %s (mode=%s)",
+            query,
+            mode,
+        )
 
-        outline = await self.generate(
-            response_model=CourseOutline,
+        outline = await self._generate_outline(
+            system_prompt=system_prompt,
             user_message=user_message,
             context=context,
             llm_context=llm_context,
         )
 
-        logger.info(
-            f"PlannerAgent created outline: '{outline.course_title}' "
-            f"with {len(outline.topics)} topics"
+        if validate_topic_count_for_mode(outline, mode):
+            logger.info(
+                "PlannerAgent created outline: '%s' with %s topics",
+                outline.course_title,
+                len(outline.topics),
+            )
+            return outline
+
+        min_t, max_t = MODE_TOPIC_BOUNDS[mode]
+        count = len(outline.topics)
+        logger.warning(
+            "Outline topic count %s out of bounds for %s (%s-%s); replan",
+            count,
+            mode,
+            min_t,
+            max_t,
+        )
+        replan_message = (
+            f"{user_message}\n\n"
+            f"STRICT MODE CONSTRAINTS: You previously produced {count} "
+            f"topics. You MUST produce between {min_t} and {max_t} "
+            f"topics inclusive for {mode} mode. No fewer, no more."
+        )
+        outline = await self._generate_outline(
+            system_prompt=system_prompt,
+            user_message=replan_message,
+            context=context,
+            llm_context=llm_context,
         )
 
-        return outline
+        if validate_topic_count_for_mode(outline, mode):
+            logger.info(
+                "PlannerAgent replan ok: '%s' with %s topics",
+                outline.course_title,
+                len(outline.topics),
+            )
+            return outline
+
+        final_count = len(outline.topics)
+        raise OutlineTopicCountError(mode, final_count, min_t, max_t)
+
+    async def _generate_outline(
+        self,
+        system_prompt: str,
+        user_message: str,
+        context: Optional[dict],
+        llm_context: Optional[LLMContext],
+    ) -> CourseOutline:
+        """Generate outline using an explicit system prompt override."""
+        original_build = self._build_system_prompt
+
+        def _build_override(
+            ctx: Optional[dict] = None,
+        ) -> str:
+            base = system_prompt
+            if ctx:
+                return f"{base}\n\n{self._format_context(ctx)}"
+            return base
+
+        self._build_system_prompt = _build_override  # type: ignore[method-assign]
+        try:
+            return await self.generate(
+                response_model=CourseOutline,
+                user_message=user_message,
+                context=context,
+                llm_context=llm_context,
+            )
+        finally:
+            self._build_system_prompt = original_build  # type: ignore[method-assign]
 
 
 
