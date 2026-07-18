@@ -40,7 +40,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { generateCourse } from '@/lib/learningApi';
 import { getProviderSettings } from '@/lib/providerSettings';
-import type { GenerateCourseRequest } from '@/types/learning';
+import type {
+  GenerateCourseRequest,
+  LearningDepthMode,
+} from '@/types/learning';
 
 interface TopicInputProps {
   className?: string;
@@ -64,7 +67,9 @@ export function TopicInput({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<LearningDepthMode>('auto');
   const inputId = useId();
+  const modeId = useId();
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -101,6 +106,7 @@ export function TopicInput({
       generateMutation.mutate({
         query: query.trim(),
         user_id: userId,
+        mode,
       });
     }
   };
@@ -129,7 +135,7 @@ export function TopicInput({
           aria-describedby={error ? `${inputId}-error` : undefined}
           aria-invalid={error ? 'true' : undefined}
           className={cn(
-            'w-full px-4 py-3 pr-24 text-lg rounded-lg border',
+            'w-full px-4 py-3 pr-44 text-lg rounded-lg border',
             'bg-background text-foreground',
             'placeholder:text-muted-foreground',
             'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
@@ -138,24 +144,43 @@ export function TopicInput({
             error && 'border-destructive focus:ring-destructive'
           )}
         />
-        <button
-          type={isLoading ? 'button' : 'submit'}
-          onClick={isLoading ? handleStop : undefined}
-          disabled={(!query.trim() && !isLoading) || !hasApiKey}
-          aria-label={isLoading ? 'Stop generating' : 'Start learning'}
-          className={cn(
-            'absolute right-2 top-1/2 -translate-y-1/2',
-            'px-4 py-1.5 rounded-md text-sm font-medium',
-            isLoading
-              ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive'
-              : 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary',
-            'transition-colors duration-200',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'focus:outline-none focus:ring-2 focus:ring-offset-2'
-          )}
-        >
-          {isLoading ? 'Stop' : 'Learn'}
-        </button>
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <select
+            id={modeId}
+            value={mode}
+            onChange={(e) => setMode(e.target.value as LearningDepthMode)}
+            disabled={isLoading || !hasApiKey}
+            aria-label="Learning depth mode"
+            className={cn(
+              'px-2 py-1.5 rounded-md text-sm',
+              'bg-muted text-foreground border border-border',
+              'focus:outline-none focus:ring-2 focus:ring-primary',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'transition-colors duration-200'
+            )}
+          >
+            <option value="auto">Auto</option>
+            <option value="lite">Lite</option>
+            <option value="full">Full</option>
+          </select>
+          <button
+            type={isLoading ? 'button' : 'submit'}
+            onClick={isLoading ? handleStop : undefined}
+            disabled={(!query.trim() && !isLoading) || !hasApiKey}
+            aria-label={isLoading ? 'Stop generating' : 'Start learning'}
+            className={cn(
+              'px-4 py-1.5 rounded-md text-sm font-medium',
+              isLoading
+                ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive'
+                : 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary',
+              'transition-colors duration-200',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'focus:outline-none focus:ring-2 focus:ring-offset-2'
+            )}
+          >
+            {isLoading ? 'Stop' : 'Learn'}
+          </button>
+        </div>
       </form>
 
       {/* Loading message with progress hint */}

@@ -57,6 +57,10 @@ export type QuizDifficulty = "easy" | "medium" | "hard";
 
 export type Complexity = "Basic" | "Intermediate" | "Advanced";
 
+export type LearningDepthMode = "auto" | "lite" | "full";
+
+export type ResolvedDepthMode = "lite" | "full";
+
 export interface QuizOption {
 	option_id: string;
 	display_label: string;
@@ -141,6 +145,8 @@ export interface LearningSession {
 	total_nodes: number;
 	completed_nodes: number;
 	last_active_node_id: string | null;
+	mode?: LearningDepthMode | null;
+	resolved_mode?: ResolvedDepthMode | null;
 	created_at: string;
 	updated_at: string | null;
 }
@@ -176,6 +182,7 @@ export interface QuizAttemptHistory {
 export interface GenerateCourseRequest {
 	query: string;
 	user_id?: string;
+	mode?: LearningDepthMode;
 }
 
 export interface QuizSubmitRequest {
