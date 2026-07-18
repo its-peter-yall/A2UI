@@ -114,10 +114,16 @@ async def planner_node(
     llm_context = _get_llm_context(runtime)
     total_start = state.get("total_start_time", time.perf_counter())
 
+    resolved_mode = state.get("resolved_mode") or "lite"
+    if resolved_mode not in ("lite", "full"):
+        resolved_mode = "lite"
+    user_mode = state.get("mode") or "auto"
+
     planner_start = time.perf_counter()
     outline: CourseOutline = await planner_agent.plan(
         state["query"],
         llm_context=llm_context,
+        mode=resolved_mode,
     )
     planner_ms = (time.perf_counter() - planner_start) * 1000
 
@@ -143,6 +149,8 @@ async def planner_node(
         query=state["query"],
         course_title=outline.course_title,
         user_id=state.get("user_id"),
+        mode=user_mode,
+        resolved_mode=resolved_mode,
     )
     _record_session_id(runtime, session["id"])
 

@@ -31,6 +31,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from server.agents.planner import OutlineTopicCountError
 from server.routers.learning import (
     GenerateCourseRequest,
     QuizSubmitRequest,
@@ -56,6 +57,8 @@ def _result() -> dict[str, object]:
         "updated_at": "2026-01-01T00:00:00+00:00",
         "total_nodes": 1,
         "completed_nodes": 0,
+        "mode": "auto",
+        "resolved_mode": "lite",
     }
     node = {
         "id": "node-1",
@@ -87,8 +90,17 @@ def _client() -> TestClient:
 class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
     """Tests for graph-only router behavior."""
 
+    @patch(
+        "server.routers.learning.resolve_depth_mode",
+        new_callable=AsyncMock,
+    )
     @patch("server.routers.learning.learning_manager.get_session_nodes")
-    def test_generate_always_uses_graph(self, mock_get_nodes: MagicMock) -> None:
+    def test_generate_always_uses_graph(
+        self,
+        mock_get_nodes: MagicMock,
+        mock_resolve: AsyncMock,
+    ) -> None:
+        mock_resolve.return_value = "lite"
         mock_get_nodes.return_value = _result()["nodes"]
         client = _client()
         graph = AsyncMock()
@@ -108,8 +120,17 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
         )
         graph.ainvoke.assert_awaited_once()
 
+    @patch(
+        "server.routers.learning.resolve_depth_mode",
+        new_callable=AsyncMock,
+    )
     @patch("server.routers.learning.learning_manager.get_session_nodes")
-    def test_generate_response_shape(self, mock_get_nodes: MagicMock) -> None:
+    def test_generate_response_shape(
+        self,
+        mock_get_nodes: MagicMock,
+        mock_resolve: AsyncMock,
+    ) -> None:
+        mock_resolve.return_value = "lite"
         mock_get_nodes.return_value = _result()["nodes"]
         client = _client()
         graph = AsyncMock()
@@ -128,6 +149,118 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("course_title", body)
         self.assertIsInstance(body["nodes"], list)
         self.assertGreater(len(body["nodes"]), 0)
+
+    @patch(
+        "server.routers.learning.resolve_depth_mode",
+        new_callable=AsyncMock,
+    )
+    @patch("server.routers.learning.learning_manager.get_session_nodes")
+    def test_generate_default_mode_auto_resolves(
+        self,
+        mock_get_nodes: MagicMock,
+        mock_resolve: AsyncMock,
+    ) -> None:
+        mock_resolve.return_value = "lite"
+        mock_get_nodes.return_value = _result()["nodes"]
+        client = _client()
+        graph = AsyncMock()
+        graph.ainvoke.return_value = _result()
+        client.app.state.course_graph = graph
+
+        response = client.post(
+            "/learning/generate",
+            json={"query": "test query"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["mode"], "auto")
+        self.assertEqual(body["resolved_mode"], "lite")
+        mock_resolve.assert_awaited_once()
+        invoke_state = graph.ainvoke.await_args.args[0]
+        self.assertEqual(invoke_state["mode"], "auto")
+        self.assertEqual(invoke_state["resolved_mode"], "lite")
+
+    @patch(
+        "server.routers.learning.resolve_depth_mode",
+        new_callable=AsyncMock,
+    )
+    @patch("server.routers.learning.learning_manager.get_session_nodes")
+    def test_generate_explicit_full_mode(
+        self,
+        mock_get_nodes: MagicMock,
+        mock_resolve: AsyncMock,
+    ) -> None:
+        mock_resolve.return_value = "full"
+        session = dict(_result()["session"])  # type: ignore[arg-type]
+        session["mode"] = "full"
+        session["resolved_mode"] = "full"
+        result = {**_result(), "session": session}
+        mock_get_nodes.return_value = result["nodes"]
+        client = _client()
+        graph = AsyncMock()
+        graph.ainvoke.return_value = result
+        client.app.state.course_graph = graph
+
+        response = client.post(
+            "/learning/generate",
+            json={"query": "test query", "mode": "full"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["mode"], "full")
+        self.assertEqual(body["resolved_mode"], "full")
+        mock_resolve.assert_awaited_once()
+        self.assertEqual(
+            mock_resolve.await_args.kwargs.get("mode")
+            or mock_resolve.await_args.args[1],
+            "full",
+        )
+        invoke_state = graph.ainvoke.await_args.args[0]
+        self.assertEqual(invoke_state["mode"], "full")
+        self.assertEqual(invoke_state["resolved_mode"], "full")
+
+    def test_generate_invalid_mode_returns_422(self) -> None:
+        client = _client()
+        graph = AsyncMock()
+        client.app.state.course_graph = graph
+
+        response = client.post(
+            "/learning/generate",
+            json={"query": "test query", "mode": "turbo"},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        graph.ainvoke.assert_not_awaited()
+
+    @patch(
+        "server.routers.learning.resolve_depth_mode",
+        new_callable=AsyncMock,
+    )
+    @patch("server.routers.learning.learning_manager.get_session_nodes")
+    def test_generate_outline_bounds_error_returns_422(
+        self,
+        mock_get_nodes: MagicMock,
+        mock_resolve: AsyncMock,
+    ) -> None:
+        mock_resolve.return_value = "lite"
+        client = _client()
+        graph = AsyncMock()
+        graph.ainvoke.side_effect = OutlineTopicCountError(
+            "lite", 2, 3, 10,
+        )
+        client.app.state.course_graph = graph
+
+        response = client.post(
+            "/learning/generate",
+            json={"query": "test query", "mode": "lite"},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        detail = response.json()["detail"]
+        self.assertIn("topics", detail)
+        mock_get_nodes.assert_not_called()
 
     @patch("server.routers.learning.learning_manager.get_concept_node")
     @patch("server.routers.learning.regenerate_failed_node")
@@ -277,6 +410,11 @@ class LearningGraphRouterTests(unittest.IsolatedAsyncioTestCase):
             patch(
                 "server.routers.learning.get_graph",
                 return_value=graph,
+            ),
+            patch(
+                "server.routers.learning.resolve_depth_mode",
+                new_callable=AsyncMock,
+                return_value="lite",
             ),
             patch(
                 "server.routers.learning"

@@ -170,7 +170,12 @@ class GraphNodeTests(unittest.IsolatedAsyncioTestCase):
         ):
             mock_plan.return_value = _outline()
             result = await planner_node(
-                {"query": "test query", "user_id": "user-1"},
+                {
+                    "query": "test query",
+                    "user_id": "user-1",
+                    "mode": "auto",
+                    "resolved_mode": "lite",
+                },
                 _runtime_context(session_ref),
             )
 
@@ -178,6 +183,11 @@ class GraphNodeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session_ref["session_id"], "session-1")
         self.assertEqual(result["topic_results"], [])
         self.assertIn("planner_ms", result)
+        mock_plan.assert_awaited_once()
+        self.assertEqual(mock_plan.await_args.kwargs["mode"], "lite")
+        create_kwargs = manager.create_learning_session.call_args.kwargs
+        self.assertEqual(create_kwargs["mode"], "auto")
+        self.assertEqual(create_kwargs["resolved_mode"], "lite")
 
     def test_build_response_node_sorts_and_computes_metrics(self) -> None:
         state = {

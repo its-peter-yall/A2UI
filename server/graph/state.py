@@ -75,6 +75,8 @@ class CourseState(TypedDict):
 
     query: str
     user_id: Optional[str]
+    mode: NotRequired[str]  # auto|lite|full
+    resolved_mode: NotRequired[str]  # lite|full
 
     outline: NotRequired[dict[str, Any]]
     session: NotRequired[dict[str, Any]]

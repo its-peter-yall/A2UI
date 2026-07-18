@@ -33,13 +33,14 @@ USAGE:
 import asyncio
 import logging
 import time
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query, status, Depends, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from server.agents.planner import OutlineTopicCountError
 from server.database.learning_persistence import learning_manager
 from server.graph.build import get_graph
 from server.graph.regen import regenerate_failed_node, regenerate_topic_node
@@ -69,6 +70,7 @@ from server.agents.generator import generator_agent
 from server.agents.quizzer import quizzer_agent
 from server.schemas.llm import LLMContext, get_llm_context
 from server.services.concept_chat import stream_concept_chat
+from server.services.depth_router import resolve_depth_mode
 from server.services.quiz_randomization import (
     get_or_create_shuffle_order,
     hide_quiz_card,
@@ -97,6 +99,10 @@ class GenerateCourseRequest(BaseModel):
 
     query: str = Field(..., description="Topic to learn about", min_length=1)
     user_id: Optional[str] = Field(default=None, description="Optional user ID")
+    mode: Literal["auto", "lite", "full"] = Field(
+        default="auto",
+        description="Depth mode: auto routes; lite 3-10; full 10-30 topics",
+    )
 
 
 class LearningSessionWithNodes(LearningSessionResponse):
@@ -292,9 +298,16 @@ async def _generate_course_with_graph(
     """Generate a learning course using LangGraph."""
     graph = get_graph(request.app.state)
     session_ref: dict[str, str] = {}
+    resolved_mode = await resolve_depth_mode(
+        query=request_body.query,
+        mode=request_body.mode,
+        llm_context=llm_context,
+    )
     input_state = {
         "query": request_body.query,
         "user_id": request_body.user_id,
+        "mode": request_body.mode,
+        "resolved_mode": resolved_mode,
         "topic_results": [],
         "total_start_time": time.perf_counter(),
     }
@@ -486,6 +499,11 @@ async def generate_course(
         return LearningSessionWithNodes(**session, nodes=nodes)
     except HTTPException:
         raise
+    except OutlineTopicCountError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(e),
+        )
     except Exception as e:
         logger.error(f"Error generating course: {e}")
         raise HTTPException(
