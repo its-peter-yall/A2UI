@@ -16,12 +16,13 @@
  *
  * KEY COMPONENTS:
  *    - TopicInput: Main form with text input and submit button
+ *    - Depth Mode Picker: Custom Auto/Lite/Full dropdown
  *    - Suggestion Chips: Clickable topic suggestions for quick starts
  *    - Loading State: Progress message while generating course
  *    - Error Display: Error message if generation fails
  *
  * DEPENDENCIES:
- *    - External: react-router-dom, @tanstack/react-query
+ *    - External: react-router-dom, @tanstack/react-query, lucide-react
  *    - Internal: @/lib/utils (cn), @/lib/learningApi (generateCourse)
  *
  * USAGE:
@@ -33,10 +34,11 @@
  * ============================================================================
  */
 
-import { useState, useId, useRef } from 'react';
+import { useState, useId, useRef, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateCourse } from '@/lib/learningApi';
 import { getProviderSettings } from '@/lib/providerSettings';
@@ -58,6 +60,15 @@ const TOPIC_SUGGESTIONS = [
   'Machine Learning Basics',
 ] as const;
 
+const DEPTH_MODE_OPTIONS: Array<{
+  value: LearningDepthMode;
+  label: string;
+}> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'lite', label: 'Lite' },
+  { value: 'full', label: 'Full' },
+];
+
 export function TopicInput({
   className,
   placeholder = 'What do you want to learn today?',
@@ -68,10 +79,31 @@ export function TopicInput({
   const queryClient = useQueryClient();
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<LearningDepthMode>('auto');
+  const [modeOpen, setModeOpen] = useState(false);
   const inputId = useId();
-  const modeId = useId();
+  const modeListboxId = useId();
+  const modePickerRef = useRef<HTMLDivElement>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        modePickerRef.current &&
+        !modePickerRef.current.contains(event.target as Node)
+      ) {
+        setModeOpen(false);
+      }
+    }
+
+    if (modeOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [modeOpen]);
 
   const generateMutation = useMutation({
     mutationFn: (data: GenerateCourseRequest) => {
@@ -117,6 +149,8 @@ export function TopicInput({
 
   const isLoading = generateMutation.isPending;
   const error = generateMutation.error;
+  const selectedModeLabel =
+    DEPTH_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? 'Auto';
 
   return (
     <div className={cn('w-full max-w-2xl', className)}>
@@ -135,7 +169,7 @@ export function TopicInput({
           aria-describedby={error ? `${inputId}-error` : undefined}
           aria-invalid={error ? 'true' : undefined}
           className={cn(
-            'w-full px-4 py-3 pr-44 text-lg rounded-lg border',
+            'w-full px-4 py-3 pr-48 text-lg rounded-lg border',
             'bg-background text-foreground',
             'placeholder:text-muted-foreground',
             'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
@@ -145,24 +179,76 @@ export function TopicInput({
           )}
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
-          <select
-            id={modeId}
-            value={mode}
-            onChange={(e) => setMode(e.target.value as LearningDepthMode)}
-            disabled={isLoading || !hasApiKey}
-            aria-label="Learning depth mode"
-            className={cn(
-              'px-2 py-1.5 rounded-md text-sm',
-              'bg-muted text-foreground border border-border',
-              'focus:outline-none focus:ring-2 focus:ring-primary',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'transition-colors duration-200'
+          <div ref={modePickerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                if (!isLoading && hasApiKey) {
+                  setModeOpen((open) => !open);
+                }
+              }}
+              disabled={isLoading || !hasApiKey}
+              aria-label="Learning depth mode"
+              aria-haspopup="listbox"
+              aria-expanded={modeOpen}
+              aria-controls={modeListboxId}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm',
+                'bg-muted text-foreground border border-border',
+                'hover:border-border/80 hover:bg-muted/80',
+                'focus:outline-none focus:ring-2 focus:ring-primary',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                'transition-colors duration-200',
+                modeOpen && 'ring-2 ring-primary border-transparent'
+              )}
+            >
+              <span className="leading-none">{selectedModeLabel}</span>
+              <ChevronDown
+                className={cn(
+                  'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
+                  modeOpen && 'rotate-180'
+                )}
+                aria-hidden="true"
+              />
+            </button>
+
+            {modeOpen && (
+              <div
+                id={modeListboxId}
+                role="listbox"
+                aria-label="Learning depth mode"
+                className={cn(
+                  'absolute right-0 top-full z-50 mt-1 min-w-full',
+                  'rounded-md border border-border bg-popover text-popover-foreground',
+                  'shadow-lg overflow-hidden'
+                )}
+              >
+                {DEPTH_MODE_OPTIONS.map((option) => {
+                  const isSelected = option.value === mode;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => {
+                        setMode(option.value);
+                        setModeOpen(false);
+                      }}
+                      className={cn(
+                        'w-full text-left px-3 py-2 text-sm transition-colors',
+                        'hover:bg-muted focus:outline-none focus:bg-muted',
+                        isSelected &&
+                          'bg-primary/10 text-primary font-semibold'
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             )}
-          >
-            <option value="auto">Auto</option>
-            <option value="lite">Lite</option>
-            <option value="full">Full</option>
-          </select>
+          </div>
           <button
             type={isLoading ? 'button' : 'submit'}
             onClick={isLoading ? handleStop : undefined}
