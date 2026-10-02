@@ -5,9 +5,9 @@ status: in-progress
 skipped_phases: [review]
 source: realtime user request, 2026-10-02
 goal_status: approved
-dag_status: initial
+dag_status: research-reconciled
 resume_gate: resumed
-current_phase: research
+current_phase: planning
 pause_reason: none; user explicitly resumed on 2026-10-02
 ---
 
@@ -34,11 +34,13 @@ pause_reason: none; user explicitly resumed on 2026-10-02
   planners run concurrently; dispatch each ready worker immediately after its
   plan is committed and all worker dependencies are complete.
 - Serialize git staging and commits in the shared checkout.
+- Concurrent agents must use selective staging only, never `git add .`. If a
+  git index lock or commit race occurs, wait and retry; do not force-reset.
 
 ## Workflow milestones
 
 - [x] Step 1: Brainstorming & Goal Alignment (approved; 6123d6b)
-- [ ] Step 2: Technical Research (required; in progress after user resume 2026-10-02)
+- [x] Step 2: Technical Research (b900ed1)
 - [ ] Step 3: Planning Completed (plan1.md through plan4.md)
 - [ ] Step 4: Execution Completed (all workers and tests)
 - [x] Step 5: Unified Code Review (Skipped via explicit --skip review request)
@@ -134,10 +136,10 @@ below additionally requires explicit user resume.
 
 | Plan | Title and scope | Worker prerequisites | Files/subsystems | Planner status | Worker status | Commits |
 | --- | --- | --- | --- | --- | --- | --- |
-| P1 | Contracts and persistence | R | TS/Pydantic contracts; SQLite/Mongo shell and session storage | Pending | Pending | None |
-| P2 | Planner and durable runtime | P1 | Depth resolution; exact-count planner; graph/start/resume | Pending | Pending | None |
-| P3 | Custom settings and API payload | P1 | TopicInput; learning API; focused client tests | Pending | Pending | None |
-| P4 | Integrated acceptance | P2, P3 | Cross-layer tests and verification evidence | Pending | Pending | None |
+| P1 | Contracts and persistence | R | TS/Pydantic contracts; SQLite/Mongo shell and session storage | Ready | Pending | None |
+| P2 | Planner and durable runtime | P1 | Depth resolution; exact-count planner; graph/start/resume | Blocked on P1 worker | Pending | None |
+| P3 | Custom settings and API payload | P1 | TopicInput; learning API; focused client tests | Blocked on P1 worker | Pending | None |
+| P4 | Integrated acceptance | P2, P3 | Cross-layer tests and verification evidence | Blocked | Pending | None |
 
 ### Execution graph
 
@@ -187,8 +189,8 @@ Owned production files:
 - server/database/repositories/mongo_learning.py
 - server/database/repositories/mongo_jobs.py
 - server/database/repositories/sqlite.py only if the adapter requires changes
-- server/database/generation_migrations.py only if research confirms need;
-  preserve the existing LearningManager migration ownership/pattern.
+- server/database/generation_migrations.py is NOT owned by P1; research
+  confirmed no change is required there.
 
 Owned existing tests: client/src/types/learning.test.ts;
 server/tests/test_depth_mode_schema.py, test_depth_mode_persistence.py,
@@ -276,33 +278,57 @@ covered; existing modes pass regression. Record precise command outcomes.
 | AC7: Existing modes remain compatible | All | Regression suites |
 | AC8: TDD and quality gates | All | Final diagnostics/build/lint/coverage |
 
-## Research handoff - interrupted; required after resume
+## Research reconciliation - COMPLETE
 
-Agent: /root/custom_research. Status: interrupted by orchestrator at user's
-request. No research.md exists and no research commit was produced. Do not
-mark research complete or reuse unreported conclusions.
+Artifact: docs/custom-learning-mode/research.md, commit b900ed1 (488 lines,
+single-file commit verified with git log -1 --stat). Orchestrator verified the
+commit metadata without reading the artifact; decisions below come from the
+researcher's reported summary.
 
-On resume, restart research with the approved goal and this complete state.
-Researcher owns ONLY docs/custom-learning-mode/research.md; it does not
-implement. Its instructions must require preservation of existing changes.
+Recorded research decisions:
+- Custom short-circuits `resolve_depth_mode` and must also be skipped in
+  `server/graph/nodes.py:initialize_generation_node`; unknown modes otherwise
+  silently fall back to lite.
+- `CourseOutline.topics` has TWO independent minimum gates (schema
+  `min_length` in server/schemas/learning.py:648 and the `validate_topics`
+  check at line 655). Both must relax or 1/2-topic outlines fail before
+  validation. New helper `validate_topic_count_for_mode(outline, mode,
+  custom_topic_count=None)` centralizes per-mode checks.
+- `server/agents/planner.py:521-526` `validate_complexity_distribution`
+  errors on uniform complexity unconditionally; guard with `total >= 3`.
+- Pydantic v2 coerces True->1, "5"->5, 2.5->2; request field must use
+  `strict=True` with `ge=1, le=30` to satisfy AC4.
+- Shell creation lives in server/database/generation_jobs.py and
+  repositories/mongo_jobs.py, NOT LearningManager; SQLite/Mongo parity is
+  mandatory for the new column.
+- Batching, routing, graph topology, detached 202 generation, quizzes,
+  cancellation, and regeneration already support 1- and 2-topic courses; no
+  topology change is required.
+- Secrets stay in scoped headers only (`X-Web-Search-Enabled`,
+  `X-Tavily-Key`); never persisted in CourseState or the database.
 
-Research deliverables:
-1. Trace exact count through request, shell creation, session reads, graph
-   start, checkpoints, and resume on SQLite and Mongo.
-2. Identify every outline/count assumption that prevents 1/2-topic courses,
-   including briefs/batches, complexity checks, and graph termination.
-3. Specify strict validation, dynamic exact-count planner constraints, and
-   one-retry failure handling using current project patterns.
-4. Confirm research availability/model gates, shared UI state, search headers,
-   optional graph research, and resume behavior without persisting secrets.
-5. Inspect tests/fixtures, identify baseline failures, and refine disjoint
-   ownership and acceptance coverage. Verify unfamiliar APIs using official
-   documentation before recommending their use.
-6. Commit research.md only and report its path, hash, concise architectural
-   summary, exact files/contracts, commands, pitfalls, and DAG adjustments.
+Baseline evidence captured by the researcher:
+- server: focused depth-mode/planner/runtime/graph suite = 53 tests OK.
+- client: TopicInput, learningApi, and learning types = 19 tests passed.
+- Known blocker: `test_course_outline_rejects_2_topics` in
+  server/tests/test_depth_mode_schema.py:55-58 encodes the old minimum and
+  must be rewritten by P1.
 
-Orchestrator verifies the research commit without reading research.md, records
-its reported decisions here, and sets dag_status to research-reconciled.
+DAG and ownership adjustments accepted:
+1. Remove server/database/generation_migrations.py from P1 ownership; research
+   confirms no change is needed there.
+2. `client/src/lib/learningApi.ts` is now unconditional P3 ownership, since
+   the POST body must carry `custom_topic_count`.
+3. P2 and P3 have zero file overlap and may run fully concurrently once P1
+   commits.
+4. Complexity-distribution guard is an explicit P2 contract item.
+
+Reusable test helpers planners and workers should follow are listed in
+research.md, notably `_topic`/`_outline` factories in
+test_depth_mode_schema.py, the AsyncMock `side_effect` replan pattern in
+test_planner_mode.py, the TemporaryDirectory LearningManager pattern in
+test_depth_mode_persistence.py, `make_job_document` in test_mongo_jobs.py,
+and the `renderInput`/vi.hoisted harness in TopicInput.test.tsx.
 
 ## Final verification commands and evidence
 
@@ -333,8 +359,8 @@ verification remains required despite --skip review.
 | --- | --- | --- |
 | goal.md and initial state.md | Written | 5d9c80a |
 | Goal approval record | Approved | 6123d6b |
-| Complete state and pause handoff | Paused at user request | Current documentation checkpoint commit |
-| research.md | Missing; agent interrupted | No commit |
+| Complete state and pause handoff | Paused, then resumed by user | 5becaf9, 955b769 |
+| research.md | Written and reconciled | b900ed1 |
 | plan1.md | Not started | None |
 | plan2.md | Not started | None |
 | plan3.md | Not started | None |
@@ -345,14 +371,14 @@ verification remains required despite --skip review.
 
 ## Current gate and resume procedure
 
-CURRENT GATE: RESUMED BY USER 2026-10-02. RESEARCH IS THE ACTIVE PHASE.
+CURRENT GATE: RESEARCH COMPLETE AND RECONCILED. P1 PLANNER ACTIVE.
 
 1. ~~Wait for explicit user resume~~ Done on 2026-10-02; goal remains approved; --skip review unchanged.
-2. ~~Read goal.md and this state, check git status~~ Done; only pre-existing user modifications present; researcher will preserve them.
-3. ~~Record status in-progress and resume_gate resumed~~ Done.
-4. Dispatch fresh researcher (in progress): research.md only, then commit.
-5. Verify its research.md commit via git log metadata; record summary/hash, reconcile exact ownership/DAG, and mark research complete.
-6. Dispatch P1 planner; pass its committed plan path to P1 worker immediately.
+2. ~~Read goal.md and this state, check git status~~ Done; only pre-existing user modifications present; all agents preserve them.
+3. ~~Record status in-progress and resume_gate resumed~~ Done (955b769).
+4. ~~Researcher dispatched and research.md committed~~ Done (b900ed1); verified via git log -1 --stat.
+5. ~~Verify commit, record summary, reconcile ownership/DAG, mark research complete~~ Done; dag_status is research-reconciled.
+6. Dispatch P1 planner (active); pass its committed plan path to the P1 worker immediately.
 7. After P1 worker commit, dispatch P2/P3 planners concurrently and pipeline their workers as each plan becomes ready. Serialize git operations.
 8. Plan and execute P4 once its dependencies are satisfied. Address defects through targeted TDD fixes; do not dispatch a unified review agent.
 9. Run required final checks and coverage verification, record outcomes in final_report.md and here, and mark complete only when acceptance is met.
