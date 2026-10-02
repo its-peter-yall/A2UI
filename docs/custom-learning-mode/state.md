@@ -1,14 +1,14 @@
 ---
 objective: custom-learning-mode
 workflow: maw
-status: paused
+status: in-progress
 skipped_phases: [review]
 source: realtime user request, 2026-10-02
 goal_status: approved
 dag_status: initial
-resume_gate: awaiting-user-resume
-current_phase: pre-research
-pause_reason: User requested researcher stop and complete state before resuming MAW.
+resume_gate: resumed
+current_phase: research
+pause_reason: none; user explicitly resumed on 2026-10-02
 ---
 
 # State & Dependency Graph: Custom Learning Mode
@@ -38,7 +38,7 @@ pause_reason: User requested researcher stop and complete state before resuming 
 ## Workflow milestones
 
 - [x] Step 1: Brainstorming & Goal Alignment (approved; 6123d6b)
-- [ ] Step 2: Technical Research (required; interrupted before artifact)
+- [ ] Step 2: Technical Research (required; in progress after user resume 2026-10-02)
 - [ ] Step 3: Planning Completed (plan1.md through plan4.md)
 - [ ] Step 4: Execution Completed (all workers and tests)
 - [x] Step 5: Unified Code Review (Skipped via explicit --skip review request)
@@ -345,23 +345,15 @@ verification remains required despite --skip review.
 
 ## Current gate and resume procedure
 
-CURRENT GATE: PAUSED BY USER BEFORE RESEARCH. STATE COMPLETE.
+CURRENT GATE: RESUMED BY USER 2026-10-02. RESEARCH IS THE ACTIVE PHASE.
 
-1. Wait for explicit user resume; do not continue automatically.
-2. Read goal.md and this state, check git status and intervening commits, and
-   preserve all existing user changes. Keep approved design and --skip review.
-3. Record status in-progress and resume_gate resumed. No new goal approval
-   is needed. Goal remains approved; research remains incomplete.
-4. Restart the interrupted researcher with the handoff above. A fresh
-   research agent is appropriate because no completed artifact exists.
-5. Verify its research.md commit via git log metadata; record summary/hash,
-   reconcile exact ownership/DAG, and mark research complete.
+1. ~~Wait for explicit user resume~~ Done on 2026-10-02; goal remains approved; --skip review unchanged.
+2. ~~Read goal.md and this state, check git status~~ Done; only pre-existing user modifications present; researcher will preserve them.
+3. ~~Record status in-progress and resume_gate resumed~~ Done.
+4. Dispatch fresh researcher (in progress): research.md only, then commit.
+5. Verify its research.md commit via git log metadata; record summary/hash, reconcile exact ownership/DAG, and mark research complete.
 6. Dispatch P1 planner; pass its committed plan path to P1 worker immediately.
-7. After P1 worker commit, dispatch P2/P3 planners concurrently and pipeline
-   their workers as each plan becomes ready. Serialize git operations.
-8. Plan and execute P4 once its dependencies are satisfied. Address defects
-   through targeted TDD fixes; do not dispatch a unified review agent.
-9. Run required final checks and coverage verification, record outcomes in
-   final_report.md and here, and mark complete only when acceptance is met.
-10. Commit workflow documentation and add git notes for significant completed
-    phases without overwriting existing notes; report the final outcome.
+7. After P1 worker commit, dispatch P2/P3 planners concurrently and pipeline their workers as each plan becomes ready. Serialize git operations.
+8. Plan and execute P4 once its dependencies are satisfied. Address defects through targeted TDD fixes; do not dispatch a unified review agent.
+9. Run required final checks and coverage verification, record outcomes in final_report.md and here, and mark complete only when acceptance is met.
+10. Commit workflow documentation and add git notes for significant completed phases without overwriting existing notes; report the final outcome.
