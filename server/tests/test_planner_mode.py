@@ -20,6 +20,7 @@ from server.agents.planner import (
     OutlineTopicCountError,
     PlannerAgent,
     build_planner_system_prompt,
+    validate_complexity_distribution,
 )
 from server.schemas.learning import CourseOutline, TopicNode
 from server.schemas.llm import LLMContext
@@ -59,6 +60,41 @@ class PlannerModeTests(unittest.IsolatedAsyncioTestCase):
     def test_templates_are_non_empty(self) -> None:
         self.assertTrue(LITE_TEMPLATE.strip())
         self.assertTrue(FULL_TEMPLATE.strip())
+
+    def test_custom_prompt_uses_exact_requested_count(self) -> None:
+        for count in (1, 2, 7, 30):
+            with self.subTest(count=count):
+                prompt = build_planner_system_prompt("custom", count)
+                self.assertIn("CUSTOM mode", prompt)
+                self.assertIn(f"EXACTLY {count} topics", prompt)
+                self.assertNotIn("LITE mode", prompt)
+                self.assertNotIn("FULL mode", prompt)
+                self.assertNotIn("{mode_template}", prompt)
+
+    def test_custom_prompt_rejects_invalid_target(self) -> None:
+        for count in (None, True, 0, 31, 2.5, "2"):
+            with self.subTest(count=count):
+                with self.assertRaises(ValueError):
+                    build_planner_system_prompt("custom", count)
+
+    def test_uniform_small_outline_is_valid(self) -> None:
+        for count in (1, 2):
+            with self.subTest(count=count):
+                result = validate_complexity_distribution(_outline(count))
+                self.assertTrue(result["valid"])
+                self.assertEqual(result["errors"], [])
+
+    def test_uniform_three_topics_still_invalid(self) -> None:
+        result = validate_complexity_distribution(_outline(3))
+        self.assertFalse(result["valid"])
+        self.assertTrue(result["errors"])
+
+    def test_small_outline_still_validates_quiz_count(self) -> None:
+        outline = _outline(1)
+        outline.topics[0].quiz_count = 2
+        result = validate_complexity_distribution(outline)
+        self.assertFalse(result["valid"])
+        self.assertIn("expected 1", result["errors"][0])
 
     async def test_plan_accepts_valid_lite_outline(self) -> None:
         agent = PlannerAgent()

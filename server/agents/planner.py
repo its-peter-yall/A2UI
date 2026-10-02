@@ -35,7 +35,9 @@ from typing import Literal, Optional
 from server.agents.base import BaseAgent
 from server.schemas.learning import (
     CourseOutline,
+    MAX_COURSE_TOPICS,
     MODE_TOPIC_BOUNDS,
+    ResolvedDepthMode,
     validate_topic_count_for_mode,
 )
 from server.schemas.llm import LLMContext
@@ -220,14 +222,59 @@ class ResumablePlannerError(RuntimeError):
     pass
 
 
-def build_planner_system_prompt(mode: Literal["lite", "full"]) -> str:
-    """Return base planner prompt with mode template injected."""
-    template = MODE_TEMPLATES[mode]
+def build_custom_template(count: int) -> str:
+    """Build exact-count constraints for a Custom curriculum.
+
+    Args:
+        count: Strict integer requested topic count, from 1 through 30.
+
+    Returns:
+        Custom mode constraints for outline and brief planning.
+
+    Raises:
+        ValueError: Count is missing, non-integer, or out of bounds.
+    """
+    if type(count) is not int or not 1 <= count <= MAX_COURSE_TOPICS:
+        raise ValueError("custom_topic_count must be an integer from 1 to 30")
+    return (
+        "You are in CUSTOM mode.\n"
+        f"- Produce EXACTLY {count} topics, no fewer and no more.\n"
+        "- Keep topic indices contiguous from 0.\n"
+        "- Preserve prerequisite ordering and atomic topic focus.\n"
+        "- For 1 or 2 topics, uniform complexity is permitted.\n"
+        "- Preserve the base quiz-count mapping.\n"
+        "- In generation briefs, use expected_depth: full; "
+        "this field describes topic pedagogy, not course length."
+    )
+
+
+def build_planner_system_prompt(
+    mode: ResolvedDepthMode,
+    custom_topic_count: Optional[int] = None,
+) -> str:
+    """Return the base prompt with resolved-mode constraints.
+
+    Args:
+        mode: Resolved Lite, Full, or Custom mode.
+        custom_topic_count: Exact topic count, required for Custom.
+
+    Returns:
+        System prompt containing only the selected mode template.
+
+    Raises:
+        ValueError: Mode/count combination is invalid.
+    """
+    if mode == "custom":
+        if custom_topic_count is None:
+            raise ValueError("custom mode requires custom_topic_count")
+        template = build_custom_template(custom_topic_count)
+    else:
+        if mode not in MODE_TEMPLATES or custom_topic_count is not None:
+            raise ValueError("Invalid planner mode/count combination")
+        template = MODE_TEMPLATES[mode]
     marker = "{mode_template}"
     if marker not in PLANNER_SYSTEM_PROMPT:
-        return (
-            f"{PLANNER_SYSTEM_PROMPT}\n\n## Mode Constraints\n{template}"
-        )
+        return f"{PLANNER_SYSTEM_PROMPT}\n\n## Mode Constraints\n{template}"
     return PLANNER_SYSTEM_PROMPT.replace(marker, template)
 
 
@@ -527,7 +574,7 @@ def validate_complexity_distribution(
 
     # 1. Uniform complexity: all topics same rating
     unique_complexities = {t.complexity for t in outline.topics}
-    if len(unique_complexities) == 1:
+    if total >= 3 and len(unique_complexities) == 1:
         only = next(iter(unique_complexities))
         errors.append(
             f"All {total} topics have complexity "
