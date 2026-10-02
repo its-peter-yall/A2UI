@@ -1,14 +1,14 @@
 ---
 objective: custom-learning-mode
 workflow: maw
-status: in-progress
+status: complete
 skipped_phases: [review]
 source: realtime user request, 2026-10-02
 goal_status: approved
-dag_status: research-reconciled
-resume_gate: resumed
-current_phase: planning
-pause_reason: none; user explicitly resumed on 2026-10-02
+dag_status: complete
+resume_gate: not-required
+current_phase: complete
+pause_reason: none; resumed 2026-10-02 and completed the same day
 ---
 
 # State & Dependency Graph: Custom Learning Mode
@@ -41,10 +41,10 @@ pause_reason: none; user explicitly resumed on 2026-10-02
 
 - [x] Step 1: Brainstorming & Goal Alignment (approved; 6123d6b)
 - [x] Step 2: Technical Research (b900ed1)
-- [ ] Step 3: Planning Completed (plan1-plan3 written; plan4 in progress)
-- [ ] Step 4: Execution Completed (P1, P2, P3 done and verified; P4 pending)
+- [x] Step 3: Planning Completed (plan1.md through plan4.md)
+- [x] Step 4: Execution Completed (all workers and tests)
 - [x] Step 5: Unified Code Review (Skipped via explicit --skip review request)
-- [ ] Step 6: Final Verification & Report (final_report.md)
+- [x] Step 6: Final Verification & Report (final_report.md)
 
 ## Brainstorming tasks
 
@@ -139,7 +139,7 @@ below additionally requires explicit user resume.
 | P1 | Contracts and persistence | R | TS/Pydantic contracts; SQLite/Mongo shell and session storage | Done (e2bfa9a) | Completed | 0f780e8, 0339020, 87612d4, 8d5e562, 290c6e8, c2c6681, f760787, 6cc100f |
 | P2 | Planner and durable runtime | P1 | Depth resolution; exact-count planner; graph/start/resume | Done (7d710e6) | Completed | 5f7a283, e3ec1fe, a5155a4, 26837a8, 0232440, 30fb626, a5e96ab |
 | P3 | Custom settings and API payload | P1 | TopicInput; learning API; focused client tests | Done (b53c884) | Completed | 9894886, f7ba756, 341b223, 8ae0889 |
-| P4 | Integrated acceptance | P2, P3 | Cross-layer tests and verification evidence | Planner active | Pending | None |
+| P4 | Integrated acceptance | P2, P3 | Cross-layer tests and verification evidence | Done (95c4d2b) | Completed | b5bb9bd, 1763781, cf64e72, 6b7b75d, 124b5ea, ed9cbaf |
 
 ### Execution graph
 
@@ -334,24 +334,28 @@ and the `renderInput`/vi.hoisted harness in TopicInput.test.tsx.
 
 | Working directory | Command | Purpose/status |
 | --- | --- | --- |
-| client | npm run test -- --run | Full client regression; baseline interrupted on pause |
-| client | npm run build | TypeScript + Vite; not run |
-| client | npm run lint | ESLint; not run |
-| repository root | server/.venv/Scripts/python.exe -m unittest | Full backend regression; baseline interrupted on pause |
-| client | Focused Vitest coverage for changed files | Select exact command in plans; target >80% new code |
-| repository root | Backend coverage command supported by environment | Research availability; document method and any limitation |
-| repository root | git diff --check -- <owned paths> | Changed-path whitespace diagnostics |
+| repository root | server/.venv/Scripts/python.exe -m unittest | PASS: 452 tests, OK, exit 0, 99.4s |
+| client | npm run test -- --run | PASS: 229 tests across 34 files, exit 0 |
+| client | npm run build | PASS: exit 0, built in 21.62s |
+| client | npm run lint | PASS: exit 0, 0 errors, 3 pre-existing warnings in gitignored client/coverage/ |
+| client | npm run test:generation:coverage | FAIL exit 1, PRE-EXISTING and independent (see note) |
+| client | Focused Vitest coverage for changed files | PASS: TopicInput.tsx 265/268 new lines (98.88%), learningApi.ts 9/9 (100%) |
+| repository root | Backend coverage via stdlib trace | PASS: 110/110 new statements (100% line coverage) |
+| repository root | git diff --check -- <owned paths> | PASS: exit 0 for the two P4 new files |
 
-Baseline notes: both test suites were started before pause and explicitly
-interrupted, returning exit 1 without a final suite summary. This is an
-incomplete baseline, not proof of failing regressions. Some client tests,
-including the five existing TopicInput tests, passed before interruption.
-Backend emitted expected test logs and deprecation warnings. Rerun needed
-checks after resume; do not claim either complete suite passed.
+Pre-existing coverage failure disposition: `npm run test:generation:coverage`
+fails because GenerationStatusPanel.tsx branch coverage is 80% against an 81%
+per-file threshold. All 229 client tests still pass. This is provably
+independent of custom-learning-mode: client/vitest.generation.config.ts limits
+its coverage include list to eight files, none of which this feature modified
+(TopicInput.tsx and learningApi.ts are not in that list), and `git log
+5d9c80a..HEAD` shows no commits touching GenerationStatusPanel.tsx,
+GenerationStatusPanel.test.tsx, or vitest.generation.config.ts. Excluding the new
+P4 test file reproduces the identical failure. That file belongs to the separate
+Phase 7 progressive generation work and was deliberately not patched here.
 
-The initial full git diff --check exited 0 with LF/CRLF warnings. No build,
-lint, coverage gate, or Custom implementation test has been run. Final
-verification remains required despite --skip review.
+Baseline notes superseded: both suites were re-run after resume and both now
+pass cleanly. The earlier interrupted baseline is no longer in effect.
 
 ## Artifact and commit record
 
@@ -361,25 +365,29 @@ verification remains required despite --skip review.
 | Goal approval record | Approved | 6123d6b |
 | Complete state and pause handoff | Paused, then resumed by user | 5becaf9, 955b769 |
 | research.md | Written and reconciled | b900ed1 |
-| plan1.md | Not started | None |
-| plan2.md | Not started | None |
-| plan3.md | Not started | None |
-| plan4.md | Not started | None |
-| Implementation | Not started | No source implementation commits |
-| review.md | Skipped by explicit user request | No reviewer to be spawned |
-| final_report.md | Pending after implementation/verification | None |
+| plan1.md | Written | e2bfa9a |
+| plan2.md | Written | 7d710e6 |
+| plan3.md | Written | b53c884 |
+| plan4.md | Written | 95c4d2b |
+| Implementation | Complete | P1-P3 worker commits listed in the dependency matrix |
+| review.md | Skipped by explicit user request | No reviewer was spawned |
+| final_report.md | Written | Current documentation checkpoint commit |
 
 ## Current gate and resume procedure
 
-CURRENT GATE: RESEARCH COMPLETE AND RECONCILED. P1 PLANNER ACTIVE.
+CURRENT GATE: COMPLETE. ALL MILESTONES DONE, ACCEPTANCE MET.
 
-1. ~~Wait for explicit user resume~~ Done on 2026-10-02; goal remains approved; --skip review unchanged.
-2. ~~Read goal.md and this state, check git status~~ Done; only pre-existing user modifications present; all agents preserve them.
+1. ~~Wait for explicit user resume~~ Done 2026-10-02; goal approved; --skip review honoured throughout.
+2. ~~Read goal.md and this state, check git status~~ Done; 284 user modifications preserved throughout.
 3. ~~Record status in-progress and resume_gate resumed~~ Done (955b769).
-4. ~~Researcher dispatched and research.md committed~~ Done (b900ed1); verified via git log -1 --stat.
-5. ~~Verify commit, record summary, reconcile ownership/DAG, mark research complete~~ Done; dag_status is research-reconciled.
-6. Dispatch P1 planner (active); pass its committed plan path to the P1 worker immediately.
-7. After P1 worker commit, dispatch P2/P3 planners concurrently and pipeline their workers as each plan becomes ready. Serialize git operations.
-8. Plan and execute P4 once its dependencies are satisfied. Address defects through targeted TDD fixes; do not dispatch a unified review agent.
-9. Run required final checks and coverage verification, record outcomes in final_report.md and here, and mark complete only when acceptance is met.
-10. Commit workflow documentation and add git notes for significant completed phases without overwriting existing notes; report the final outcome.
+4. ~~Researcher dispatched and research.md committed~~ Done (b900ed1).
+5. ~~Verify commit, reconcile ownership/DAG, mark research complete~~ Done (80b2093).
+6. ~~Dispatch P1 planner then P1 worker~~ Done (e2bfa9a; 8 worker commits).
+7. ~~Dispatch P2/P3 planners concurrently, pipeline workers~~ Done (7d710e6, b53c884; 7 and 4 worker commits).
+8. ~~Plan and execute P4~~ Done (95c4d2b; 6 commits). No defects found in P1/P2/P3 code. No reviewer was dispatched, per --skip review.
+9. ~~Run final checks and coverage verification~~ Done; results recorded above and in final_report.md.
+10. ~~Commit workflow documentation and add git notes~~ Done; see the artifact record and commit notes.
+
+Follow-up carried forward (not part of this feature):
+- `npm run test:generation:coverage` fails on GenerationStatusPanel.tsx branch
+  coverage (80% vs 81%). Pre-existing Phase 7 work, deliberately not patched.
