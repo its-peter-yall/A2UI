@@ -419,4 +419,138 @@ describe('TopicInput custom mode controls', () => {
     selectMode('Custom');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('submits exact request payload with custom_topic_count and seeds session cache for Custom mode', async () => {
+    mocks.generateCourse.mockResolvedValue({
+      session: {
+        id: 'session-custom-1',
+        query: 'Compilers',
+        course_title: 'Compilers',
+        mode: 'custom',
+        resolved_mode: 'custom',
+        custom_topic_count: 7,
+        total_nodes: 0,
+        nodes: [],
+      },
+      generation: { id: 'job-custom-1', stage: 'INITIALIZING', last_event_id: 1 },
+    });
+
+    const client = renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Compilers' },
+    });
+    selectMode('Custom');
+
+    const countInput = screen.getByLabelText(/number of concepts/i);
+    fireEvent.change(countInput, { target: { value: '7' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    await waitFor(() => {
+      expect(mocks.generateCourse).toHaveBeenCalledWith(
+        {
+          query: 'Compilers',
+          user_id: undefined,
+          mode: 'custom',
+          custom_topic_count: 7,
+        },
+        { webSearchEnabled: false },
+      );
+    });
+
+    expect(
+      client.getQueryData(['learningSession', 'session-custom-1']),
+    ).toMatchObject({
+      id: 'session-custom-1',
+      mode: 'custom',
+      resolved_mode: 'custom',
+      custom_topic_count: 7,
+    });
+    expect(mocks.navigate).toHaveBeenCalledWith('/learn/session-custom-1');
+  });
+
+  it('submits request payload without custom_topic_count for Auto mode even if count was previously entered', async () => {
+    mocks.generateCourse.mockResolvedValue({
+      session: {
+        id: 'session-auto-1',
+        query: 'Compilers',
+        course_title: 'Compilers',
+        mode: 'auto',
+        total_nodes: 0,
+        nodes: [],
+      },
+      generation: { id: 'job-auto-1', stage: 'INITIALIZING', last_event_id: 1 },
+    });
+
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Compilers' },
+    });
+
+    // Select Custom and enter count 15
+    selectMode('Custom');
+    fireEvent.change(screen.getByLabelText(/number of concepts/i), {
+      target: { value: '15' },
+    });
+
+    // Switch back to Auto
+    selectMode('Auto');
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    await waitFor(() => {
+      expect(mocks.generateCourse).toHaveBeenCalledWith(
+        {
+          query: 'Compilers',
+          user_id: undefined,
+          mode: 'auto',
+        },
+        { webSearchEnabled: false },
+      );
+    });
+  });
+
+  it('omits custom_topic_count from the payload for Lite and Full modes', async () => {
+    mocks.generateCourse.mockResolvedValue({
+      session: { id: 'session-x', query: 'Compilers', course_title: 'C', nodes: [] },
+      generation: { id: 'job-x', stage: 'INITIALIZING', last_event_id: 1 },
+    });
+
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Compilers' },
+    });
+    selectMode('Custom');
+    fireEvent.change(screen.getByLabelText(/number of concepts/i), {
+      target: { value: '9' },
+    });
+    selectMode('Lite');
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    await waitFor(() => {
+      expect(mocks.generateCourse).toHaveBeenCalledWith(
+        { query: 'Compilers', user_id: undefined, mode: 'lite' },
+        { webSearchEnabled: false },
+      );
+    });
+  });
+
+  it('disables Custom settings controls while course generation is pending', () => {
+    mocks.generateCourse.mockReturnValue(new Promise(() => {}));
+
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Distributed Systems' },
+    });
+    selectMode('Custom');
+
+    const countInput = screen.getByLabelText(/number of concepts/i);
+    fireEvent.change(countInput, { target: { value: '5' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    expect(countInput).toBeDisabled();
+    expect(screen.getByRole('switch', { name: /research/i })).toBeDisabled();
+  });
 });

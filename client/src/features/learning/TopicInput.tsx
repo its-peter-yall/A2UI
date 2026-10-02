@@ -39,6 +39,7 @@ import type {
   GenerateCourseRequest,
   LearningDepthMode,
   LearningSessionWithNodes,
+  ResolvedDepthMode,
 } from '@/types/learning';
 
 interface TopicInputProps {
@@ -113,7 +114,7 @@ export function TopicInput({
   const generateMutation = useMutation({
     mutationFn: (data: GenerateCourseRequest) =>
       generateCourse(data, { webSearchEnabled }),
-    onSuccess: (accepted) => {
+    onSuccess: (accepted, data) => {
       const shell = accepted.session;
       const session: LearningSessionWithNodes = {
         id: String(shell.id),
@@ -130,6 +131,18 @@ export function TopicInput({
             ? shell.completed_nodes
             : 0,
         last_active_node_id: null,
+        mode:
+          (shell.mode as LearningDepthMode | null | undefined) ??
+          (data.mode ?? mode),
+        resolved_mode:
+          (shell.resolved_mode as ResolvedDepthMode | null | undefined) ??
+          null,
+        custom_topic_count:
+          typeof shell.custom_topic_count === 'number'
+            ? shell.custom_topic_count
+            : (mode === 'custom' && /^\d+$/.test(customTopicCount.trim())
+                ? Number(customTopicCount.trim())
+                : null),
         title_finalized:
           typeof shell.title_finalized === 'boolean'
             ? shell.title_finalized
