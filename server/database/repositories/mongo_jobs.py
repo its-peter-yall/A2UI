@@ -100,6 +100,7 @@ class MongoGenerationJobRepository:
         mode: str,
         web_search_requested: bool,
         now: Optional[datetime] = None,
+        custom_topic_count: Optional[int] = None,
     ) -> tuple[dict[str, Any], GenerationJobRecord]:
         timestamp = _utc_now(now)
         session_id = str(uuid.uuid4())
@@ -118,6 +119,7 @@ class MongoGenerationJobRepository:
             "course_title": query.strip(),
             "mode": mode,
             "resolved_mode": None,
+            "custom_topic_count": custom_topic_count,
             "title_finalized": False,
             "status": "active",
             "progress_percent": 0,
@@ -167,6 +169,7 @@ class MongoGenerationJobRepository:
             "course_title": query.strip(),
             "mode": mode,
             "resolved_mode": None,
+            "custom_topic_count": custom_topic_count,
             "title_finalized": 0,
             "created_at": now_iso,
             "updated_at": now_iso,
