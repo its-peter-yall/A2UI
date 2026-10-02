@@ -199,6 +199,64 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     self.assertNotIn("llm-secret", repr(snapshot.values))
                     self.assertNotIn("search-secret", repr(snapshot.values))
 
+    async def test_corrected_outline_completes_without_wrong_nodes(
+        self,
+    ) -> None:
+        wrong, corrected = make_outline(2), make_outline(5)
+        with self._externals(5, outlines=[wrong, corrected]) as (generate, _):
+            session_id = await self._start(5)
+            await _drain(self.harness.runtime)
+            response = await self.client.get(f"/learning/sessions/{session_id}")
+            self.assertEqual(response.status_code, 200, response.text)
+            public = response.json()
+            self.assertEqual(public["generation"]["stage"], "COMPLETE")
+            self.assertEqual(len(public["nodes"]), 5)
+            self.assertEqual(
+                [node["sequence_index"] for node in public["nodes"]],
+                list(range(5)),
+            )
+            self.assertEqual(generate.await_count, 2)
+            self.assertEqual(len(wrong.topics), 2)
+            self.assertIn(
+                "EXACTLY 5 topics",
+                generate.await_args_list[1].kwargs["user_message"],
+            )
+
+    async def test_second_mismatch_is_failed_in_public_read_and_events(
+        self,
+    ) -> None:
+        wrong_first, wrong_second = make_outline(2), make_outline(4)
+        with self._externals(
+            5, outlines=[wrong_first, wrong_second]
+        ) as (generate, _):
+            session_id = await self._start(5)
+            await _drain(self.harness.runtime)
+            self.assertEqual(generate.await_count, 2)
+            response = await self.client.get(f"/learning/sessions/{session_id}")
+            self.assertEqual(response.status_code, 200, response.text)
+            public = response.json()
+            self.assertEqual(public["custom_topic_count"], 5)
+            self.assertEqual(public["generation"]["stage"], "FAILED")
+            self.assertEqual(public["nodes"], [])
+            self.assertEqual(public["total_nodes"], 0)
+            result = self.harness._build_result(session_id)
+            self.assertIn("FAILED", result.stage_events)
+            self.assertNotIn("outline_ready", result.event_types)
+            self.assertNotIn("generation_complete", result.event_types)
+            self.assertEqual(len(wrong_first.topics), 2)
+            self.assertEqual(len(wrong_second.topics), 4)
+            job = self.harness.jobs.get_by_session(session_id)
+            self.assertIsNotNone(job)
+            self.assertEqual(job.stage, GenerationStage.FAILED)
+            self.assertIsNone(job.lock_owner)
+            stream = await self.client.get(
+                f"/learning/sessions/{session_id}/events?after=0"
+            )
+            self.assertEqual(stream.status_code, 200, stream.text)
+            self.assertIn('"FAILED"', stream.text)
+            self.assertNotIn("llm-secret", stream.text)
+            self.assertNotIn("search-secret", stream.text)
+
 
 def main() -> None:
     """Run this acceptance module directly through Python's module runner."""
