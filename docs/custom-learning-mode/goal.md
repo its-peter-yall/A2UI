@@ -3,6 +3,10 @@
 Status: approved by the user on 2026-10-02, including the proposed design
 and concept count range. Proceed with implementation.
 
+Workflow: MAW with technical research enabled and unified review explicitly
+skipped. Execution is paused at the user's request; resume from state.md
+only when the user asks to continue.
+
 ## User objective
 
 Add Custom to the learning page's Auto / Lite / Full mode dropdown.
