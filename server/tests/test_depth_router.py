@@ -82,6 +82,27 @@ class DepthRouterTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(result, "lite")
 
+    async def test_custom_skips_classifier_and_llm(self) -> None:
+        with (
+            patch(
+                "server.services.depth_router.classify_depth",
+                new_callable=AsyncMock,
+            ) as classify,
+            patch(
+                "server.services.depth_router.instructor_client."
+                "create_structured",
+                new_callable=AsyncMock,
+            ) as create,
+        ):
+            for llm in (None, self.llm):
+                with self.subTest(llm_present=llm is not None):
+                    result = await resolve_depth_mode(
+                        "Photosynthesis", "custom", llm_context=llm
+                    )
+                    self.assertEqual(result, "custom")
+            classify.assert_not_called()
+            create.assert_not_called()
+
     async def test_classify_depth_returns_structured_mode(self) -> None:
         with patch(
             "server.services.depth_router.instructor_client.create_structured",

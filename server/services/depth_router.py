@@ -26,6 +26,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from server.schemas.learning import ResolvedDepthMode
 from server.schemas.llm import LLMContext
 from server.utils.instructor_client import instructor_client
 
@@ -101,19 +102,23 @@ async def resolve_depth_mode(
     query: str,
     mode: str,
     llm_context: Optional[LLMContext] = None,
-) -> Literal["lite", "full"]:
-    """Resolve user depth mode to lite or full.
+) -> ResolvedDepthMode:
+    """Resolve user depth mode to lite, full, or custom.
 
     Args:
         query: Learning query (used only for auto).
-        mode: User selection auto|lite|full.
+        mode: User selection auto|lite|full|custom.
         llm_context: Required when mode is auto.
 
     Returns:
-        Resolved mode lite or full. Auto failures → lite.
+        Resolved mode lite, full, or custom. Auto failures → lite.
     """
-    if mode in ("lite", "full"):
-        return mode  # type: ignore[return-value]
+    if mode == "custom":
+        return "custom"
+    if mode == "lite":
+        return "lite"
+    if mode == "full":
+        return "full"
 
     if mode != "auto":
         logger.warning("Unknown depth mode %r; falling back to lite", mode)

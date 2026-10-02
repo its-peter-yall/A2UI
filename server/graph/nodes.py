@@ -269,7 +269,7 @@ async def initialize_generation_node(
     if existing in ("lite", "full") and user_mode == "auto":
         # Resume: keep previously persisted resolution.
         resolved_mode = existing
-    elif user_mode in ("lite", "full"):
+    elif user_mode in ("lite", "full", "custom"):
         resolved_mode = user_mode
     else:
         llm_ctx = None

@@ -45,6 +45,36 @@ class StagedGraphTests(unittest.IsolatedAsyncioTestCase):
         nodes._bump_job_counts("s1", sources=2)
         jobs.bump_counts.assert_called_once_with("s1", sources=2)
 
+    async def test_custom_initialize_skips_depth_resolver(self) -> None:
+        jobs = MagicMock()
+        jobs.is_cancel_requested.return_value = False
+        with (
+            patch("server.graph.nodes.generation_job_store", jobs),
+            patch("server.graph.nodes.learning_manager") as learning,
+            patch("server.graph.nodes.progress_event_store"),
+            patch(
+                "server.graph.nodes.resolve_depth_mode",
+                new_callable=AsyncMock,
+            ) as resolve,
+        ):
+            result = await nodes.initialize_generation_node(
+                {
+                    "session_id": "s1",
+                    "query": "Topic",
+                    "mode": "custom",
+                    "custom_topic_count": 2,
+                },
+                runtime={
+                    "llm_context": LLMContext(api_key="k", model="m"),
+                    "search_context": SearchContext(),
+                },
+            )
+        self.assertEqual(result["resolved_mode"], "custom")
+        resolve.assert_not_called()
+        learning.update_session_resolved_mode.assert_called_once_with(
+            "s1", "custom"
+        )
+
     async def test_web_off_skips_research_and_runs_three_then_ten(self) -> None:
         calls: list[str] = []
         jobs = MagicMock()
