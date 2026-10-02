@@ -356,6 +356,92 @@ class MongoLearningTests(unittest.TestCase):
         self.assertIsNone(set_dict["failed_step"])
         self.assertNotIn("$unset", update_args[1])
 
+    def test_custom_session_count_round_trips_independently(self) -> None:
+        sessions = self.database["learning_sessions"]
+        nodes = self.database["concept_nodes"]
+        for count in (1, 2, 5, 30):
+            with self.subTest(count=count):
+                result = self.repository.create_learning_session(
+                    "CSS",
+                    "CSS",
+                    mode="custom",
+                    resolved_mode="custom",
+                    custom_topic_count=count,
+                )
+                inserted = sessions.insert_one.call_args.args[0]
+                self.assertEqual(inserted["custom_topic_count"], count)
+                self.assertEqual(result["custom_topic_count"], count)
+                sessions.find_one.return_value = dict(inserted)
+                for actual in (0, 1):
+                    nodes.count_documents.side_effect = [actual, 0]
+                    loaded = self.repository.get_learning_session(
+                        result["id"]
+                    )
+                    assert loaded is not None
+                    self.assertEqual(loaded["custom_topic_count"], count)
+                    self.assertEqual(loaded["total_nodes"], actual)
+                    self.assertEqual(loaded["mode"], "custom")
+                    self.assertEqual(loaded["resolved_mode"], "custom")
+                cursor = sessions.find.return_value
+                chain = cursor.sort.return_value.skip.return_value
+                chain.limit.return_value = [dict(inserted)]
+                sessions.count_documents.return_value = 1
+                nodes.count_documents.side_effect = [1, 0]
+                revisions = self.database["revision_sessions"]
+                revisions.count_documents.return_value = 0
+                listed, total = self.repository.get_sessions_list(None)
+                self.assertEqual(total, 1)
+                self.assertEqual(listed[0]["custom_topic_count"], count)
+                self.assertEqual(listed[0]["total_nodes"], 1)
+
+    def test_existing_modes_create_null_count_documents(self) -> None:
+        sessions = self.database["learning_sessions"]
+        for mode in ("auto", "lite", "full"):
+            with self.subTest(mode=mode):
+                result = self.repository.create_learning_session(
+                    "CSS", "CSS", mode=mode
+                )
+                inserted = sessions.insert_one.call_args.args[0]
+                self.assertIsNone(inserted["custom_topic_count"])
+                self.assertIsNone(result["custom_topic_count"])
+
+    def test_legacy_document_reads_and_lists_null_count(self) -> None:
+        sessions = self.database["learning_sessions"]
+        document = {
+            "_id": "old",
+            "query": "Old query",
+            "course_title": "Old title",
+            "created_at": "2026-08-03T11:00:00Z",
+            "updated_at": "2026-08-03T11:00:00Z",
+        }
+        sessions.find_one.return_value = dict(document)
+        self.database["concept_nodes"].count_documents.return_value = 0
+        for _ in range(2):
+            loaded = self.repository.get_learning_session("old")
+            assert loaded is not None
+            self.assertEqual(loaded["query"], "Old query")
+            self.assertIsNone(loaded["custom_topic_count"])
+        cursor = sessions.find.return_value
+        cursor.sort.return_value.skip.return_value.limit.return_value = [
+            dict(document)
+        ]
+        sessions.count_documents.return_value = 1
+        self.database["revision_sessions"].count_documents.return_value = 0
+        listed, total = self.repository.get_sessions_list(None)
+        self.assertEqual(total, 1)
+        self.assertIsNone(listed[0]["custom_topic_count"])
+        self.assertNotIn("custom_topic_count", document)
+
+    def test_update_resolved_mode_accepts_custom(self) -> None:
+        sessions = self.database["learning_sessions"]
+        sessions.update_one.return_value.matched_count = 1
+        self.repository.update_session_resolved_mode("s1", "custom")
+        update = sessions.update_one.call_args.args[1]
+        self.assertEqual(update["$set"]["resolved_mode"], "custom")
+        self.assertNotIn("custom_topic_count", update["$set"])
+        with self.assertRaises(ValueError):
+            self.repository.update_session_resolved_mode("s1", "turbo")
+
 
 if __name__ == "__main__":
     unittest.main()

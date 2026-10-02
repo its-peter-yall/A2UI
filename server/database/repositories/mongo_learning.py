@@ -107,6 +107,7 @@ class MongoLearningRepository:
         user_id: Optional[str] = None,
         mode: str = "auto",
         resolved_mode: Optional[str] = None,
+        custom_topic_count: Optional[int] = None,
     ) -> dict[str, Any]:
         now = utc_iso()
         document = {
@@ -117,6 +118,7 @@ class MongoLearningRepository:
             "title_finalized": True,
             "mode": mode,
             "resolved_mode": resolved_mode,
+            "custom_topic_count": custom_topic_count,
             "status": "active",
             "progress_percent": 0,
             "completed_at": None,
@@ -135,6 +137,7 @@ class MongoLearningRepository:
         if document is None:
             return None
         row = document_to_row(document) or {}
+        row.setdefault("custom_topic_count", None)
         total_nodes = self._nodes.count_documents(
             {"learning_session_id": session_id}
         )
@@ -214,6 +217,7 @@ class MongoLearningRepository:
         rows = []
         for item in cursor:
             row = document_to_row(item) or {}
+            row.setdefault("custom_topic_count", None)
             sid = row.get("id")
             if sid:
                 raw_total = self._nodes.count_documents(
@@ -271,7 +275,7 @@ class MongoLearningRepository:
         session_id: str,
         resolved_mode: str,
     ) -> None:
-        if resolved_mode not in ("lite", "full"):
+        if resolved_mode not in ("lite", "full", "custom"):
             raise ValueError(f"Invalid resolved_mode: {resolved_mode}")
         result = self._sessions.update_one(
             {"_id": session_id},
