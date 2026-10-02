@@ -180,6 +180,80 @@ class StagedGraphTests(unittest.IsolatedAsyncioTestCase):
                 for event in emitted
             ))
 
+    async def test_custom_reuses_optional_research_stage(self) -> None:
+        choices = ((False, None), (True, None), (True, "saved"))
+        for enabled, report_id in choices:
+            with self.subTest(enabled=enabled, report_id=report_id):
+                calls = []
+                jobs = MagicMock()
+                jobs.is_cancel_requested.return_value = False
+                jobs.get_by_session.return_value = None
+                research_store = MagicMock()
+                research_store.get_report_context.return_value = "Evidence"
+
+                async def research(**kwargs):
+                    calls.append("research")
+                    return "new-report", False
+
+                async def plan(**kwargs):
+                    calls.append("outline")
+                    self.assertEqual(kwargs["mode"], "custom")
+                    self.assertEqual(kwargs["custom_topic_count"], 2)
+                    return _custom_outline(2)
+
+                graph = build_graph(node_overrides={
+                    "plan_brief_batch_node": AsyncMock(return_value={
+                        "active_batch_start": 0, "active_batch_size": 2,
+                    }),
+                    "generator_node": AsyncMock(return_value={}),
+                    "prepare_quiz_batch_node": AsyncMock(return_value={}),
+                    "quizzer_node": AsyncMock(return_value={}),
+                    "advance_batch_node": AsyncMock(return_value={
+                        "next_topic_index": 2,
+                    }),
+                    "finalize_generation_node": AsyncMock(return_value={}),
+                })
+                with (
+                    patch("server.graph.nodes.generation_job_store", jobs),
+                    patch("server.graph.nodes.learning_manager"),
+                    patch("server.graph.nodes.generation_artifact_store"),
+                    patch("server.graph.nodes.progress_event_store"),
+                    patch("server.graph.nodes.research_store", research_store),
+                    patch("server.graph.nodes.run_research",
+                          new=AsyncMock(side_effect=research)) as run_research,
+                    patch("server.graph.nodes.planner_agent.plan",
+                          new=AsyncMock(side_effect=plan)) as planner,
+                    patch("server.graph.nodes.resolve_depth_mode",
+                          new_callable=AsyncMock) as resolve,
+                ):
+                    result = await graph.ainvoke({
+                        "job_id": "j1", "session_id": "s1", "query": "Topic",
+                        "user_id": None, "mode": "custom",
+                        "custom_topic_count": 2, "web_search_enabled": enabled,
+                        "research_report_id": report_id,
+                        "next_topic_index": 0, "generator_results": [],
+                        "topic_results": [], "degraded": False,
+                    }, context={
+                        "llm_context": LLMContext(api_key="k", model="m"),
+                        "search_context": SearchContext(enabled=enabled),
+                        "worker_id": "w1",
+                    })
+                resolve.assert_not_called()
+                planner.assert_awaited_once()
+                self.assertEqual(result["custom_topic_count"], 2)
+                if enabled and report_id is None:
+                    run_research.assert_awaited_once()
+                    self.assertEqual(calls, ["research", "outline"])
+                    self.assertEqual(result["research_report_id"], "new-report")
+                else:
+                    run_research.assert_not_called()
+                    self.assertEqual(calls, ["outline"])
+                expected_context = "Evidence" if enabled else None
+                self.assertEqual(
+                    planner.await_args.kwargs["research_context"],
+                    expected_context,
+                )
+
     async def test_web_off_skips_research_and_runs_three_then_ten(self) -> None:
         calls: list[str] = []
         jobs = MagicMock()

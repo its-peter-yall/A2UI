@@ -45,6 +45,30 @@ class StagedStateTests(unittest.TestCase):
             [(0, 3), (3, 10), (13, 10), (23, 7)],
         )
 
+    def test_custom_counts_retain_existing_batch_schedule(self) -> None:
+        from server.graph.nodes import route_next_batch, select_topic_batch
+
+        expected = {
+            1: [(0, 1)],
+            2: [(0, 2)],
+            7: [(0, 3), (3, 4)],
+            30: [(0, 3), (3, 10), (13, 10), (23, 7)],
+        }
+        for count, batches in expected.items():
+            with self.subTest(count=count):
+                cursor, actual = 0, []
+                while cursor < count:
+                    batch = select_topic_batch(cursor, count)
+                    actual.append((batch.start, batch.size))
+                    cursor = batch.start + batch.size
+                    route = route_next_batch({
+                        "topic_count": count, "next_topic_index": cursor,
+                    })
+                    self.assertEqual(
+                        route, "plan_next" if cursor < count else "finalize"
+                    )
+                self.assertEqual(actual, batches)
+
     def test_custom_count_is_a_checkpoint_state_channel(self) -> None:
         from typing import get_type_hints
         from server.graph.state import CourseState
