@@ -31,6 +31,7 @@ from server.database.generation_jobs import (
 )
 from server.database.generation_migrations import initialize_generation_schema
 from server.database.learning_persistence import LearningManager
+from server.database.repositories.sqlite import SqliteGenerationJobRepository
 from server.schemas.generation import (
     GenerationStage,
     GenerationWarning,
@@ -188,6 +189,67 @@ class GenerationJobStoreTests(unittest.TestCase):
         )
         self.assertEqual(counts.sources, 2)
         self.assertEqual(counts.research_sections, 1)
+
+    def test_custom_shell_count_round_trips_independently(self) -> None:
+        repository = SqliteGenerationJobRepository(self.store)
+        learning = LearningManager(self.db_path)
+        for count in (1, 2, 5, 30):
+            with self.subTest(count=count):
+                session, job = repository.create_session_shell_and_job(
+                    query="CSS",
+                    user_id=None,
+                    mode="custom",
+                    custom_topic_count=count,
+                    web_search_requested=False,
+                    now=self.now,
+                )
+                self.assertEqual(session["custom_topic_count"], count)
+                self.assertEqual(session["mode"], "custom")
+                self.assertIsNone(session["resolved_mode"])
+                self.assertFalse(session["title_finalized"])
+                loaded = learning.get_learning_session(session["id"])
+                assert loaded is not None
+                self.assertEqual(loaded["custom_topic_count"], count)
+                self.assertEqual(loaded["total_nodes"], 0)
+                self.assertEqual(job.session_id, session["id"])
+                self.assertEqual(job.counts.topics_total, 0)
+
+    def test_legacy_shell_calls_keep_null_count(self) -> None:
+        learning = LearningManager(self.db_path)
+        for mode in ("auto", "lite", "full"):
+            with self.subTest(mode=mode):
+                session, _ = self.store.create_session_shell_and_job(
+                    query="CSS",
+                    user_id=None,
+                    mode=mode,
+                    web_search_requested=False,
+                    now=self.now,
+                )
+                self.assertIsNone(session["custom_topic_count"])
+                loaded = learning.get_learning_session(session["id"])
+                assert loaded is not None
+                self.assertIsNone(loaded["custom_topic_count"])
+
+    def test_repeated_startup_preserves_custom_shell_count(self) -> None:
+        session, job = self.store.create_session_shell_and_job(
+            query="CSS",
+            user_id=None,
+            mode="custom",
+            custom_topic_count=2,
+            web_search_requested=False,
+            now=self.now,
+        )
+        learning = LearningManager(self.db_path)
+        for _ in range(2):
+            learning.init_learning_tables()
+            initialize_generation_schema(self.db_path)
+        loaded = learning.get_learning_session(session["id"])
+        assert loaded is not None
+        self.assertEqual(loaded["custom_topic_count"], 2)
+        restored = self.store.get_by_session(session["id"])
+        assert restored is not None
+        self.assertEqual(restored.id, job.id)
+        self.assertEqual(restored.stage, GenerationStage.INITIALIZING)
 
 
 if __name__ == "__main__":

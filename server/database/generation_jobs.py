@@ -188,6 +188,7 @@ class GenerationJobStore:
         mode: str,
         web_search_requested: bool,
         now: Optional[datetime] = None,
+        custom_topic_count: Optional[int] = None,
     ) -> tuple[dict[str, Any], GenerationJobRecord]:
         """Create a learning session shell and its job atomically.
 
@@ -208,9 +209,9 @@ class GenerationJobStore:
                 """
                 INSERT INTO learning_sessions (
                     id, user_id, query, course_title, mode, resolved_mode,
-                    title_finalized, created_at, updated_at
+                    custom_topic_count, title_finalized, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """,
                 (
                     session_id,
@@ -219,6 +220,7 @@ class GenerationJobStore:
                     query.strip(),
                     mode,
                     None,
+                    custom_topic_count,
                     now_iso,
                     now_iso,
                 ),
@@ -255,6 +257,7 @@ class GenerationJobStore:
             "course_title": query.strip(),
             "mode": mode,
             "resolved_mode": None,
+            "custom_topic_count": custom_topic_count,
             "title_finalized": 0,
             "created_at": now_iso,
             "updated_at": now_iso,
