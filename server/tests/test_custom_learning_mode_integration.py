@@ -71,6 +71,101 @@ async def _drain(runtime: GenerationRuntime) -> None:
         await asyncio.wait_for(asyncio.gather(*tasks), timeout=30)
 
 
+def _mongo_stores() -> tuple[Any, Any]:
+    """Compose real repositories with deterministic collection transport."""
+    database = MagicMock()
+    collections: dict[str, MagicMock] = {}
+    documents: dict[str, dict[str, Any]] = {}
+
+    def collection(name: str) -> MagicMock:
+        if name not in collections:
+            collections[name] = MagicMock(name=name)
+        return collections[name]
+
+    database.__getitem__.side_effect = collection
+    transaction = MagicMock()
+    database.client.start_session.return_value.__enter__.return_value = (
+        transaction
+    )
+    transaction.start_transaction.return_value.__enter__.return_value = (
+        transaction
+    )
+
+    def matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
+        for key, expected in query.items():
+            if key == "$or":
+                if not any(matches(document, item) for item in expected):
+                    return False
+                continue
+            actual = document.get(key)
+            if isinstance(expected, dict):
+                for operator, operand in expected.items():
+                    if operator == "$in":
+                        ok = actual in operand
+                    elif operator == "$gt":
+                        ok = actual is not None and actual > operand
+                    elif operator == "$lte":
+                        ok = actual is not None and actual <= operand
+                    else:
+                        raise AssertionError(
+                            f"Unsupported predicate: {operator}"
+                        )
+                    if not ok:
+                        return False
+            elif actual != expected:
+                return False
+        return True
+
+    def insert(name: str, document: dict[str, Any], **kwargs: Any) -> None:
+        del kwargs
+        stored = make_job_document() if name == "generation_jobs" else {}
+        stored.update(deepcopy(document))
+        documents[name] = stored
+
+    def find(name: str, query: dict[str, Any]) -> Optional[dict[str, Any]]:
+        document = documents.get(name)
+        if document is None or not matches(document, query):
+            return None
+        return deepcopy(document)
+
+    def update(
+        name: str, query: dict[str, Any], change: dict[str, Any], **kwargs: Any
+    ) -> Optional[dict[str, Any]]:
+        del kwargs
+        document = documents.get(name)
+        if document is None or not matches(document, query):
+            return None
+        if set(change) - {"$set", "$inc"}:
+            raise AssertionError(f"Unsupported update: {change.keys()}")
+        document.update(deepcopy(change.get("$set", {})))
+        for key, amount in change.get("$inc", {}).items():
+            document[key] = document.get(key, 0) + amount
+        return deepcopy(document)
+
+    for name in ("learning_sessions", "generation_jobs"):
+        target = collection(name)
+        target.insert_one.side_effect = (
+            lambda document, name=name, **kw: insert(name, document, **kw)
+        )
+        target.find_one.side_effect = lambda query, name=name: find(name, query)
+        target.find_one_and_update.side_effect = (
+            lambda query, change, name=name, **kw:
+            update(name, query, change, **kw)
+        )
+        target.update_one.side_effect = (
+            lambda query, change, name=name:
+            SimpleNamespace(
+                matched_count=int(update(name, query, change) is not None)
+            )
+        )
+    collection("concept_nodes").count_documents.return_value = 0
+    collection("concept_nodes").find.return_value.sort.return_value = []
+    return (
+        MongoLearningRepository(database),
+        MongoGenerationJobRepository(database),
+    )
+
+
 class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
     """Prove composed behavior using isolated temporary persistence."""
 
@@ -323,6 +418,167 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(resolve.await_count, int(mode == "auto"))
                 search.assert_not_awaited()
                 generate.assert_awaited_once()
+
+    async def test_stored_count_survives_http_read_and_resume_on_both_stores(
+        self,
+    ) -> None:
+        for backend in ("sqlite", "mongo"):
+            for count in (1, 2, 5, 30):
+                with self.subTest(backend=backend, count=count):
+                    if backend == "sqlite":
+                        learning = self.harness.learning
+                        jobs = self.harness.jobs
+                    else:
+                        learning, jobs = _mongo_stores()
+                    events = MagicMock()
+                    events.latest_id.return_value = 0
+                    app_state = SimpleNamespace()
+                    seen: list[int] = []
+
+                    async def pause_outline(state: Any, runtime: Any) -> dict:
+                        del runtime
+                        seen.append(state["custom_topic_count"])
+                        raise ResumableGenerationError("pause before outline")
+
+                    async def resume_outline(state: Any, runtime: Any) -> dict:
+                        del runtime
+                        seen.append(state["custom_topic_count"])
+                        return {"topic_count": count, "next_topic_index": 0}
+
+                    async def plan(state: Any, runtime: Any) -> dict:
+                        del state, runtime
+                        return {"active_batch_start": 0, "active_batch_size": 1}
+
+                    overrides = {
+                        "outline_planner_node": pause_outline,
+                        "plan_brief_batch_node": plan,
+                        "generator_node": AsyncMock(return_value={}),
+                        "prepare_quiz_batch_node": AsyncMock(return_value={}),
+                        "quizzer_node": AsyncMock(return_value={}),
+                        "advance_batch_node": AsyncMock(
+                            return_value={"next_topic_index": count}
+                        ),
+                        "finalize_generation_node": AsyncMock(return_value={}),
+                    }
+
+                    async def runner_fn(**kwargs: Any) -> None:
+                        await run_generation_job(
+                            **kwargs, job_store=jobs, event_store=events
+                        )
+
+                    runtime = GenerationRuntime(
+                        app_state=app_state, job_store=jobs,
+                        event_store=events, research=self.harness.research,
+                        runner=runner_fn,
+                    )
+                    self.app.state.generation_runtime = runtime
+                    cp_path = self.harness.checkpoint_path.parent / (
+                        f"{backend}-{count}.db"
+                    )
+                    with (
+                        patch("server.graph.runner.learning_manager", learning),
+                        patch("server.graph.nodes.learning_manager", learning),
+                        patch("server.graph.nodes.generation_job_store", jobs),
+                        patch(
+                            "server.graph.nodes.progress_event_store", events
+                        ),
+                        patch(
+                            "server.routers.learning.learning_manager", learning
+                        ),
+                        patch(
+                            "server.routers.learning.generation_job_store", jobs
+                        ),
+                        patch(
+                            "server.database.storage_registry."
+                            "progress_event_repository", events,
+                        ),
+                    ):
+                        try:
+                            cm = AsyncSqliteSaver.from_conn_string(str(cp_path))
+                            async with cm as saver:
+                                app_state.course_graph = build_graph(
+                                    saver, node_overrides=overrides
+                                )
+                                session_id = await self._start(count)
+                                await _drain(runtime)
+                                paused = await self.client.get(
+                                    f"/learning/sessions/{session_id}"
+                                )
+                                self.assertEqual(
+                                    paused.status_code, 200, paused.text
+                                )
+                                self.assertEqual(
+                                    paused.json()["custom_topic_count"], count
+                                )
+                                self.assertEqual(
+                                    paused.json()["generation"]["stage"],
+                                    "PAUSED",
+                                )
+                                job = jobs.get_by_session(session_id)
+                                self.assertIsNotNone(job)
+                                thread_id = job.thread_id
+                            # Rebuild runtime and graph after closing saver.
+                            await runtime.shutdown()
+                            runtime = GenerationRuntime(
+                                app_state=app_state, job_store=jobs,
+                                event_store=events,
+                                research=self.harness.research,
+                                runner=runner_fn,
+                            )
+                            self.app.state.generation_runtime = runtime
+                            overrides["outline_planner_node"] = resume_outline
+                            cm = AsyncSqliteSaver.from_conn_string(str(cp_path))
+                            async with cm as saver:
+                                graph = build_graph(
+                                    saver, node_overrides=overrides
+                                )
+                                app_state.course_graph = graph
+                                config = {
+                                    "configurable": {"thread_id": thread_id}
+                                }
+                                before = await graph.aget_state(config)
+                                self.assertEqual(
+                                    before.values["custom_topic_count"], count
+                                )
+                                response = await self.client.post(
+                                    f"/learning/sessions/{session_id}/resume",
+                                    headers=_headers(),
+                                )
+                                self.assertEqual(
+                                    response.status_code, 202, response.text
+                                )
+                                await _drain(runtime)
+                                after = await graph.aget_state(config)
+                                self.assertEqual(after.next, ())
+                                self.assertEqual(
+                                    after.values["custom_topic_count"], count
+                                )
+                                self.assertEqual(after.values["mode"], "custom")
+                                self.assertEqual(
+                                    after.values["resolved_mode"], "custom"
+                                )
+                                self.assertNotIn(
+                                    "llm-secret", repr(after.values)
+                                )
+                                read = await self.client.get(
+                                    f"/learning/sessions/{session_id}"
+                                )
+                                self.assertEqual(
+                                    read.status_code, 200, read.text
+                                )
+                                self.assertEqual(
+                                    read.json()["custom_topic_count"], count
+                                )
+                                self.assertEqual(
+                                    jobs.get_by_session(session_id).thread_id,
+                                    thread_id,
+                                )
+                                self.assertEqual(seen, [count, count])
+                        finally:
+                            await runtime.shutdown()
+                            self.app.state.generation_runtime = (
+                                self.harness.runtime
+                            )
 
 
 def main() -> None:
