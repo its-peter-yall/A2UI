@@ -65,6 +65,7 @@ class LearningRepository(Protocol):
         user_id: Optional[str] = None,
         mode: str = "auto",
         resolved_mode: Optional[str] = None,
+        custom_topic_count: Optional[int] = None,
     ) -> dict[str, Any]: ...
 
     def get_learning_session(
@@ -206,6 +207,7 @@ class GenerationJobRepository(Protocol):
         mode: str,
         web_search_requested: bool,
         now: Optional[datetime] = None,
+        custom_topic_count: Optional[int] = None,
     ) -> tuple[dict, GenerationJobRecord]: ...
     def get_by_session(
         self,

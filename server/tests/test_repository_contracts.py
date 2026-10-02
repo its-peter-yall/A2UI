@@ -96,6 +96,19 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIs(context.research, bundle.research)
         self.assertIs(context.progress, bundle.progress)
 
+    def test_creation_ports_accept_optional_custom_topic_count(self) -> None:
+        methods = (
+            LearningRepository.create_learning_session,
+            GenerationJobRepository.create_session_shell_and_job,
+        )
+        for method in methods:
+            with self.subTest(method=method.__qualname__):
+                parameters = inspect.signature(method).parameters
+                self.assertIn("custom_topic_count", parameters)
+                self.assertIsNone(
+                    parameters["custom_topic_count"].default
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
