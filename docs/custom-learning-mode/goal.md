@@ -1,6 +1,7 @@
 # Custom Learning Mode
 
-Status: proposed; awaiting user review before implementation.
+Status: approved by the user on 2026-10-02, including the proposed design
+and concept count range. Proceed with implementation.
 
 ## User objective
 

@@ -1,12 +1,12 @@
 ---
 objective: custom-learning-mode
 workflow: maw
-status: awaiting-goal-approval
+status: in-progress
 skipped_phases: []
 source: realtime user request, 2026-10-02
-goal_status: pending
+goal_status: approved
 dag_status: initial
-resume_gate: none
+resume_gate: authorized
 ---
 
 # State & Dependency Graph: Custom Learning Mode
@@ -16,14 +16,14 @@ resume_gate: none
 - Keep workflow artifacts directly in docs/custom-learning-mode/.
 - No phases skipped. Brainstorming, research, planning, execution, review,
   and final verification are required.
-- Authorization: draft the specification now; obtain MAW's explicit written
-  goal approval before dispatching research/planning/implementation agents.
+- Authorization: user explicitly approved the written design on 2026-10-02;
+  research, planning, implementation, and verification are authorized.
 - Preserve the many existing uncommitted client/server changes. Stage only
   explicitly owned paths; serialize all commits in the shared checkout.
 
 ## Workflow milestones
 
-- [ ] Step 1: Brainstorming & Goal Alignment (goal.md proposed)
+- [x] Step 1: Brainstorming & Goal Alignment (user explicitly approved)
 - [ ] Step 2: Technical Research (research.md)
 - [ ] Step 3: Planning Completed
 - [ ] Step 4: Execution Completed
@@ -36,7 +36,7 @@ resume_gate: none
 - [x] Capture count and research requirements from user.
 - [x] Compare UI approaches and recommend a settings row.
 - [x] Write proposed goal; review consistency, scope, and count enforcement.
-- [ ] Obtain user approval of the written goal and proposed 1–30 range.
+- [x] Obtain user approval of the written goal and proposed 1–30 range.
 - [x] Construct initial DAG, ownership, and acceptance mapping.
 
 ## Initial findings
@@ -52,7 +52,7 @@ resume_gate: none
 ## Confirmed product decisions
 
 - User requested Custom, an explicit concept count, and research on/off.
-- Proposed details awaiting approval: settings row, range 1–30, empty initial
+- Approved details: settings row, range 1–30, empty initial
   count, and reuse of the existing research setting.
 
 ## Dependency matrix & execution status
@@ -159,7 +159,7 @@ Evidence pending execution. Track baseline failures separately.
 
 ## Current gate and resume procedure
 
-CURRENT GATE: WAITING FOR WRITTEN GOAL APPROVAL.
+CURRENT GATE: READY FOR TECHNICAL RESEARCH; GOAL APPROVED.
 
 1. Read this state, goal, and git status; preserve intervening user changes.
 2. Obtain explicit goal approval, or incorporate requested revisions.
