@@ -99,9 +99,17 @@ export const generateCourse = async (
     ...buildLlmHeaders(),
     ...buildWebSearchHeaders(webSearchEnabled, getWebSearchSettings()),
   };
+  const payload: GenerateCourseRequest = {
+    query: data.query,
+    ...(data.user_id !== undefined ? { user_id: data.user_id } : {}),
+    ...(data.mode !== undefined ? { mode: data.mode } : {}),
+    ...(data.custom_topic_count !== undefined
+      ? { custom_topic_count: data.custom_topic_count }
+      : {}),
+  };
   const response = await api.post<GenerateCourseAcceptedResponse>(
     '/learning/generate',
-    data,
+    payload,
     { headers },
   );
   return response.data;

@@ -223,3 +223,60 @@ describe('learningApi secret scope', () => {
     });
   });
 });
+
+describe('learningApi request payload', () => {
+  beforeEach(() => {
+    mocks.resetLast();
+    mocks.instance.post.mockClear();
+  });
+
+  it('generateCourse forwards custom_topic_count in request body for custom mode', async () => {
+    await generateCourse({
+      query: 'Quantum Computing',
+      mode: 'custom',
+      custom_topic_count: 5,
+    });
+
+    expect(mocks.instance.post).toHaveBeenCalledWith(
+      '/learning/generate',
+      expect.objectContaining({
+        query: 'Quantum Computing',
+        mode: 'custom',
+        custom_topic_count: 5,
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('generateCourse omits custom_topic_count in request body for non-custom modes', async () => {
+    await generateCourse({
+      query: 'Classical Mechanics',
+      mode: 'auto',
+    });
+
+    const callArgs = mocks.instance.post.mock.calls[0];
+    const payload = callArgs[1] as Record<string, unknown>;
+    expect(payload).toEqual(
+      expect.objectContaining({
+        query: 'Classical Mechanics',
+        mode: 'auto',
+      }),
+    );
+    expect(payload.custom_topic_count).toBeUndefined();
+  });
+
+  it('generateCourse sends exactly the contract fields and drops undefined entries', async () => {
+    const data: GenerateCourseRequest = {
+      query: 'Compilers',
+      mode: 'lite',
+      user_id: undefined,
+      custom_topic_count: undefined,
+    };
+
+    await generateCourse(data);
+
+    const callArgs = mocks.instance.post.mock.calls[0];
+    const payload = callArgs[1] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(['mode', 'query']);
+  });
+});
