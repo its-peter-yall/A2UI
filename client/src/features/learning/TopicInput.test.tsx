@@ -216,4 +216,79 @@ describe('TopicInput custom mode controls', () => {
     const countInput = screen.getByLabelText(/number of concepts/i) as HTMLInputElement;
     expect(countInput.value).toBe('');
   });
+
+  it('synchronizes research state between the globe icon and the Custom research switch', () => {
+    renderInput();
+    selectMode('Custom');
+
+    const globeButton = screen.getByRole('button', {
+      name: /use web search for this course/i,
+    });
+    const researchSwitch = screen.getByRole('switch', { name: /research/i });
+
+    expect(globeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(researchSwitch).toHaveAttribute('aria-checked', 'false');
+
+    // Toggle switch ON -> globe updates to true
+    fireEvent.click(researchSwitch);
+    expect(researchSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(globeButton).toHaveAttribute('aria-pressed', 'true');
+
+    // Toggle globe OFF -> switch updates to false
+    fireEvent.click(globeButton);
+    expect(globeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(researchSwitch).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('keeps research switch visible but disabled with guidance when search capability is unavailable', () => {
+    mocks.capability = false;
+    renderInput();
+    selectMode('Custom');
+
+    // Globe button is hidden from input bar
+    expect(
+      screen.queryByRole('button', { name: /use web search/i }),
+    ).not.toBeInTheDocument();
+
+    // Research switch remains VISIBLE but DISABLED
+    const researchSwitch = screen.getByRole('switch', { name: /research/i });
+    expect(researchSwitch).toBeInTheDocument();
+    expect(researchSwitch).toBeDisabled();
+
+    // Guidance text is shown
+    expect(
+      screen.getByText(/configure web search provider in settings/i),
+    ).toBeInTheDocument();
+  });
+
+  it('allows custom generation with research off when capability is unavailable', async () => {
+    mocks.capability = false;
+    mocks.generateCourse.mockResolvedValue({
+      session: {
+        id: 'session-noresearch',
+        query: 'Compilers',
+        course_title: 'Compilers',
+        nodes: [],
+      },
+      generation: { id: 'job-nr', stage: 'INITIALIZING', last_event_id: 1 },
+    });
+
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Compilers' },
+    });
+    selectMode('Custom');
+    fireEvent.change(screen.getByLabelText(/number of concepts/i), {
+      target: { value: '4' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    await waitFor(() => {
+      expect(mocks.generateCourse).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.generateCourse.mock.calls[0][1]).toEqual({
+      webSearchEnabled: false,
+    });
+  });
 });

@@ -360,7 +360,10 @@ export function TopicInput({
               <div className="flex items-center gap-2">
                 <label
                   htmlFor={researchSwitchId}
-                  className="text-xs sm:text-sm font-medium text-foreground"
+                  className={cn(
+                    'text-xs sm:text-sm font-medium',
+                    canUseWebSearch ? 'text-foreground' : 'text-muted-foreground',
+                  )}
                 >
                   Research
                 </label>
@@ -368,25 +371,39 @@ export function TopicInput({
                   id={researchSwitchId}
                   type="button"
                   role="switch"
-                  aria-checked={webSearchEnabled}
+                  aria-checked={webSearchEnabled && canUseWebSearch}
                   aria-label="Research"
-                  onClick={() => setWebSearchEnabled((prev) => !prev)}
+                  disabled={isLoading || !canStart || !canUseWebSearch}
+                  onClick={() => {
+                    if (canUseWebSearch) {
+                      setWebSearchEnabled((prev) => !prev);
+                    }
+                  }}
                   className={cn(
                     'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
                     'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
                     'disabled:opacity-50 disabled:cursor-not-allowed',
-                    webSearchEnabled ? 'bg-[#ffb74d]' : 'bg-muted-foreground/30',
+                    webSearchEnabled && canUseWebSearch
+                      ? 'bg-[#ffb74d]'
+                      : 'bg-muted-foreground/30',
                   )}
                 >
                   <span
                     className={cn(
                       'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out',
-                      webSearchEnabled ? 'translate-x-4' : 'translate-x-0',
+                      webSearchEnabled && canUseWebSearch
+                        ? 'translate-x-4'
+                        : 'translate-x-0',
                     )}
                     aria-hidden="true"
                   />
                 </button>
               </div>
+              {!canUseWebSearch && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Configure web search provider in Settings to enable research.
+                </p>
+              )}
             </div>
           </div>
         )}
