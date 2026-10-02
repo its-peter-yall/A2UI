@@ -45,6 +45,14 @@ class StagedStateTests(unittest.TestCase):
             [(0, 3), (3, 10), (13, 10), (23, 7)],
         )
 
+    def test_custom_count_is_a_checkpoint_state_channel(self) -> None:
+        from typing import get_type_hints
+        from server.graph.state import CourseState
+
+        hints = get_type_hints(CourseState, include_extras=True)
+        self.assertIn("custom_topic_count", hints)
+        self.assertIn("NotRequired", str(hints["custom_topic_count"]))
+
     def test_keyed_reducer_replaces_resumed_topic_result(self) -> None:
         from server.graph.state import merge_generator_results
 

@@ -103,8 +103,9 @@ class CourseState(TypedDict):
     session_id: str
     query: str
     user_id: Optional[str]
-    mode: str  # auto|lite|full
-    resolved_mode: str  # lite|full
+    mode: str  # auto|lite|full|custom
+    resolved_mode: str  # lite|full|custom
+    custom_topic_count: NotRequired[Optional[int]]
     web_search_enabled: bool
     research_report_id: Optional[str]
     topic_count: int

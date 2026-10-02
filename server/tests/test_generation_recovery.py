@@ -19,11 +19,19 @@ USAGE:
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from server.database.checkpoint_migration import copy_checkpoints
+from server.database.generation_jobs import GenerationJobStore
+from server.database.generation_migrations import initialize_generation_schema
+from server.database.learning_persistence import LearningManager
+from server.graph.build import build_graph
 from server.graph.runner import (
     GenerationAlreadyRunning,
     GenerationCancelled,
@@ -86,6 +94,151 @@ class GenerationRunnerTests(unittest.IsolatedAsyncioTestCase):
         persisted_calls = repr(jobs.method_calls)
         self.assertNotIn("llm-secret", persisted_calls)
         self.assertNotIn("search-secret", persisted_calls)
+
+    async def test_start_restores_custom_count_from_session(self) -> None:
+        for count in (1, 2, 7, 30):
+            with self.subTest(count=count):
+                graph, jobs = AsyncMock(), MagicMock()
+                jobs.get_by_session.return_value = SimpleNamespace(
+                    id="j1", thread_id="gen-s1"
+                )
+                jobs.try_acquire_lock.return_value = SimpleNamespace(
+                    owner="w1", version=1
+                )
+                session = {
+                    "id": "s1", "query": "Topic", "mode": "custom",
+                    "resolved_mode": "custom", "custom_topic_count": count,
+                    "total_nodes": 0,
+                }
+                with patch(
+                    "server.graph.runner.learning_manager."
+                    "get_learning_session", return_value=session,
+                ):
+                    await run_generation_job(
+                        app_state=SimpleNamespace(course_graph=graph),
+                        session_id="s1", worker_id="w1",
+                        llm_context=LLMContext(api_key="k", model="m"),
+                        search_context=SearchContext(), job_store=jobs,
+                        event_store=MagicMock(),
+                    )
+                state = graph.ainvoke.await_args.args[0]
+                self.assertEqual(state["custom_topic_count"], count)
+                self.assertEqual(state["resolved_mode"], "custom")
+                self.assertEqual(state["mode"], "custom")
+                self.assertEqual(state["topic_count"], 0)
+                self.assertNotIn("llm_context", state)
+                self.assertNotIn("search_context", state)
+
+    async def test_custom_count_survives_reopened_checkpoint_resume(
+        self,
+    ) -> None:
+        for count in (1, 2, 7, 30):
+            with (
+                self.subTest(count=count),
+                tempfile.TemporaryDirectory() as tmp,
+            ):
+                db_path = Path(tmp) / "a2ui.db"
+                cp_path = str(Path(tmp) / "checkpoints.db")
+                learning = LearningManager(db_path)
+                learning.init_learning_tables()
+                initialize_generation_schema(db_path)
+                jobs = GenerationJobStore(db_path)
+                session, job = jobs.create_session_shell_and_job(
+                    query="Topic", user_id=None, mode="custom",
+                    custom_topic_count=count, web_search_requested=False,
+                )
+                seen = []
+
+                async def pause_outline(state, runtime):
+                    seen.append(state["custom_topic_count"])
+                    raise ResumableGenerationError("pause before outline")
+
+                async def resume_outline(state, runtime):
+                    seen.append(state["custom_topic_count"])
+                    return {"topic_count": count, "next_topic_index": 0}
+
+                async def plan(state, runtime):
+                    return {
+                        "active_batch_start": 0,
+                        "active_batch_size": 1,
+                    }
+
+                overrides = {
+                    "outline_planner_node": pause_outline,
+                    "plan_brief_batch_node": plan,
+                    "generator_node": AsyncMock(return_value={}),
+                    "prepare_quiz_batch_node": AsyncMock(return_value={}),
+                    "quizzer_node": AsyncMock(return_value={}),
+                    "advance_batch_node": AsyncMock(
+                        return_value={"next_topic_index": count}
+                    ),
+                    "finalize_generation_node": AsyncMock(return_value={}),
+                }
+                events = MagicMock()
+                with (
+                    patch("server.graph.runner.learning_manager", learning),
+                    patch("server.graph.nodes.learning_manager", learning),
+                    patch("server.graph.nodes.generation_job_store", jobs),
+                    patch("server.graph.nodes.progress_event_store", events),
+                    patch("server.graph.nodes.resolve_depth_mode",
+                          new_callable=AsyncMock) as resolve,
+                ):
+                    saver_cm = AsyncSqliteSaver.from_conn_string(cp_path)
+                    async with saver_cm as saver:
+                        graph = build_graph(saver, node_overrides=overrides)
+                        await run_generation_job(
+                            app_state=SimpleNamespace(course_graph=graph),
+                            session_id=session["id"], job_store=jobs,
+                            event_store=events,
+                            llm_context=LLMContext(api_key="k", model="m"),
+                            search_context=SearchContext(),
+                        )
+                        self.assertEqual(
+                            jobs.get_by_session(session["id"]).stage,
+                            GenerationStage.PAUSED,
+                        )
+                    # Close/reopen saver and rebuild graph against same file.
+                    overrides["outline_planner_node"] = resume_outline
+                    jobs.prepare_resume(session["id"])
+                    saver_cm = AsyncSqliteSaver.from_conn_string(cp_path)
+                    async with saver_cm as saver:
+                        graph = build_graph(saver, node_overrides=overrides)
+                        config = {"configurable": {"thread_id": job.thread_id}}
+                        before = await graph.aget_state(config)
+                        self.assertEqual(
+                            before.values["custom_topic_count"], count
+                        )
+                        with patch(
+                            "server.graph.runner.learning_manager."
+                            "get_learning_session"
+                        ) as read_session:
+                            await run_generation_job(
+                                app_state=SimpleNamespace(course_graph=graph),
+                                session_id=session["id"], resume=True,
+                                job_store=jobs, event_store=events,
+                                llm_context=LLMContext(
+                                    api_key="fresh-key", model="m"
+                                ),
+                                search_context=SearchContext(),
+                            )
+                            read_session.assert_not_called()
+                        after = await graph.aget_state(config)
+                        self.assertEqual(
+                            after.values["custom_topic_count"], count
+                        )
+                        self.assertEqual(after.values["mode"], "custom")
+                        self.assertEqual(
+                            after.values["resolved_mode"], "custom"
+                        )
+                        self.assertEqual(after.next, ())
+                        self.assertNotIn("fresh-key", repr(after.values))
+                    resolve.assert_not_called()
+                self.assertEqual(seen, [count, count])
+                self.assertEqual(
+                    learning.get_learning_session(session["id"])[
+                        "custom_topic_count"
+                    ], count,
+                )
 
     async def test_second_worker_is_rejected(self) -> None:
         jobs = MagicMock()
