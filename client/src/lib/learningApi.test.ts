@@ -25,6 +25,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InternalAxiosRequestConfig } from 'axios';
+import type { GenerateCourseRequest } from '@/types/learning';
 
 const mocks = vi.hoisted(() => {
   let lastConfig: InternalAxiosRequestConfig | undefined;
