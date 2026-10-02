@@ -22,6 +22,11 @@ from server.agents.planner import (
     build_planner_system_prompt,
     validate_complexity_distribution,
 )
+from server.schemas.generation import (
+    GenerationBrief,
+    GenerationBriefBatch,
+    GroundingStatus,
+)
 from server.schemas.learning import CourseOutline, TopicNode
 from server.schemas.llm import LLMContext
 
@@ -42,6 +47,32 @@ def _topics(n: int) -> list[TopicNode]:
 
 def _outline(n: int) -> CourseOutline:
     return CourseOutline(course_title="C", topics=_topics(n))
+
+
+def _custom_brief(index: int) -> GenerationBrief:
+    return GenerationBrief(
+        topic_index=index,
+        topic_scope=f"Scope {index}",
+        learning_objectives=[f"Explain topic {index}"],
+        prerequisites=[],
+        assumed_knowledge=[],
+        current_facts=[],
+        methodologies=[],
+        conventions=[],
+        deprecated_approaches=[],
+        migration_notes=[],
+        caveats=[],
+        source_excerpts=None,
+        required_examples=["Example"],
+        common_misconceptions=["Misconception"],
+        failure_modes=["Failure"],
+        pedagogical_guidance="Explain clearly.",
+        expected_depth="full",
+        boundaries_with_adjacent_topics="Keep topic atomic.",
+        quiz_learning_targets=["Recall"],
+        expected_learner_evidence=["Explanation"],
+        grounding_status=GroundingStatus.DISABLED,
+    )
 
 
 class PlannerModeTests(unittest.IsolatedAsyncioTestCase):
@@ -217,6 +248,45 @@ class PlannerModeTests(unittest.IsolatedAsyncioTestCase):
                     "Topic", mode="lite", custom_topic_count=7
                 )
             generate.assert_not_called()
+
+    async def test_custom_briefs_use_course_count_and_exact_indices(
+        self,
+    ) -> None:
+        agent = PlannerAgent()
+        cases = ((1, 0, 1), (2, 0, 2), (7, 3, 4), (30, 23, 7))
+        for count, start, size in cases:
+            with self.subTest(count=count, start=start):
+                expected = GenerationBriefBatch(
+                    start_index=start,
+                    briefs=[
+                        _custom_brief(i) for i in range(start, start + size)
+                    ],
+                )
+                with patch.object(
+                    agent, "generate", new_callable=AsyncMock
+                ) as generate:
+                    generate.return_value = expected
+                    actual = await agent.plan_briefs(
+                        outline=_outline(count), start_index=start,
+                        batch_size=size, mode="custom",
+                        llm_context=LLMContext(api_key="k", model="m"),
+                    )
+                    self.assertIs(actual, expected)
+                    generate.assert_awaited_once()
+                    prompt = generate.await_args.kwargs[
+                        "system_prompt_override"
+                    ]
+                    self.assertIn(f"EXACTLY {count} topics", prompt)
+                    self.assertIn("expected_depth: full", prompt)
+                    self.assertEqual(
+                        [brief.topic_index for brief in actual.briefs],
+                        list(range(start, start + size)),
+                    )
+                    self.assertTrue(all(
+                        brief.source_excerpts is None
+                        and brief.research_report_id is None
+                        for brief in actual.briefs
+                    ))
 
 
 if __name__ == "__main__":

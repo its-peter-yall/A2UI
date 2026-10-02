@@ -30,7 +30,7 @@ USAGE:
 from __future__ import annotations
 
 import logging
-from typing import Literal, Optional
+from typing import Optional
 
 from server.agents.base import BaseAgent
 from server.schemas.learning import (
@@ -427,7 +427,7 @@ class PlannerAgent(BaseAgent):
         research_context: Optional[str] = None,
         grounding_status: GroundingStatus = GroundingStatus.DISABLED,
         llm_context: Optional[LLMContext] = None,
-        mode: Literal["lite", "full"] = "full",
+        mode: ResolvedDepthMode = "full",
     ) -> GenerationBriefBatch:
         """Generate contiguous GenerationBrief batch for topics from start_index.
 
@@ -438,7 +438,7 @@ class PlannerAgent(BaseAgent):
             research_context: Scoped research report context if web search enabled.
             grounding_status: GroundingStatus for briefs (DISABLED, GROUNDED, DEGRADED).
             llm_context: Provider/LLM configuration.
-            mode: Resolved mode (lite or full).
+            mode: Resolved mode (lite, full, or custom).
 
         Returns:
             GenerationBriefBatch containing exact requested topic briefs.
@@ -459,7 +459,10 @@ class PlannerAgent(BaseAgent):
             for t in batch_topics
         )
 
-        system_prompt = build_planner_system_prompt(mode)
+        system_prompt = build_planner_system_prompt(
+            mode,
+            len(outline.topics) if mode == "custom" else None,
+        )
         user_message = (
             f"Generate structured generation briefs for topic indices: {indices_str}.\n\n"
             f"Course Title: {outline.course_title}\n\n"
