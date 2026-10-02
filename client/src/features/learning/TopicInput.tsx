@@ -80,11 +80,13 @@ export function TopicInput({
   const [modeOpen, setModeOpen] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
   const [customTopicCount, setCustomTopicCount] = useState('');
+  const [countError, setCountError] = useState<string | null>(null);
   const inputId = useId();
   const modeListboxId = useId();
   const countInputId = useId();
   const researchSwitchId = useId();
   const countHintId = useId();
+  const countErrorId = useId();
   const modePickerRef = useRef<HTMLDivElement>(null);
 
   const canUseWebSearch = hasWebSearchCapability();
@@ -156,13 +158,35 @@ export function TopicInput({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (query.trim() && !generateMutation.isPending && canStart) {
-      generateMutation.mutate({
-        query: query.trim(),
-        user_id: userId,
-        mode,
-      });
+    if (!query.trim() || generateMutation.isPending || !canStart) {
+      return;
     }
+
+    let parsedCount: number | undefined;
+    if (mode === 'custom') {
+      const trimmed = customTopicCount.trim();
+      const numeric = Number(trimmed);
+      if (
+        !/^\d+$/.test(trimmed) ||
+        !Number.isInteger(numeric) ||
+        numeric < CUSTOM_TOPIC_COUNT_MIN ||
+        numeric > CUSTOM_TOPIC_COUNT_MAX
+      ) {
+        setCountError(
+          `Please enter a whole number between ${CUSTOM_TOPIC_COUNT_MIN} and ${CUSTOM_TOPIC_COUNT_MAX} concepts.`,
+        );
+        return;
+      }
+      parsedCount = numeric;
+    }
+    setCountError(null);
+
+    generateMutation.mutate({
+      query: query.trim(),
+      user_id: userId,
+      mode,
+      ...(parsedCount !== undefined ? { custom_topic_count: parsedCount } : {}),
+    });
   };
 
   const handleSuggestionClick = (suggestion: string) => {
@@ -176,7 +200,12 @@ export function TopicInput({
 
   return (
     <div className={cn('w-full max-w-2xl', className)}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2" role="search">
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-2"
+        role="search"
+        noValidate
+      >
         <div className="relative">
           <label htmlFor={inputId} className="sr-only">
             Enter a topic to learn
@@ -282,6 +311,9 @@ export function TopicInput({
                         aria-selected={isSelected}
                         onClick={() => {
                           setMode(option.value);
+                          if (option.value !== 'custom') {
+                            setCountError(null);
+                          }
                           setModeOpen(false);
                         }}
                         className={cn(
@@ -341,19 +373,35 @@ export function TopicInput({
                   step={1}
                   placeholder={`${CUSTOM_TOPIC_COUNT_MIN}-${CUSTOM_TOPIC_COUNT_MAX}`}
                   value={customTopicCount}
-                  onChange={(e) => setCustomTopicCount(e.target.value)}
+                  onChange={(e) => {
+                    setCustomTopicCount(e.target.value);
+                    setCountError(null);
+                  }}
                   disabled={isLoading || !canStart}
-                  aria-describedby={countHintId}
+                  aria-invalid={countError ? 'true' : undefined}
+                  aria-describedby={countError ? countErrorId : countHintId}
                   className={cn(
-                    'w-20 px-2.5 py-1 text-sm rounded-md border bg-background text-foreground border-border',
+                    'w-20 px-2.5 py-1 text-sm rounded-md border bg-background text-foreground',
                     'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
                     'disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
+                    countError
+                      ? 'border-destructive focus:ring-destructive'
+                      : 'border-border',
                   )}
                 />
                 <span id={countHintId} className="text-xs text-muted-foreground">
                   {`(${CUSTOM_TOPIC_COUNT_MIN}-${CUSTOM_TOPIC_COUNT_MAX})`}
                 </span>
               </div>
+              {countError && (
+                <p
+                  id={countErrorId}
+                  role="alert"
+                  className="text-xs font-medium text-destructive"
+                >
+                  {countError}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1">

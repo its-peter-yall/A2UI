@@ -291,4 +291,132 @@ describe('TopicInput custom mode controls', () => {
       webSearchEnabled: false,
     });
   });
+
+  it('retains entered concept count when switching between modes during form lifetime', () => {
+    renderInput();
+    selectMode('Custom');
+
+    const countInput = screen.getByLabelText(/number of concepts/i);
+    fireEvent.change(countInput, { target: { value: '12' } });
+    expect((countInput as HTMLInputElement).value).toBe('12');
+
+    // Switch to Lite
+    selectMode('Lite');
+    expect(screen.queryByLabelText(/number of concepts/i)).not.toBeInTheDocument();
+
+    // Switch back to Custom -> retained
+    selectMode('Custom');
+    const restoredInput = screen.getByLabelText(/number of concepts/i);
+    expect((restoredInput as HTMLInputElement).value).toBe('12');
+  });
+
+  it('blocks submission and displays accessible validation feedback when count is empty in Custom mode', () => {
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Distributed Systems' },
+    });
+    selectMode('Custom');
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    expect(mocks.generateCourse).not.toHaveBeenCalled();
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(/between 1 and 30/i);
+    expect(screen.getByLabelText(/number of concepts/i)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it.each([
+    ['0', '0'],
+    ['-5', '-5'],
+    ['31', '31'],
+    ['100', '100'],
+    ['2.5', '2.5'],
+    ['abc', 'abc'],
+  ])(
+    'blocks submission and shows accessible validation feedback for invalid count %s (%s)',
+    (_label, invalidValue) => {
+      renderInput();
+      fireEvent.change(screen.getByRole('searchbox'), {
+        target: { value: 'Distributed Systems' },
+      });
+      selectMode('Custom');
+
+      const countInput = screen.getByLabelText(/number of concepts/i);
+      fireEvent.change(countInput, { target: { value: invalidValue } });
+
+      fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+      expect(mocks.generateCourse).not.toHaveBeenCalled();
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(/between 1 and 30/i);
+      expect(countInput).toHaveAttribute('aria-invalid', 'true');
+    },
+  );
+
+  it.each([
+    ['1'],
+    ['30'],
+    ['7'],
+  ])('accepts valid whole-number count %s for submission', async (validValue) => {
+    mocks.generateCourse.mockResolvedValue({
+      session: {
+        id: 'session-valid',
+        query: 'Distributed Systems',
+        course_title: 'Distributed Systems',
+        nodes: [],
+      },
+      generation: { id: 'job-valid', stage: 'INITIALIZING', last_event_id: 1 },
+    });
+
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Distributed Systems' },
+    });
+    selectMode('Custom');
+    fireEvent.change(screen.getByLabelText(/number of concepts/i), {
+      target: { value: validValue },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+
+    await waitFor(() => {
+      expect(mocks.generateCourse).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('clears validation error when user types a new count value', () => {
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Distributed Systems' },
+    });
+    selectMode('Custom');
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    const countInput = screen.getByLabelText(/number of concepts/i);
+    fireEvent.change(countInput, { target: { value: '5' } });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('clears a stale validation error when leaving Custom mode', () => {
+    renderInput();
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Distributed Systems' },
+    });
+    selectMode('Custom');
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    selectMode('Lite');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    selectMode('Custom');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
