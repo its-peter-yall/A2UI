@@ -41,8 +41,8 @@ pause_reason: none; user explicitly resumed on 2026-10-02
 
 - [x] Step 1: Brainstorming & Goal Alignment (approved; 6123d6b)
 - [x] Step 2: Technical Research (b900ed1)
-- [ ] Step 3: Planning Completed (plan1.md through plan4.md)
-- [ ] Step 4: Execution Completed (all workers and tests)
+- [ ] Step 3: Planning Completed (plan1-plan3 written; plan4 in progress)
+- [ ] Step 4: Execution Completed (P1, P2, P3 done and verified; P4 pending)
 - [x] Step 5: Unified Code Review (Skipped via explicit --skip review request)
 - [ ] Step 6: Final Verification & Report (final_report.md)
 
@@ -136,10 +136,10 @@ below additionally requires explicit user resume.
 
 | Plan | Title and scope | Worker prerequisites | Files/subsystems | Planner status | Worker status | Commits |
 | --- | --- | --- | --- | --- | --- | --- |
-| P1 | Contracts and persistence | R | TS/Pydantic contracts; SQLite/Mongo shell and session storage | Ready | Pending | None |
-| P2 | Planner and durable runtime | P1 | Depth resolution; exact-count planner; graph/start/resume | Blocked on P1 worker | Pending | None |
-| P3 | Custom settings and API payload | P1 | TopicInput; learning API; focused client tests | Blocked on P1 worker | Pending | None |
-| P4 | Integrated acceptance | P2, P3 | Cross-layer tests and verification evidence | Blocked | Pending | None |
+| P1 | Contracts and persistence | R | TS/Pydantic contracts; SQLite/Mongo shell and session storage | Done (e2bfa9a) | Completed | 0f780e8, 0339020, 87612d4, 8d5e562, 290c6e8, c2c6681, f760787, 6cc100f |
+| P2 | Planner and durable runtime | P1 | Depth resolution; exact-count planner; graph/start/resume | Done (7d710e6) | Completed | 5f7a283, e3ec1fe, a5155a4, 26837a8, 0232440, 30fb626, a5e96ab |
+| P3 | Custom settings and API payload | P1 | TopicInput; learning API; focused client tests | Done (b53c884) | Completed | 9894886, f7ba756, 341b223, 8ae0889 |
+| P4 | Integrated acceptance | P2, P3 | Cross-layer tests and verification evidence | Planner active | Pending | None |
 
 ### Execution graph
 
