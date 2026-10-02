@@ -162,3 +162,58 @@ describe('TopicInput web search', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/learn/session-1');
   });
 });
+
+describe('TopicInput custom mode controls', () => {
+  beforeEach(() => {
+    mocks.generateCourse.mockReset();
+    mocks.navigate.mockReset();
+    mocks.capability = true;
+    mocks.agentsReady = true;
+  });
+
+  function openModePicker() {
+    fireEvent.click(screen.getByRole('button', { name: /learning depth mode/i }));
+  }
+
+  function selectMode(label: 'Auto' | 'Lite' | 'Full' | 'Custom') {
+    openModePicker();
+    fireEvent.click(screen.getByRole('option', { name: label }));
+  }
+
+  it('renders four depth mode options in the listbox: Auto, Lite, Full, and Custom', () => {
+    renderInput();
+    openModePicker();
+
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(4);
+    expect(options.map((opt) => opt.textContent)).toEqual([
+      'Auto',
+      'Lite',
+      'Full',
+      'Custom',
+    ]);
+  });
+
+  it('shows custom settings row only when Custom mode is selected', () => {
+    renderInput();
+    expect(screen.queryByLabelText(/number of concepts/i)).not.toBeInTheDocument();
+
+    selectMode('Custom');
+
+    expect(screen.getByLabelText(/number of concepts/i)).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: /research/i })).toBeInTheDocument();
+
+    // Switching back to Auto hides the settings row
+    selectMode('Auto');
+    expect(screen.queryByLabelText(/number of concepts/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /research/i })).not.toBeInTheDocument();
+  });
+
+  it('initializes the concept count field as empty', () => {
+    renderInput();
+    selectMode('Custom');
+
+    const countInput = screen.getByLabelText(/number of concepts/i) as HTMLInputElement;
+    expect(countInput.value).toBe('');
+  });
+});

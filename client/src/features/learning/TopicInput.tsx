@@ -61,7 +61,11 @@ const DEPTH_MODE_OPTIONS: Array<{
   { value: 'auto', label: 'Auto' },
   { value: 'lite', label: 'Lite' },
   { value: 'full', label: 'Full' },
+  { value: 'custom', label: 'Custom' },
 ];
+
+const CUSTOM_TOPIC_COUNT_MIN = 1;
+const CUSTOM_TOPIC_COUNT_MAX = 30;
 
 export function TopicInput({
   className,
@@ -75,8 +79,12 @@ export function TopicInput({
   const [mode, setMode] = useState<LearningDepthMode>('auto');
   const [modeOpen, setModeOpen] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [customTopicCount, setCustomTopicCount] = useState('');
   const inputId = useId();
   const modeListboxId = useId();
+  const countInputId = useId();
+  const researchSwitchId = useId();
+  const countHintId = useId();
   const modePickerRef = useRef<HTMLDivElement>(null);
 
   const canUseWebSearch = hasWebSearchCapability();
@@ -168,142 +176,220 @@ export function TopicInput({
 
   return (
     <div className={cn('w-full max-w-2xl', className)}>
-      <form onSubmit={handleSubmit} className="relative" role="search">
-        <label htmlFor={inputId} className="sr-only">
-          Enter a topic to learn
-        </label>
-        <input
-          id={inputId}
-          type="search"
-          role="searchbox"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          autoFocus={autoFocus}
-          placeholder={placeholder}
-          disabled={isLoading || !canStart}
-          aria-describedby={error ? `${inputId}-error` : undefined}
-          aria-invalid={error ? 'true' : undefined}
-          className={cn(
-            'w-full px-4 py-3 pr-56 text-lg rounded-lg border',
-            'bg-background text-foreground',
-            'placeholder:text-muted-foreground',
-            'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'transition-colors duration-200',
-            error && 'border-destructive focus:ring-destructive',
-          )}
-        />
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 sm:gap-2">
-          {canUseWebSearch && (
-            <button
-              type="button"
-              aria-label="Use web search for this course"
-              aria-pressed={webSearchEnabled}
-              title={
-                webSearchEnabled
-                  ? 'Web search on for this course'
-                  : 'Web search off for this course'
-              }
-              onClick={() => setWebSearchEnabled((v) => !v)}
-              disabled={isLoading || !canStart}
-              className={cn(
-                'inline-flex items-center justify-center h-8 w-8 rounded-md shrink-0',
-                'border transition-colors duration-200',
-                'focus:outline-none focus:ring-2 focus:ring-primary',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-                webSearchEnabled
-                  ? 'bg-[#ffb74d]/15 border-[#ffb74d] text-[#ffb74d]'
-                  : 'bg-muted border-border text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Globe2 className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
-          <div ref={modePickerRef} className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                if (!isLoading && canStart) {
-                  setModeOpen((open) => !open);
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2" role="search">
+        <div className="relative">
+          <label htmlFor={inputId} className="sr-only">
+            Enter a topic to learn
+          </label>
+          <input
+            id={inputId}
+            type="search"
+            role="searchbox"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoFocus={autoFocus}
+            placeholder={placeholder}
+            disabled={isLoading || !canStart}
+            aria-describedby={error ? `${inputId}-error` : undefined}
+            aria-invalid={error ? 'true' : undefined}
+            className={cn(
+              'w-full px-4 py-3 pr-56 text-lg rounded-lg border',
+              'bg-background text-foreground',
+              'placeholder:text-muted-foreground',
+              'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              'transition-colors duration-200',
+              error && 'border-destructive focus:ring-destructive',
+            )}
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5 sm:gap-2">
+            {canUseWebSearch && (
+              <button
+                type="button"
+                aria-label="Use web search for this course"
+                aria-pressed={webSearchEnabled}
+                title={
+                  webSearchEnabled
+                    ? 'Web search on for this course'
+                    : 'Web search off for this course'
                 }
-              }}
-              disabled={isLoading || !canStart}
-              aria-label="Learning depth mode"
-              aria-haspopup="listbox"
-              aria-expanded={modeOpen}
-              aria-controls={modeListboxId}
-              className={cn(
-                'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm',
-                'bg-muted text-foreground border border-border',
-                'hover:border-border/80 hover:bg-muted/80',
-                'focus:outline-none focus:ring-2 focus:ring-primary',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-                'transition-colors duration-200',
-                modeOpen && 'ring-2 ring-primary border-transparent',
-              )}
-            >
-              <span className="leading-none">{selectedModeLabel}</span>
-              <ChevronDown
+                onClick={() => setWebSearchEnabled((v) => !v)}
+                disabled={isLoading || !canStart}
                 className={cn(
-                  'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
-                  modeOpen && 'rotate-180',
-                )}
-                aria-hidden="true"
-              />
-            </button>
-
-            {modeOpen && (
-              <div
-                id={modeListboxId}
-                role="listbox"
-                aria-label="Learning depth mode"
-                className={cn(
-                  'absolute right-0 top-full z-50 mt-1 min-w-full',
-                  'rounded-md border border-border bg-popover text-popover-foreground',
-                  'shadow-lg overflow-hidden',
+                  'inline-flex items-center justify-center h-8 w-8 rounded-md shrink-0',
+                  'border transition-colors duration-200',
+                  'focus:outline-none focus:ring-2 focus:ring-primary',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  webSearchEnabled
+                    ? 'bg-[#ffb74d]/15 border-[#ffb74d] text-[#ffb74d]'
+                    : 'bg-muted border-border text-muted-foreground hover:text-foreground',
                 )}
               >
-                {DEPTH_MODE_OPTIONS.map((option) => {
-                  const isSelected = option.value === mode;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      onClick={() => {
-                        setMode(option.value);
-                        setModeOpen(false);
-                      }}
-                      className={cn(
-                        'w-full text-left px-3 py-2 text-sm transition-colors',
-                        'hover:bg-muted focus:outline-none focus:bg-muted',
-                        isSelected &&
-                          'bg-primary/10 text-primary font-semibold',
-                      )}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
+                <Globe2 className="h-4 w-4" aria-hidden="true" />
+              </button>
             )}
+            <div ref={modePickerRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isLoading && canStart) {
+                    setModeOpen((open) => !open);
+                  }
+                }}
+                disabled={isLoading || !canStart}
+                aria-label="Learning depth mode"
+                aria-haspopup="listbox"
+                aria-expanded={modeOpen}
+                aria-controls={modeListboxId}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm',
+                  'bg-muted text-foreground border border-border',
+                  'hover:border-border/80 hover:bg-muted/80',
+                  'focus:outline-none focus:ring-2 focus:ring-primary',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors duration-200',
+                  modeOpen && 'ring-2 ring-primary border-transparent',
+                )}
+              >
+                <span className="leading-none">{selectedModeLabel}</span>
+                <ChevronDown
+                  className={cn(
+                    'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200',
+                    modeOpen && 'rotate-180',
+                  )}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {modeOpen && (
+                <div
+                  id={modeListboxId}
+                  role="listbox"
+                  aria-label="Learning depth mode"
+                  className={cn(
+                    'absolute right-0 top-full z-50 mt-1 min-w-full',
+                    'rounded-md border border-border bg-popover text-popover-foreground',
+                    'shadow-lg overflow-hidden',
+                  )}
+                >
+                  {DEPTH_MODE_OPTIONS.map((option) => {
+                    const isSelected = option.value === mode;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={() => {
+                          setMode(option.value);
+                          setModeOpen(false);
+                        }}
+                        className={cn(
+                          'w-full text-left px-3 py-2 text-sm transition-colors',
+                          'hover:bg-muted focus:outline-none focus:bg-muted',
+                          isSelected &&
+                            'bg-primary/10 text-primary font-semibold',
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={!query.trim() || isLoading || !canStart}
+              aria-label={isLoading ? 'Starting...' : 'Start learning'}
+              className={cn(
+                'px-4 py-1.5 rounded-md text-sm font-medium',
+                'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary',
+                'transition-colors duration-200',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                'focus:outline-none focus:ring-2 focus:ring-offset-2',
+              )}
+            >
+              {isLoading ? 'Starting...' : 'Learn'}
+            </button>
           </div>
-          <button
-            type="submit"
-            disabled={!query.trim() || isLoading || !canStart}
-            aria-label={isLoading ? 'Starting...' : 'Start learning'}
+        </div>
+
+        {mode === 'custom' && (
+          <div
+            data-testid="custom-settings-row"
             className={cn(
-              'px-4 py-1.5 rounded-md text-sm font-medium',
-              'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary',
-              'transition-colors duration-200',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'focus:outline-none focus:ring-2 focus:ring-offset-2',
+              'px-3 py-2.5 rounded-lg border border-border bg-card/60 backdrop-blur-xs',
+              'flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm',
+              isLoading && 'opacity-60',
             )}
           >
-            {isLoading ? 'Starting...' : 'Learn'}
-          </button>
-        </div>
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor={countInputId}
+                  className="text-xs sm:text-sm font-medium text-foreground whitespace-nowrap"
+                >
+                  Number of concepts
+                </label>
+                <input
+                  id={countInputId}
+                  type="number"
+                  inputMode="numeric"
+                  min={CUSTOM_TOPIC_COUNT_MIN}
+                  max={CUSTOM_TOPIC_COUNT_MAX}
+                  step={1}
+                  placeholder={`${CUSTOM_TOPIC_COUNT_MIN}-${CUSTOM_TOPIC_COUNT_MAX}`}
+                  value={customTopicCount}
+                  onChange={(e) => setCustomTopicCount(e.target.value)}
+                  disabled={isLoading || !canStart}
+                  aria-describedby={countHintId}
+                  className={cn(
+                    'w-20 px-2.5 py-1 text-sm rounded-md border bg-background text-foreground border-border',
+                    'focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent',
+                    'disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
+                  )}
+                />
+                <span id={countHintId} className="text-xs text-muted-foreground">
+                  {`(${CUSTOM_TOPIC_COUNT_MIN}-${CUSTOM_TOPIC_COUNT_MAX})`}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor={researchSwitchId}
+                  className="text-xs sm:text-sm font-medium text-foreground"
+                >
+                  Research
+                </label>
+                <button
+                  id={researchSwitchId}
+                  type="button"
+                  role="switch"
+                  aria-checked={webSearchEnabled}
+                  aria-label="Research"
+                  onClick={() => setWebSearchEnabled((prev) => !prev)}
+                  className={cn(
+                    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out',
+                    'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                    webSearchEnabled ? 'bg-[#ffb74d]' : 'bg-muted-foreground/30',
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out',
+                      webSearchEnabled ? 'translate-x-4' : 'translate-x-0',
+                    )}
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
 
       {isLoading && (
