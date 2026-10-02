@@ -90,6 +90,7 @@ class LearningManager:
                     course_title TEXT NOT NULL,
                     mode TEXT NOT NULL DEFAULT 'auto',
                     resolved_mode TEXT,
+                    custom_topic_count INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -266,6 +267,7 @@ class LearningManager:
         user_id: Optional[str] = None,
         mode: str = "auto",
         resolved_mode: Optional[str] = None,
+        custom_topic_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         conn = self._get_connection()
         try:
@@ -276,9 +278,9 @@ class LearningManager:
                 """
                 INSERT INTO learning_sessions (
                     id, user_id, query, course_title, mode, resolved_mode,
-                    created_at, updated_at
+                    custom_topic_count, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session_id,
@@ -287,6 +289,7 @@ class LearningManager:
                     course_title,
                     mode,
                     resolved_mode,
+                    custom_topic_count,
                     now,
                     now,
                 ),
@@ -300,6 +303,7 @@ class LearningManager:
                 "course_title": course_title,
                 "mode": mode,
                 "resolved_mode": resolved_mode,
+                "custom_topic_count": custom_topic_count,
                 "created_at": now,
                 "updated_at": now,
                 "total_nodes": 0,
@@ -325,6 +329,7 @@ class LearningManager:
                     ls.title_finalized,
                     ls.mode,
                     ls.resolved_mode,
+                    ls.custom_topic_count,
                     ls.last_active_node_id,
                     ls.created_at,
                     ls.updated_at,
@@ -351,6 +356,7 @@ class LearningManager:
                 "title_finalized": bool(title_finalized),
                 "mode": row["mode"],
                 "resolved_mode": row["resolved_mode"],
+                "custom_topic_count": row["custom_topic_count"],
                 "last_active_node_id": row["last_active_node_id"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
@@ -496,6 +502,7 @@ class LearningManager:
                         ls.id,
                         ls.query,
                         ls.course_title,
+                        ls.custom_topic_count,
                         ls.user_id,
                         ls.created_at,
                         ls.updated_at,
@@ -530,6 +537,7 @@ class LearningManager:
                     ss.id,
                     ss.query,
                     ss.course_title,
+                    ss.custom_topic_count,
                     ss.progress_percent,
                     ss.computed_status AS status,
                     ss.total_nodes,
@@ -565,6 +573,7 @@ class LearningManager:
                     "id": row["id"],
                     "query": row["query"],
                     "course_title": row["course_title"],
+                    "custom_topic_count": row["custom_topic_count"],
                     "status": row["status"],
                     "progress_percent": int(row["progress_percent"] or 0),
                     "total_nodes": int(row["total_nodes"] or 0),
@@ -587,8 +596,8 @@ class LearningManager:
     def update_session_resolved_mode(
         self, session_id: str, resolved_mode: str
     ) -> None:
-        """Persist resolved depth mode (lite|full) on learning session."""
-        if resolved_mode not in ("lite", "full"):
+        """Persist resolved depth mode (lite|full|custom) on a session."""
+        if resolved_mode not in ("lite", "full", "custom"):
             raise ValueError(f"Invalid resolved_mode: {resolved_mode}")
         conn = self._get_connection()
         try:
@@ -3098,6 +3107,11 @@ class LearningManager:
             cursor.execute(
                 "ALTER TABLE learning_sessions "
                 "ADD COLUMN resolved_mode TEXT"
+            )
+        if "custom_topic_count" not in existing_columns:
+            cursor.execute(
+                "ALTER TABLE learning_sessions "
+                "ADD COLUMN custom_topic_count INTEGER"
             )
         if "title_finalized" not in existing_columns:
             cursor.execute(
