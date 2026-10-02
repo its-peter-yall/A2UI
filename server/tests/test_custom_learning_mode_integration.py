@@ -257,6 +257,73 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("llm-secret", stream.text)
             self.assertNotIn("search-secret", stream.text)
 
+    async def test_invalid_http_counts_never_create_or_schedule_jobs(
+        self,
+    ) -> None:
+        payloads = [{"query": "Modern CSS", "mode": "custom"}]
+        payloads.extend(
+            {
+                "query": "Modern CSS", "mode": "custom",
+                "custom_topic_count": value,
+            }
+            for value in (None, True, False, 2.5, 3.0, "5", 0, -1, 31)
+        )
+        payloads.extend(
+            {"query": "Modern CSS", "mode": mode, "custom_topic_count": 5}
+            for mode in ("auto", "lite", "full")
+        )
+        with patch.object(
+            self.harness.runtime, "start", wraps=self.harness.runtime.start
+        ) as start:
+            for payload in payloads:
+                with self.subTest(payload=payload):
+                    response = await self.client.post(
+                        "/learning/generate", json=payload, headers=_headers()
+                    )
+                    self.assertEqual(response.status_code, 422, response.text)
+            start.assert_not_called()
+        sessions, total = self.harness.learning.get_sessions_list(user_id=None)
+        self.assertEqual(sessions, [])
+        self.assertEqual(total, 0)
+        self.assertEqual(self.harness.runtime.active_session_ids, [])
+
+    async def test_existing_modes_without_count_still_complete(self) -> None:
+        for mode, resolved, count in (
+            ("auto", "lite", 3), ("lite", "lite", 3), ("full", "full", 10)
+        ):
+            with (
+                self.subTest(mode=mode),
+                self._externals(count) as (generate, search),
+                patch(
+                    "server.graph.nodes.resolve_depth_mode",
+                    new_callable=AsyncMock,
+                    return_value="lite",
+                ) as resolve,
+            ):
+                response = await self.client.post(
+                    "/learning/generate",
+                    json={"query": "Modern CSS", "mode": mode},
+                    headers=_headers(),
+                )
+                self.assertEqual(response.status_code, 202, response.text)
+                accepted = response.json()
+                self.assertIsNone(accepted["session"]["custom_topic_count"])
+                await _drain(self.harness.runtime)
+                session_id = accepted["session"]["id"]
+                response = await self.client.get(
+                    f"/learning/sessions/{session_id}"
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                public = response.json()
+                self.assertEqual(public["mode"], mode)
+                self.assertEqual(public["resolved_mode"], resolved)
+                self.assertIsNone(public["custom_topic_count"])
+                self.assertEqual(public["generation"]["stage"], "COMPLETE")
+                self.assertEqual(len(public["nodes"]), count)
+                self.assertEqual(resolve.await_count, int(mode == "auto"))
+                search.assert_not_awaited()
+                generate.assert_awaited_once()
+
 
 def main() -> None:
     """Run this acceptance module directly through Python's module runner."""
