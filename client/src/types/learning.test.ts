@@ -30,6 +30,10 @@ import type {
   ConceptChatSearch,
   ConceptChatSearchSource,
   ConceptChatStreamChunk,
+  GenerateCourseRequest,
+  LearningDepthMode,
+  LearningSession,
+  ResolvedDepthMode,
 } from './learning';
 
 const sampleSource: ConceptChatSearchSource = {
@@ -125,5 +129,64 @@ describe('ConceptChatStreamChunk additive fields', () => {
     expect(chunk.warning).toBe(
       'Web search unavailable; answering from the concept.',
     );
+  });
+});
+
+describe('Custom learning contract', () => {
+  it('accepts custom as selected and resolved mode with a count', () => {
+    const mode: LearningDepthMode = 'custom';
+    const resolvedMode: ResolvedDepthMode = 'custom';
+    const request: GenerateCourseRequest = {
+      query: 'Modern CSS',
+      mode,
+      custom_topic_count: 2,
+    };
+    const session: LearningSession = {
+      id: 's1',
+      user_id: null,
+      query: request.query,
+      course_title: 'CSS',
+      total_nodes: 0,
+      completed_nodes: 0,
+      last_active_node_id: null,
+      mode,
+      resolved_mode: resolvedMode,
+      custom_topic_count: request.custom_topic_count,
+      created_at: '2026-10-02T00:00:00Z',
+      updated_at: null,
+    };
+    expect(session.custom_topic_count).toBe(2);
+    expect(session.total_nodes).toBe(0);
+    expect(session.resolved_mode).toBe('custom');
+  });
+
+  it('keeps existing request and legacy session shapes assignable', () => {
+    const requests: GenerateCourseRequest[] = [
+      { query: 'CSS' },
+      { query: 'CSS', mode: 'auto' },
+      { query: 'CSS', mode: 'lite' },
+      { query: 'CSS', mode: 'full' },
+    ];
+    const legacySession: LearningSession = {
+      id: 's-old',
+      user_id: null,
+      query: 'CSS',
+      course_title: 'CSS',
+      total_nodes: 3,
+      completed_nodes: 0,
+      last_active_node_id: null,
+      created_at: '2026-10-02T00:00:00Z',
+      updated_at: null,
+    };
+    const nullCountSession: LearningSession = {
+      ...legacySession,
+      mode: 'auto',
+      custom_topic_count: null,
+    };
+    for (const request of requests) {
+      expect(request.custom_topic_count).toBeUndefined();
+    }
+    expect(legacySession.custom_topic_count).toBeUndefined();
+    expect(nullCountSession.custom_topic_count).toBeNull();
   });
 });

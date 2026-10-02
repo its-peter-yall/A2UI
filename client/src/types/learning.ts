@@ -75,9 +75,9 @@ export type QuizDifficulty = "easy" | "medium" | "hard";
 
 export type Complexity = "Basic" | "Intermediate" | "Advanced";
 
-export type LearningDepthMode = "auto" | "lite" | "full";
+export type LearningDepthMode = 'auto' | 'lite' | 'full' | 'custom';
 
-export type ResolvedDepthMode = "lite" | "full";
+export type ResolvedDepthMode = 'lite' | 'full' | 'custom';
 
 /** Validated public citation metadata attached to a concept node. */
 export interface NodeCitation {
@@ -179,6 +179,7 @@ export interface LearningSession {
 	last_active_node_id: string | null;
 	mode?: LearningDepthMode | null;
 	resolved_mode?: ResolvedDepthMode | null;
+	custom_topic_count?: number | null;
 	title_finalized?: boolean;
 	created_at: string;
 	updated_at: string | null;
@@ -217,6 +218,7 @@ export interface GenerateCourseRequest {
 	query: string;
 	user_id?: string;
 	mode?: LearningDepthMode;
+	custom_topic_count?: number;
 }
 
 export interface QuizSubmitRequest {
