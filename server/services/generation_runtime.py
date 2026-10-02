@@ -151,6 +151,9 @@ class GenerationRuntime:
             user_id=getattr(request_body, "user_id", None),
             mode=request_body.mode,
             web_search_requested=search_context.enabled,
+            custom_topic_count=getattr(
+                request_body, "custom_topic_count", None
+            ),
         )
         session_id = session["id"]
         try:
@@ -198,6 +201,7 @@ class GenerationRuntime:
             "title_finalized": title_finalized,
             "mode": session.get("mode"),
             "resolved_mode": session.get("resolved_mode"),
+            "custom_topic_count": session.get("custom_topic_count"),
             "total_nodes": int(session.get("total_nodes") or 0),
             "completed_nodes": int(session.get("completed_nodes") or 0),
             "last_active_node_id": session.get("last_active_node_id"),

@@ -64,6 +64,52 @@ class GenerationRuntimeTests(unittest.IsolatedAsyncioTestCase):
         gate.set()
         await asyncio.gather(*runtime.active_tasks)
 
+    async def test_start_forwards_custom_count_and_returns_shell(self) -> None:
+        for count in (1, 2, 7, 30):
+            for research in (False, True):
+                with self.subTest(count=count, research=research):
+                    jobs, events, runner = MagicMock(), MagicMock(), AsyncMock()
+                    jobs.create_session_shell_and_job.return_value = (
+                        {
+                            "id": "s1", "query": "Topic", "mode": "custom",
+                            "custom_topic_count": count, "total_nodes": 0,
+                            "created_at": "2026-10-02T00:00:00Z",
+                        },
+                        SimpleNamespace(id="j1"),
+                    )
+                    jobs.to_public.return_value = {"id": "j1"}
+                    runtime = GenerationRuntime(
+                        app_state=SimpleNamespace(), job_store=jobs,
+                        event_store=events, runner=runner,
+                    )
+                    result = await runtime.start(
+                        request_body=SimpleNamespace(
+                            query="Topic", user_id=None, mode="custom",
+                            custom_topic_count=count,
+                        ),
+                        llm_context=LLMContext(api_key="k", model="m"),
+                        search_context=SearchContext(enabled=research),
+                    )
+                    await asyncio.gather(*runtime.active_tasks)
+                    jobs.create_session_shell_and_job.assert_called_once_with(
+                        query="Topic", user_id=None, mode="custom",
+                        web_search_requested=research,
+                        custom_topic_count=count,
+                    )
+                    self.assertEqual(
+                        result["session"]["custom_topic_count"], count
+                    )
+                    self.assertEqual(result["session"]["total_nodes"], 0)
+                    self.assertEqual(result["session"]["mode"], "custom")
+                    runner.assert_awaited_once()
+                    self.assertFalse(runner.await_args.kwargs["resume"])
+
+    def test_legacy_shell_returns_null_custom_count(self) -> None:
+        result = GenerationRuntime._shell_session_payload(
+            {"id": "s-old", "mode": "lite", "total_nodes": 3}
+        )
+        self.assertIsNone(result["custom_topic_count"])
+
     async def test_shutdown_does_not_store_contexts_and_marks_jobs_paused(self) -> None:
         jobs = MagicMock()
         runtime = GenerationRuntime(
