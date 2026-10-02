@@ -100,8 +100,8 @@ class FailedStep(str, Enum):
     BOTH = "BOTH"  # both steps failed (or atomic regen requested)
 
 
-LearningDepthMode = Literal["auto", "lite", "full"]
-ResolvedDepthMode = Literal["lite", "full"]
+LearningDepthMode = Literal["auto", "lite", "full", "custom"]
+ResolvedDepthMode = Literal["lite", "full", "custom"]
 
 MODE_TOPIC_BOUNDS: dict[str, tuple[int, int]] = {
     "lite": (3, 10),
@@ -114,21 +114,32 @@ MAX_COURSE_TOPICS = 30
 def validate_topic_count_for_mode(
     outline: "CourseOutline",
     mode: ResolvedDepthMode,
+    custom_topic_count: Optional[int] = None,
 ) -> bool:
-    """Return True if outline topic count is within mode bounds.
+    """Check outline cardinality against a resolved mode.
 
     Args:
-        outline: Course outline whose topics will be counted.
-        mode: Resolved depth mode (lite or full).
+        outline: Outline whose topics will be counted.
+        mode: Resolved lite, full, or custom mode.
+        custom_topic_count: Exact requested count for custom mode.
 
     Returns:
-        True when topic count is within MODE_TOPIC_BOUNDS for mode.
+        Whether the outline satisfies the mode's cardinality contract.
     """
+    count = len(outline.topics)
+    if mode == "custom":
+        if type(custom_topic_count) is not int:
+            return False
+        return (
+            1 <= custom_topic_count <= MAX_COURSE_TOPICS
+            and count == custom_topic_count
+        )
+    if custom_topic_count is not None:
+        return False
     bounds = MODE_TOPIC_BOUNDS.get(mode)
     if bounds is None:
         return False
     min_topics, max_topics = bounds
-    count = len(outline.topics)
     return min_topics <= count <= max_topics
 
 
@@ -650,17 +661,17 @@ class CourseOutline(BaseModel):
         ...,
         description=(
             "Ordered list of topic nodes "
-            f"(minimum 3, maximum {MAX_COURSE_TOPICS})"
+            f"(minimum 1, maximum {MAX_COURSE_TOPICS})"
         ),
-        min_length=3,
+        min_length=1,
         max_length=MAX_COURSE_TOPICS,
     )
 
     @field_validator("topics")
     @classmethod
     def validate_topics(cls, topics: List[TopicNode]) -> List[TopicNode]:
-        if len(topics) < 3:
-            raise ValueError("CourseOutline requires at least 3 topics")
+        if len(topics) < 1:
+            raise ValueError("CourseOutline requires at least 1 topic")
         if len(topics) > MAX_COURSE_TOPICS:
             raise ValueError(
                 f"CourseOutline supports at most {MAX_COURSE_TOPICS} topics"
