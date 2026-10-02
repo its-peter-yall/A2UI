@@ -139,6 +139,85 @@ class PlannerModeTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(OutlineTopicCountError):
                 await agent.plan("x", mode="full", llm_context=llm)
 
+    async def test_custom_accepts_exact_boundaries_and_middle(self) -> None:
+        agent = PlannerAgent()
+        llm = LLMContext(api_key="k", model="m")
+        for count in (1, 2, 7, 30):
+            with self.subTest(count=count):
+                expected = _outline(count)
+                with patch.object(
+                    agent, "generate", new_callable=AsyncMock
+                ) as generate:
+                    generate.return_value = expected
+                    actual = await agent.plan(
+                        "Topic", mode="custom",
+                        custom_topic_count=count, llm_context=llm,
+                    )
+                    self.assertIs(actual, expected)
+                    self.assertEqual(len(actual.topics), count)
+                    generate.assert_awaited_once()
+                    prompt = generate.await_args.kwargs[
+                        "system_prompt_override"
+                    ]
+                    self.assertIn(f"EXACTLY {count} topics", prompt)
+
+    async def test_custom_retries_once_without_changing_outline(self) -> None:
+        agent = PlannerAgent()
+        for wrong in (1, 30):
+            with self.subTest(wrong=wrong):
+                invalid, expected = _outline(wrong), _outline(7)
+                with patch.object(
+                    agent, "generate", new_callable=AsyncMock
+                ) as generate:
+                    generate.side_effect = [invalid, expected]
+                    result = await agent.plan(
+                        "Topic", mode="custom", custom_topic_count=7,
+                        llm_context=LLMContext(api_key="k", model="m"),
+                    )
+                    self.assertIs(result, expected)
+                    self.assertEqual(len(invalid.topics), wrong)
+                    self.assertEqual(generate.await_count, 2)
+                    first, second = generate.await_args_list
+                    correction = second.kwargs["user_message"]
+                    self.assertIn(f"previously produced {wrong}", correction)
+                    self.assertIn("EXACTLY 7 topics", correction)
+                    self.assertIn("STRICT MODE CONSTRAINTS", correction)
+                    self.assertEqual(
+                        first.kwargs["system_prompt_override"],
+                        second.kwargs["system_prompt_override"],
+                    )
+
+    async def test_custom_second_mismatch_raises_count_error(self) -> None:
+        agent = PlannerAgent()
+        with patch.object(
+            agent, "generate", new_callable=AsyncMock
+        ) as generate:
+            generate.side_effect = [_outline(6), _outline(8)]
+            with self.assertRaises(OutlineTopicCountError) as caught:
+                await agent.plan(
+                    "Topic", mode="custom", custom_topic_count=7,
+                    llm_context=LLMContext(api_key="k", model="m"),
+                )
+            self.assertEqual(generate.await_count, 2)
+        error = caught.exception
+        self.assertEqual(
+            (error.mode, error.count, error.min_topics, error.max_topics),
+            ("custom", 8, 7, 7),
+        )
+
+    async def test_invalid_custom_target_never_calls_generate(self) -> None:
+        agent = PlannerAgent()
+        with patch.object(
+            agent, "generate", new_callable=AsyncMock
+        ) as generate:
+            with self.assertRaises(ValueError):
+                await agent.plan("Topic", mode="custom")
+            with self.assertRaises(ValueError):
+                await agent.plan(
+                    "Topic", mode="lite", custom_topic_count=7
+                )
+            generate.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

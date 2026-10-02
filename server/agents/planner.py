@@ -315,7 +315,8 @@ class PlannerAgent(BaseAgent):
         research_context: Optional[str] = None,
         context: Optional[dict] = None,
         llm_context: Optional[LLMContext] = None,
-        mode: Literal["lite", "full"] = "full",
+        mode: ResolvedDepthMode = "full",
+        custom_topic_count: Optional[int] = None,
     ) -> CourseOutline:
         """Generate CourseOutline for query under resolved depth mode.
 
@@ -324,19 +325,19 @@ class PlannerAgent(BaseAgent):
             research_context: Optional research report context.
             context: Optional prompt context.
             llm_context: OpenRouter/provider context.
-            mode: Resolved depth mode (lite or full). Never auto.
+            mode: Resolved depth mode (lite, full, or custom). Never auto.
+            custom_topic_count: Exact topic count, required for custom.
 
         Returns:
-            Valid CourseOutline within mode topic bounds.
+            Valid CourseOutline satisfying the mode's cardinality: within
+            Lite/Full bounds or exactly custom_topic_count for Custom.
 
         Raises:
+            ValueError: Invalid mode/count combination before any LLM call.
             OutlineTopicCountError: After one replan still out of bounds.
             Exception: Upstream generation failures.
         """
-        if mode not in MODE_TEMPLATES:
-            raise ValueError(f"Invalid planner mode: {mode}")
-
-        system_prompt = build_planner_system_prompt(mode)
+        system_prompt = build_planner_system_prompt(mode, custom_topic_count)
         user_message = (
             "Create a structured learning path (table of contents) for the following topic:\n\n"
             f"{query}\n\n"
@@ -365,7 +366,7 @@ class PlannerAgent(BaseAgent):
             system_prompt_override=system_prompt,
         )
 
-        if validate_topic_count_for_mode(outline, mode):
+        if validate_topic_count_for_mode(outline, mode, custom_topic_count):
             logger.info(
                 "PlannerAgent created outline: '%s' with %s topics",
                 outline.course_title,
@@ -373,7 +374,13 @@ class PlannerAgent(BaseAgent):
             )
             return outline
 
-        min_t, max_t = MODE_TOPIC_BOUNDS[mode]
+        if mode == "custom":
+            # The prompt builder validated this before the first call.
+            if custom_topic_count is None:
+                raise ValueError("custom mode requires custom_topic_count")
+            min_t = max_t = custom_topic_count
+        else:
+            min_t, max_t = MODE_TOPIC_BOUNDS[mode]
         count = len(outline.topics)
         logger.warning(
             "Outline topic count %s out of bounds for %s (%s-%s); replan",
@@ -382,11 +389,16 @@ class PlannerAgent(BaseAgent):
             min_t,
             max_t,
         )
+        constraint = (
+            f"EXACTLY {min_t} topics"
+            if mode == "custom"
+            else f"between {min_t} and {max_t} topics inclusive"
+        )
         replan_message = (
             f"{user_message}\n\n"
             f"STRICT MODE CONSTRAINTS: You previously produced {count} "
-            f"topics. You MUST produce between {min_t} and {max_t} "
-            f"topics inclusive for {mode} mode. No fewer, no more."
+            f"topics. You MUST produce {constraint} for {mode} mode. "
+            "No fewer, no more. Regenerate the complete outline."
         )
         outline = await self.generate(
             response_model=CourseOutline,
@@ -396,7 +408,7 @@ class PlannerAgent(BaseAgent):
             system_prompt_override=system_prompt,
         )
 
-        if validate_topic_count_for_mode(outline, mode):
+        if validate_topic_count_for_mode(outline, mode, custom_topic_count):
             logger.info(
                 "PlannerAgent replan ok: '%s' with %s topics",
                 outline.course_title,
