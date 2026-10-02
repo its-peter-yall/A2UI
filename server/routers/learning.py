@@ -38,7 +38,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query, status, Depends, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from server.agents.planner import OutlineTopicCountError
 from server.database.generation_jobs import (
@@ -63,8 +63,10 @@ from server.schemas.generation import (
 from server.schemas.learning import (
     ConceptChatRequest,
     ConceptNodeResponse,
+    LearningDepthMode,
     LearningSessionResponse,
     LearningSessionSummary,
+    MAX_COURSE_TOPICS,
     ModuleGenerationStatus,
     NodeStatus,
     PublicNodeCitation,
@@ -128,10 +130,28 @@ class GenerateCourseRequest(BaseModel):
         max_length=500,
     )
     user_id: Optional[str] = Field(default=None, description="Optional user ID")
-    mode: Literal["auto", "lite", "full"] = Field(
+    mode: LearningDepthMode = Field(
         default="auto",
-        description="Depth mode: auto routes; lite 3-10; full 10-30 topics",
+        description=(
+            "Depth mode: auto routes; lite 3-10; full 10-30; custom exact"
+        ),
     )
+    custom_topic_count: Optional[int] = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=MAX_COURSE_TOPICS,
+        description="Exact Custom topic count; null for other modes",
+    )
+
+    @model_validator(mode="after")
+    def validate_custom_topic_count(self) -> "GenerateCourseRequest":
+        """Require a count only when Custom mode is selected."""
+        if self.mode == "custom" and self.custom_topic_count is None:
+            raise ValueError("custom mode requires custom_topic_count")
+        if self.mode != "custom" and self.custom_topic_count is not None:
+            raise ValueError("custom_topic_count is only valid for custom mode")
+        return self
 
 
 class LearningSessionWithNodes(LearningSessionResponse):

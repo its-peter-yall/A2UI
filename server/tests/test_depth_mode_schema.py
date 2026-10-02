@@ -20,13 +20,17 @@ USAGE:
 """
 from __future__ import annotations
 
+import json
 import unittest
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
+from server.routers.learning import GenerateCourseRequest
 from server.schemas.learning import (
     CourseOutline,
+    LearningDepthMode,
     LearningSessionResponse,
+    ResolvedDepthMode,
     TopicNode,
     validate_topic_count_for_mode,
 )
@@ -166,6 +170,140 @@ class DepthModeSchemaTests(unittest.TestCase):
         )
         self.assertEqual(session.mode, "auto")
         self.assertEqual(session.resolved_mode, "lite")
+
+
+class CustomDepthContractTests(unittest.TestCase):
+    def test_depth_aliases_accept_custom(self) -> None:
+        self.assertEqual(
+            TypeAdapter(LearningDepthMode).validate_python("custom"),
+            "custom",
+        )
+        self.assertEqual(
+            TypeAdapter(ResolvedDepthMode).validate_python("custom"),
+            "custom",
+        )
+        with self.assertRaises(ValidationError):
+            TypeAdapter(ResolvedDepthMode).validate_python("auto")
+
+    def test_requests_accept_exact_integer_boundaries(self) -> None:
+        for count in (1, 2, 5, 30):
+            data = {
+                "query": "CSS",
+                "mode": "custom",
+                "custom_topic_count": count,
+            }
+            with self.subTest(count=count):
+                request = GenerateCourseRequest.model_validate(data)
+                from_json = GenerateCourseRequest.model_validate_json(
+                    json.dumps(data)
+                )
+                self.assertEqual(request.mode, "custom")
+                self.assertEqual(request.custom_topic_count, count)
+                self.assertEqual(from_json.custom_topic_count, count)
+
+    def test_custom_request_rejects_missing_count(self) -> None:
+        with self.assertRaises(ValidationError):
+            GenerateCourseRequest.model_validate(
+                {"query": "CSS", "mode": "custom"}
+            )
+
+    def test_custom_request_rejects_invalid_count_values(self) -> None:
+        for value in (None, True, False, 2.5, 5.0, "5", 0, -1, 31):
+            data = {
+                "query": "CSS",
+                "mode": "custom",
+                "custom_topic_count": value,
+            }
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError):
+                    GenerateCourseRequest.model_validate(data)
+                with self.assertRaises(ValidationError):
+                    GenerateCourseRequest.model_validate_json(
+                        json.dumps(data)
+                    )
+
+    def test_existing_requests_allow_missing_or_null_count(self) -> None:
+        for mode in ("auto", "lite", "full"):
+            for supplied in ({}, {"custom_topic_count": None}):
+                with self.subTest(mode=mode, supplied=supplied):
+                    request = GenerateCourseRequest.model_validate(
+                        {"query": "CSS", "mode": mode, **supplied}
+                    )
+                    self.assertEqual(request.mode, mode)
+                    self.assertIsNone(request.custom_topic_count)
+        default = GenerateCourseRequest(query="CSS")
+        self.assertEqual(default.mode, "auto")
+        self.assertIsNone(default.custom_topic_count)
+
+    def test_other_request_modes_reject_non_null_count(self) -> None:
+        for mode in (None, "auto", "lite", "full"):
+            data = {"query": "CSS", "custom_topic_count": 5}
+            if mode is not None:
+                data["mode"] = mode
+            with self.subTest(mode=mode):
+                with self.assertRaises(ValidationError):
+                    GenerateCourseRequest.model_validate(data)
+
+    def test_unknown_request_mode_remains_invalid(self) -> None:
+        with self.assertRaises(ValidationError):
+            GenerateCourseRequest(query="CSS", mode="turbo")
+
+    def test_custom_session_response_retains_requested_count(self) -> None:
+        for count in (1, 2, 30):
+            with self.subTest(count=count):
+                response = LearningSessionResponse(
+                    id="s1",
+                    query="CSS",
+                    course_title="CSS",
+                    mode="custom",
+                    resolved_mode="custom",
+                    custom_topic_count=count,
+                    total_nodes=0,
+                )
+                payload = response.model_dump(mode="json")
+                self.assertEqual(payload["custom_topic_count"], count)
+                self.assertEqual(payload["total_nodes"], 0)
+
+    def test_custom_response_rejects_missing_or_invalid_count(self) -> None:
+        base = {
+            "id": "s1",
+            "query": "CSS",
+            "course_title": "CSS",
+            "mode": "custom",
+        }
+        with self.assertRaises(ValidationError):
+            LearningSessionResponse.model_validate(base)
+        for value in (None, True, False, 2.5, 5.0, "5", 0, -1, 31):
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError):
+                    LearningSessionResponse.model_validate(
+                        {**base, "custom_topic_count": value}
+                    )
+
+    def test_legacy_responses_allow_missing_or_null_count(self) -> None:
+        for mode in (None, "auto", "lite", "full"):
+            for supplied in ({}, {"custom_topic_count": None}):
+                with self.subTest(mode=mode, supplied=supplied):
+                    response = LearningSessionResponse(
+                        id="old",
+                        query="CSS",
+                        course_title="CSS",
+                        mode=mode,
+                        **supplied,
+                    )
+                    self.assertIsNone(response.custom_topic_count)
+
+    def test_non_custom_responses_reject_non_null_count(self) -> None:
+        for mode in (None, "auto", "lite", "full"):
+            with self.subTest(mode=mode):
+                with self.assertRaises(ValidationError):
+                    LearningSessionResponse(
+                        id="s1",
+                        query="CSS",
+                        course_title="CSS",
+                        mode=mode,
+                        custom_topic_count=5,
+                    )
 
 
 if __name__ == "__main__":

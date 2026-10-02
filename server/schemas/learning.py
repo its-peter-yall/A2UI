@@ -815,16 +815,32 @@ class LearningSessionResponse(ResponseBase, TimestampMixin, LearningSessionBase)
     )
     mode: Optional[LearningDepthMode] = Field(
         default=None,
-        description="User-selected depth mode (auto|lite|full)",
+        description="User-selected depth mode (auto|lite|full|custom)",
     )
     resolved_mode: Optional[ResolvedDepthMode] = Field(
         default=None,
-        description="Effective depth mode after routing (lite|full)",
+        description="Effective depth mode after routing (lite|full|custom)",
+    )
+    custom_topic_count: Optional[int] = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        le=MAX_COURSE_TOPICS,
+        description="Requested Custom count, independent of total_nodes",
     )
     title_finalized: bool = Field(
         default=True,
         description="Whether course title is final (false while provisional)",
     )
+
+    @model_validator(mode="after")
+    def validate_custom_topic_count(self) -> "LearningSessionResponse":
+        """Require a count only when Custom mode is selected."""
+        if self.mode == "custom" and self.custom_topic_count is None:
+            raise ValueError("custom mode requires custom_topic_count")
+        if self.mode != "custom" and self.custom_topic_count is not None:
+            raise ValueError("custom_topic_count is only valid for custom mode")
+        return self
 
 
 class LearningSessionSummary(BaseModel):
