@@ -19,16 +19,41 @@ USAGE:
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from server.database.generation_artifacts import GenerationArtifactStore
+from server.database.generation_jobs import GenerationJobStore
+from server.database.generation_migrations import initialize_generation_schema
+from server.database.learning_persistence import LearningManager
+from server.database.progress_events import ProgressEventStore
 from server.graph import nodes
 from server.graph.build import build_graph
 from server.graph.nodes import fan_out_generators, select_topic_batch
+from server.graph.runner import run_generation_job
 from server.schemas.generation import GenerationStage, GenerationWarning
 from server.schemas.learning import CourseOutline, TopicNode
 from server.schemas.llm import LLMContext
+from server.schemas.progress import ProgressEventType
 from server.schemas.search import SearchContext
+
+
+def _custom_outline(count: int) -> CourseOutline:
+    return CourseOutline(
+        course_title="Custom Course",
+        topics=[
+            TopicNode(
+                index=index, title=f"Topic {index}",
+                summary_for_context=f"Summary {index}",
+                key_terms=["term-a", "term-b"],
+                complexity="Basic", quiz_count=1,
+            )
+            for index in range(count)
+        ],
+    )
 
 
 class StagedGraphTests(unittest.IsolatedAsyncioTestCase):
@@ -74,6 +99,86 @@ class StagedGraphTests(unittest.IsolatedAsyncioTestCase):
         learning.update_session_resolved_mode.assert_called_once_with(
             "s1", "custom"
         )
+
+    async def test_outline_node_passes_custom_requested_count(self) -> None:
+        jobs = MagicMock()
+        jobs.is_cancel_requested.return_value = False
+        jobs.get_by_session.return_value = None
+        llm = LLMContext(api_key="k", model="m")
+        with (
+            patch("server.graph.nodes.generation_job_store", jobs),
+            patch("server.graph.nodes.generation_artifact_store") as artifacts,
+            patch("server.graph.nodes.progress_event_store"),
+            patch("server.graph.nodes.planner_agent.plan",
+                  new_callable=AsyncMock) as plan,
+        ):
+            expected = _custom_outline(2)
+            plan.return_value = expected
+            result = await nodes.outline_planner_node(
+                {
+                    "session_id": "s1", "query": "Topic",
+                    "resolved_mode": "custom", "custom_topic_count": 2,
+                }, runtime={"llm_context": llm},
+            )
+            self.assertEqual(plan.await_args.kwargs["custom_topic_count"], 2)
+            self.assertEqual(plan.await_args.kwargs["mode"], "custom")
+            self.assertEqual(result["topic_count"], 2)
+            artifacts.persist_outline.assert_called_once_with("s1", expected)
+
+    async def test_second_count_mismatch_is_durably_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "a2ui.db"
+            learning = LearningManager(db_path)
+            learning.init_learning_tables()
+            initialize_generation_schema(db_path)
+            jobs = GenerationJobStore(db_path)
+            events = ProgressEventStore(db_path)
+            artifacts = GenerationArtifactStore(db_path)
+            session, _ = jobs.create_session_shell_and_job(
+                query="Topic", user_id=None, mode="custom",
+                custom_topic_count=7, web_search_requested=False,
+            )
+            graph = build_graph()
+            with (
+                patch("server.graph.runner.learning_manager", learning),
+                patch("server.graph.nodes.learning_manager", learning),
+                patch("server.graph.nodes.generation_job_store", jobs),
+                patch(
+                    "server.graph.nodes.generation_artifact_store", artifacts
+                ),
+                patch("server.graph.nodes.progress_event_store", events),
+                patch.object(
+                    nodes.planner_agent, "generate", new_callable=AsyncMock
+                ) as generate,
+                patch("server.graph.nodes.planner_agent.plan_briefs",
+                      new_callable=AsyncMock) as briefs,
+            ):
+                generate.side_effect = [_custom_outline(6), _custom_outline(8)]
+                await run_generation_job(
+                    app_state=SimpleNamespace(course_graph=graph),
+                    session_id=session["id"], job_store=jobs,
+                    event_store=events,
+                    llm_context=LLMContext(api_key="k", model="m"),
+                    search_context=SearchContext(),
+                )
+            self.assertEqual(generate.await_count, 2)
+            briefs.assert_not_called()
+            stored = jobs.get_by_session(session["id"])
+            self.assertEqual(stored.stage, GenerationStage.FAILED)
+            self.assertIsNone(stored.lock_owner)
+            self.assertEqual(artifacts.count_topics(session["id"]), 0)
+            self.assertEqual(learning.get_session_nodes(session["id"]), [])
+            emitted = events.list_after(session["id"], 0)
+            self.assertTrue(any(
+                event.event_type == ProgressEventType.STAGE_CHANGED
+                and event.payload.model_dump(mode="json").get("stage")
+                == GenerationStage.FAILED.value
+                for event in emitted
+            ))
+            self.assertFalse(any(
+                event.event_type == ProgressEventType.OUTLINE_READY
+                for event in emitted
+            ))
 
     async def test_web_off_skips_research_and_runs_three_then_ten(self) -> None:
         calls: list[str] = []

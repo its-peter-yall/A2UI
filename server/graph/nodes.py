@@ -425,6 +425,7 @@ async def outline_planner_node(
         research_context=report_context,
         llm_context=llm_ctx,
         mode=mode,  # type: ignore[arg-type]
+        custom_topic_count=state.get("custom_topic_count"),
     )
 
     generation_artifact_store.persist_outline(session_id, outline)
