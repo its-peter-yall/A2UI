@@ -122,6 +122,12 @@ class ResearchProgressContractTests(unittest.TestCase):
                 "generation_paused",
                 "generation_cancelled",
                 "generation_complete",
+                "research_sources_updated",
+                "research_text_delta",
+                "outline_text_delta",
+                "topic_content_delta",
+                "topic_explanation_ready",
+                "target_draft_reset",
             ],
         )
 
