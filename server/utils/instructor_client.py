@@ -77,6 +77,26 @@ StreamDeltaCallback = Callable[
 ]
 
 
+class StreamCallbackError(RuntimeError):
+    """A presentation callback failed; no provider retry is permitted."""
+
+
+async def _notify(
+    callback: Optional[StreamDeltaCallback],
+    update: StructuredStreamUpdate,
+) -> None:
+    if callback is None:
+        return
+    try:
+        await callback(update)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise StreamCallbackError(
+            "Streaming display callback failed"
+        ) from exc
+
+
 def sanitize_json_escapes(s: str) -> str:
     """Sanitize invalid escape sequences in a JSON string.
 
@@ -350,25 +370,46 @@ class InstructorClient:
         initial_attempt: int = 1,
         **kwargs: Any,
     ) -> T:
-        """Stream one structured attempt and return the validated model."""
-        if on_delta:
-            await on_delta(StructuredStreamUpdate(
-                kind="attempt_started", attempt=initial_attempt,
-            ))
-        return await self._create_partial_attempt(
-            role=role,
-            response_model=response_model,
-            messages=messages,
-            api_key=api_key,
-            model_override=model_override,
-            attribution_headers=attribution_headers,
-            system_prompt=system_prompt,
-            provider=provider,
-            reasoning_params=reasoning_params,
-            max_completion_tokens=max_completion_tokens,
-            on_delta=on_delta,
-            attempt=initial_attempt,
-            **kwargs,
+        """Stream structured partials with bounded transport retries."""
+        if not 1 <= initial_attempt <= 5:
+            raise ValueError("Attempt must be between 1 and 5")
+        async for retry_attempt in AsyncRetrying(
+            stop=stop_after_attempt(min(3, 6 - initial_attempt)),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            retry=retry_if_not_exception_type((
+                ValueError,
+                TypeError,
+                asyncio.CancelledError,
+                StreamCallbackError,
+            )),
+            reraise=True,
+        ):
+            with retry_attempt:
+                attempt = (
+                    initial_attempt
+                    + retry_attempt.retry_state.attempt_number
+                    - 1
+                )
+                await _notify(on_delta, StructuredStreamUpdate(
+                    kind="attempt_started", attempt=attempt,
+                ))
+                return await self._create_partial_attempt(
+                    role=role,
+                    response_model=response_model,
+                    messages=messages,
+                    api_key=api_key,
+                    model_override=model_override,
+                    attribution_headers=attribution_headers,
+                    system_prompt=system_prompt,
+                    provider=provider,
+                    reasoning_params=reasoning_params,
+                    max_completion_tokens=max_completion_tokens,
+                    on_delta=on_delta,
+                    attempt=attempt,
+                    **kwargs,
+                )
+        raise RuntimeError(
+            "Streaming retry loop exited without a result"
         )
 
     async def _create_partial_attempt(
@@ -445,12 +486,11 @@ class InstructorClient:
             last = None
             async for partial in stream:
                 last = partial
-                if on_delta:
-                    await on_delta(StructuredStreamUpdate(
-                        kind="partial",
-                        attempt=attempt,
-                        partial=partial,
-                    ))
+                await _notify(on_delta, StructuredStreamUpdate(
+                    kind="partial",
+                    attempt=attempt,
+                    partial=partial,
+                ))
             if last is None:
                 raise ValueError(
                     "Provider returned an empty structured stream"

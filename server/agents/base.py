@@ -37,7 +37,10 @@ from typing import Any, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
-from server.utils.instructor_client import instructor_client
+from server.utils.instructor_client import (
+    StreamDeltaCallback,
+    instructor_client,
+)
 from server.schemas.llm import LLMContext
 
 
@@ -147,6 +150,45 @@ class BaseAgent(ABC):
         )
         logger.info(f"{self.__class__.__name__} generated structured response")
         return response
+
+    async def generate_streaming(
+        self,
+        response_model: Type[T],
+        user_message: str,
+        context: Optional[dict[str, Any]] = None,
+        llm_context: Optional[LLMContext] = None,
+        system_prompt_override: Optional[str] = None,
+        *,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        initial_attempt: int = 1,
+        **kwargs: Any,
+    ) -> T:
+        """Stream a structured response using the agent's role config."""
+        if not llm_context:
+            raise ValueError("AI API key is required in llm_context.")
+        model, provider, key, reasoning = (
+            llm_context.resolve_agent_call(self._role)
+        )
+        if not key:
+            raise ValueError("AI API key is required in llm_context.")
+        return await instructor_client.create_partial_structured(
+            role=self._role,
+            response_model=response_model,
+            messages=[{"role": "user", "content": user_message}],
+            api_key=key,
+            model_override=model,
+            attribution_headers=llm_context.get_attribution_headers(),
+            system_prompt=self._build_system_prompt(
+                context,
+                system_prompt_override=system_prompt_override,
+            ),
+            provider=provider,
+            reasoning_params=reasoning,
+            max_completion_tokens=llm_context.max_completion_tokens,
+            on_delta=on_delta,
+            initial_attempt=initial_attempt,
+            **kwargs,
+        )
 
     def _build_system_prompt(
         self,
