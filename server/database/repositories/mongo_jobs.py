@@ -121,7 +121,7 @@ class MongoGenerationJobRepository:
             "resolved_mode": None,
             "custom_topic_count": custom_topic_count,
             "title_finalized": False,
-            "status": "active",
+            "status": "in_progress",
             "progress_percent": 0,
             "completed_at": None,
             "last_active_node_id": None,

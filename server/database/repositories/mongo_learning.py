@@ -118,8 +118,7 @@ class MongoLearningRepository:
             "title_finalized": True,
             "mode": mode,
             "resolved_mode": resolved_mode,
-            "custom_topic_count": custom_topic_count,
-            "status": "active",
+            "status": "in_progress",
             "progress_percent": 0,
             "completed_at": None,
             "last_active_node_id": None,
@@ -181,9 +180,14 @@ class MongoLearningRepository:
             )
             if last_node is not None:
                 last_title = last_node.get("title")
+        current_status = session.get("status")
         return {
             "progress_percent": progress,
-            "status": session.get("status") or "in_progress",
+            "status": (
+                "in_progress"
+                if current_status in ("active", None, "")
+                else current_status
+            ),
             "completed_nodes": completed,
             "total_nodes": total,
             "last_active_node_id": last_active_id,
@@ -202,7 +206,9 @@ class MongoLearningRepository:
         query: dict[str, Any] = {}
         if user_id is not None:
             query["user_id"] = user_id
-        if status != "all":
+        if status == "in_progress":
+            query["status"] = {"$in": ["in_progress", "active"]}
+        elif status != "all":
             query["status"] = status
         safe_sort = sort_by if sort_by in {
             "created_at",
@@ -265,7 +271,7 @@ class MongoLearningRepository:
                 row["last_active_node_title"] = last_title
                 if total > 0 and completed == total:
                     row["status"] = "completed"
-                elif "status" not in row or not row["status"]:
+                elif row.get("status") in ("active", "in_progress", None, ""):
                     row["status"] = "in_progress"
             rows.append(row)
         return rows, self._sessions.count_documents(query)
