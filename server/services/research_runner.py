@@ -34,6 +34,7 @@ from urllib.parse import urlsplit
 from server.schemas.generation import (
     GenerationCursor,
     GenerationLock,
+    GenerationStage,
     GenerationWarning,
     GroundingStatus,
     ResearchCursor,
@@ -42,6 +43,7 @@ from server.schemas.progress import (
     ProgressEventType,
     ResearchDegradedPayload,
     ResearchSectionReadyPayload,
+    ResearchSourcesUpdatedPayload,
 )
 from server.schemas.research import (
     CoverageItem,
@@ -59,6 +61,8 @@ from server.search.budget import (
     resolve_research_budget,
 )
 from server.search.source_safety import (
+    UnsafeSourceUrl,
+    canonicalize_source_url,
     content_identity,
     deduplicate_results,
     format_untrusted_sources,
@@ -71,6 +75,7 @@ from server.search.types import (
     SearchErrorClass,
     SearchQuery,
 )
+from server.services.session_event_stream import session_live_stream
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +257,6 @@ class ResearchRunner:
         ledger: Optional[ResearchBudgetLedger] = None,
     ) -> ResearchOutcome:
         """Run the bounded research loop to a terminal status."""
-        del job_id  # reserved for future job-scoped telemetry
         warnings: list[GenerationWarning] = []
         limitations: list[str] = []
         conflicts: list[str] = []
@@ -264,10 +268,37 @@ class ResearchRunner:
         next_section_index = 0
         pending_queries: list[str] = []
         sources_by_id: dict[str, ResearchSource] = {}
+        accepted_urls: dict[str, str] = {}
+        accepted_hashes: dict[str, str] = {}
         shared_ledger = ledger
 
         report = self._research_store.create_report(session_id=session_id)
         report_id = str(report.id)
+        loaded = self._research_store.get_report(session_id)
+        raw_sources = (
+            getattr(loaded, "sources", None)
+            if loaded is not None else None
+        )
+        if isinstance(raw_sources, (list, tuple)):
+            for source in raw_sources:
+                source_id = getattr(source, "id", None)
+                if not isinstance(source_id, str) or not source_id:
+                    continue
+                sources_by_id[source_id] = source
+                url_value = str(getattr(source, "url", "") or "")
+                try:
+                    canonical = canonicalize_source_url(url_value)
+                except (UnsafeSourceUrl, ValueError):
+                    canonical = url_value
+                if canonical:
+                    accepted_urls[canonical] = source_id
+                excerpt = str(
+                    getattr(source, "excerpt", "") or ""
+                )
+                if excerpt.strip():
+                    accepted_hashes[content_identity(excerpt)] = (
+                        source_id
+                    )
 
         cursor = self._load_research_cursor(session_id)
         iteration = cursor.iteration
@@ -457,7 +488,25 @@ class ResearchRunner:
                         break
 
                     retained = deduplicate_results(response.results)
+                    before = set(sources_by_id)
                     for hit in retained:
+                        try:
+                            canonical = canonicalize_source_url(
+                                str(hit.canonical_url or hit.url)
+                            )
+                        except UnsafeSourceUrl:
+                            continue
+                        excerpt = hit.content or hit.snippet or ""
+                        identity = (
+                            content_identity(excerpt)
+                            if str(excerpt).strip() else ""
+                        )
+                        existing_id = accepted_urls.get(canonical)
+                        if existing_id is None and identity:
+                            existing_id = accepted_hashes.get(identity)
+                        if existing_id is not None:
+                            batch_source_ids.append(existing_id)
+                            continue
                         source = self._persist_hit(
                             session_id=session_id,
                             hit=hit,
@@ -466,7 +515,35 @@ class ResearchRunner:
                         if source is None:
                             continue
                         sources_by_id[source.id] = source
+                        accepted_urls[canonical] = source.id
+                        if identity:
+                            accepted_hashes[identity] = source.id
                         batch_source_ids.append(source.id)
+                    added_ids = set(sources_by_id) - before
+                    if added_ids:
+                        self._ensure_not_cancelled(session_id)
+                        providers = {
+                            sources_by_id[sid].provider_id.value
+                            for sid in added_ids
+                        }
+                        await session_live_stream.publish(
+                            session_id=session_id,
+                            job_id=job_id,
+                            stage=GenerationStage.RESEARCHING,
+                            event_type=(
+                                ProgressEventType.RESEARCH_SOURCES_UPDATED
+                            ),
+                            payload=ResearchSourcesUpdatedPayload(
+                                unique_source_count=len(
+                                    sources_by_id
+                                ),
+                                new_sources_count=len(added_ids),
+                                provider_id=(
+                                    next(iter(providers))
+                                    if len(providers) == 1 else None
+                                ),
+                            ),
+                        )
 
                     self._persist_research_cursor(
                         session_id=session_id,
@@ -486,6 +563,7 @@ class ResearchRunner:
                     # Empty search batch — still allow synthesis on no evidence
                     pass
 
+                batch_source_ids = list(dict.fromkeys(batch_source_ids))
                 self._ensure_not_cancelled(session_id)
                 try:
                     ledger.reserve_llm_turn()
