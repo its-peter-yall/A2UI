@@ -55,9 +55,38 @@ import {
 } from "@/lib/providerSettings";
 import { cn } from "@/lib/utils";
 import type { LearningSessionWithNodes } from "@/types/learning";
-import type { ResearchReport } from "@/types/generation";
+import type { GenerationStage, ResearchReport } from "@/types/generation";
 import { isTerminalGenerationStage, reconcileGenerationSession } from "./generationEvents";
 import { useSessionEvents } from "./useSessionEvents";
+import { useGenerationDrafts, type TargetDraft } from "./useGenerationDrafts";
+import { useGenerationOverlays } from "./useGenerationOverlays";
+
+const STAGE_ANNOUNCEMENTS: Partial<Record<GenerationStage, string>> = {
+	RESEARCHING: "Researching sources",
+	OUTLINING: "Planning course outline",
+	PLANNING_PREVIEW: "Outline ready. Preparing topics.",
+	GENERATING_PREVIEW: "Generating topic explanations",
+	PLANNING_BATCH: "Planning remaining topics",
+	GENERATING_BATCH: "Generating remaining topics",
+	PAUSED: "Generation paused",
+	CANCELLED: "Generation cancelled",
+	COMPLETE: "Course generation complete",
+	COMPLETE_DEGRADED: "Course generation complete with limited grounding",
+	FAILED: "Generation failed",
+};
+
+function pickResearchDraft(
+	draftsByTarget: Readonly<Record<string, TargetDraft>>,
+): TargetDraft | undefined {
+	const drafts = Object.values(draftsByTarget).filter(
+		(draft) => draft.targetType === "research",
+	);
+	return (
+		drafts.find((draft) => draft.text.length > 0) ??
+		drafts.find((draft) => draft.uniqueSourceCount !== null) ??
+		drafts[0]
+	);
+}
 
 export function LearningPage() {
 	const { sessionId } = useParams<{ sessionId: string }>();
@@ -67,7 +96,6 @@ export function LearningPage() {
 		null,
 	);
 	const [showResumeBanner, setShowResumeBanner] = useState(false);
-	const [sourcesOpen, setSourcesOpen] = useState(false);
 	const [controlError, setControlError] = useState<string | null>(null);
 	const modalRef = useRef<HTMLDivElement>(null);
 	const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -107,13 +135,49 @@ export function LearningPage() {
 	const generationActive =
 		!!session?.generation &&
 		!isTerminalGenerationStage(session.generation.stage);
-	useSessionEvents(sessionId, generationActive);
+	const drafts = useGenerationDrafts(sessionId, session?.generation?.id);
+	const overlays = useGenerationOverlays({
+		stage: session?.generation?.stage,
+		webSearchRequested: !!session?.generation?.web_search_requested,
+		attempt: 1,
+	});
+	useSessionEvents(sessionId, {
+		enabled: generationActive,
+		onLiveEvent: drafts.handleLiveEvent,
+	});
+	const researchDraft = pickResearchDraft(drafts.draftsByTarget);
+	const outlineDraft = Object.values(drafts.draftsByTarget).find(
+		(draft) => draft.targetType === "outline",
+	);
+	const topicDrafts: Record<
+		string,
+		{
+			text: string;
+			truncated: boolean;
+			textOffset: number;
+			explanationReady: boolean;
+		}
+	> = {};
+	for (const draft of Object.values(drafts.draftsByTarget)) {
+		if (draft.targetType === "topic") {
+			topicDrafts[draft.targetId] = {
+				text: draft.text,
+				truncated: draft.truncated,
+				textOffset: draft.textOffset,
+				explanationReady: draft.explanationReady,
+			};
+		}
+	}
+	const stageAnnouncement =
+		session?.generation?.stage
+			? STAGE_ANNOUNCEMENTS[session.generation.stage]
+			: undefined;
 
 	const webRequested = !!session?.generation?.web_search_requested;
 	const researchQuery = useQuery({
 		queryKey: ["courseResearch", sessionId],
 		queryFn: () => getCourseResearch(sessionId!),
-		enabled: !!sessionId && webRequested && (sourcesOpen || webRequested),
+		enabled: !!sessionId && webRequested && (overlays.isSourcesOpen || webRequested),
 		staleTime: 0,
 		refetchInterval: (query) => {
 			const status = query.state.data?.status;
@@ -430,7 +494,7 @@ export function LearningPage() {
 							{(webRequested || researchQuery.data) && (
 								<button
 									type="button"
-									onClick={() => setSourcesOpen(true)}
+									onClick={() => overlays.openSources()}
 									className={cn(
 										"inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors",
 										"focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-md px-2 py-1",
@@ -494,11 +558,26 @@ export function LearningPage() {
 
 			{/* Main content */}
 			<main id="main-content" className="flex-1 min-h-0 overflow-hidden">
+				<div className="sr-only" aria-live="polite">
+					{stageAnnouncement}
+				</div>
 				<LearningPathContainer
 					sessionId={sessionId}
 					session={session ?? undefined}
 					initialNodeId={session?.last_active_node_id ?? undefined}
-					onOpenSources={() => setSourcesOpen(true)}
+					onOpenSources={overlays.openSources}
+					isTOCOpen={overlays.isTOCOpen}
+					onOpenTOC={overlays.openTOC}
+					onCloseTOC={overlays.dismiss}
+					outlineDraft={
+						outlineDraft
+							? {
+									courseTitle: outlineDraft.courseTitle,
+									topics: outlineDraft.topics,
+							  }
+							: undefined
+					}
+					topicDrafts={topicDrafts}
 					onCourseGenerated={(nextSession) => {
 						document.title = `Learn: ${nextSession.course_title}`;
 						refetch();
@@ -507,9 +586,12 @@ export function LearningPage() {
 			</main>
 
 			<CourseSourcesPanel
-				isOpen={sourcesOpen}
-				onClose={() => setSourcesOpen(false)}
+				isOpen={overlays.isSourcesOpen}
+				onClose={overlays.dismiss}
 				report={researchQuery.data as ResearchReport | undefined}
+				draftText={researchDraft?.text}
+				liveSourceCount={researchDraft?.uniqueSourceCount ?? undefined}
+				liveProviderId={researchDraft?.providerId}
 			/>
 
 			{/* Course completion overlay - accessible modal */}

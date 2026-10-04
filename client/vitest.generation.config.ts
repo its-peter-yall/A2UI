@@ -41,6 +41,9 @@ export default mergeConfig(
           'src/features/learning/GenerationStatusPanel.tsx',
           'src/features/learning/CourseSourcesPanel.tsx',
           'src/features/learning/SourceCitations.tsx',
+          'src/features/learning/useGenerationDrafts.ts',
+          'src/features/learning/useGenerationOverlays.ts',
+          'src/features/learning/DraftMarkdownPreview.tsx',
         ],
         thresholds: {
           perFile: true,

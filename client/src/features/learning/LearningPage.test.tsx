@@ -82,7 +82,16 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('./LearningPathContainer', () => ({
-  LearningPathContainer: () => <div data-testid="path-container" />,
+  LearningPathContainer: ({
+    isTOCOpen,
+  }: {
+    isTOCOpen?: boolean;
+  }) => (
+    <div
+      data-testid="path-container"
+      data-toc-open={isTOCOpen ? 'true' : 'false'}
+    />
+  ),
 }));
 
 vi.mock('./useSessionEvents', () => ({
@@ -303,6 +312,60 @@ describe('LearningPage controls', () => {
     renderPage(completedSession);
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: /generation status/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('auto-opens Sources on RESEARCHING, swaps to TOC on OUTLINING, and closes TOC on outline ready', async () => {
+    const researching = {
+      ...runningSession,
+      generation: {
+        ...runningSession.generation!,
+        stage: 'RESEARCHING' as const,
+        web_search_requested: true,
+      },
+    };
+    const client = renderPage(researching);
+
+    expect(
+      await screen.findByRole('dialog', { name: /course sources/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('path-container')).toHaveAttribute(
+      'data-toc-open',
+      'false',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(/researching/i);
+
+    client.setQueryData(['learningSession', 'session-1'], {
+      ...researching,
+      generation: {
+        ...researching.generation!,
+        stage: 'OUTLINING' as const,
+      },
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: /course sources/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId('path-container')).toHaveAttribute(
+        'data-toc-open',
+        'true',
+      );
+    });
+
+    client.setQueryData(['learningSession', 'session-1'], {
+      ...researching,
+      generation: {
+        ...researching.generation!,
+        stage: 'PLANNING_PREVIEW' as const,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('path-container')).toHaveAttribute(
+        'data-toc-open',
+        'false',
+      );
     });
   });
 });

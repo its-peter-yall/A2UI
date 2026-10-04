@@ -220,4 +220,79 @@ describe('LearningPathContainer progressive', () => {
     );
     expect(screen.getByTestId('concept-card')).toHaveTextContent('Ready Topic');
   });
+
+  it('reveals streaming explanation preview on the generating topic without exposing quizzes', () => {
+    const session = {
+      id: 'session-1',
+      user_id: null,
+      query: 'CSS',
+      course_title: 'CSS',
+      total_nodes: 2,
+      completed_nodes: 0,
+      last_active_node_id: null,
+      created_at: '2026-08-01T00:00:00Z',
+      updated_at: null,
+      generation,
+      nodes: [
+        {
+          id: 'n1',
+          learning_session_id: 'session-1',
+          sequence_index: 0,
+          title: 'Selectors',
+          content_markdown: '',
+          status: 'LOCKED',
+          error_message: null,
+          retry_available: false,
+          module_status: 'GENERATING',
+          quiz: null,
+          quiz_set: null,
+          quiz_hidden: null,
+          quiz_set_hidden: null,
+          created_at: '2026-08-01T00:00:00Z',
+          updated_at: null,
+        },
+        {
+          id: 'n2',
+          learning_session_id: 'session-1',
+          sequence_index: 1,
+          title: 'Cascade',
+          content_markdown: '',
+          status: 'LOCKED',
+          error_message: null,
+          retry_available: false,
+          module_status: 'SKELETON',
+          quiz: null,
+          quiz_set: null,
+          quiz_hidden: null,
+          quiz_set_hidden: null,
+          created_at: '2026-08-01T00:00:00Z',
+          updated_at: null,
+        },
+      ],
+    } as LearningSessionWithNodes;
+
+    wrap(
+      <LearningPathContainer
+        sessionId="session-1"
+        session={session}
+        topicDrafts={{
+          n1: {
+            text: 'Selectors match elements in the DOM.',
+            truncated: false,
+            textOffset: 0,
+            explanationReady: false,
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Selectors')).toBeInTheDocument();
+    expect(
+      screen.getByText(/selectors match elements in the dom/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/preview mode · generating explanation/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/quiz/i)).not.toBeInTheDocument();
+  });
 });

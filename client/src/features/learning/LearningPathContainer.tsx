@@ -84,6 +84,13 @@ import {
 import { ToastContainer, useErrorToast } from "./useErrorToast";
 import { useLearningMutations } from "./useLearningMutations";
 
+export interface TopicDraftPreview {
+	text: string;
+	truncated?: boolean;
+	textOffset?: number;
+	explanationReady?: boolean;
+}
+
 interface LearningPathContainerProps {
 	/** Existing session ID to load */
 	sessionId?: string;
@@ -99,6 +106,15 @@ interface LearningPathContainerProps {
 	onCourseGenerated?: (session: LearningSessionWithNodes) => void;
 	/** Open course sources panel */
 	onOpenSources?: () => void;
+	/** Controlled Table of Contents overlay from the generation FSM */
+	isTOCOpen?: boolean;
+	onOpenTOC?: () => void;
+	onCloseTOC?: () => void;
+	outlineDraft?: {
+		courseTitle?: string;
+		topics: Readonly<Record<number, string>>;
+	};
+	topicDrafts?: Readonly<Record<string, TopicDraftPreview>>;
 }
 
 type CelebrationState = {
@@ -116,6 +132,11 @@ export function LearningPathContainer({
 	initialNodeId,
 	onCourseGenerated,
 	onOpenSources,
+	isTOCOpen: isTOCOpenProp,
+	onOpenTOC,
+	onCloseTOC,
+	outlineDraft,
+	topicDrafts,
 }: LearningPathContainerProps) {
 	const queryClient = useQueryClient();
 	const [generatedSessionId, setGeneratedSessionId] = useState<
@@ -128,6 +149,11 @@ export function LearningPathContainer({
 	// Chat panel state
 	const [isChatOpen, setIsChatOpen] = useState(false);
 	const [isTOCOpen, setIsTOCOpen] = useState(false);
+	const tocOpen = isTOCOpenProp ?? isTOCOpen;
+	const openTOC = onOpenTOC ?? (() => setIsTOCOpen(true));
+	const closeTOC = onCloseTOC ?? (() => setIsTOCOpen(false));
+	const userNavigatedRef = useRef(false);
+	const autoRevealedRef = useRef(false);
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
 	const [prefillMessage, setPrefillMessage] = useState<string>("");
 	// Stable nodeId for chat — only updates when user explicitly opens chat,
@@ -529,8 +555,11 @@ export function LearningPathContainer({
 
 	// Carousel navigation functions
 	const goToSlide = useCallback(
-		(index: number) => {
+		(index: number, userInitiated = true) => {
 			if (!session) return;
+			if (userInitiated) {
+				userNavigatedRef.current = true;
+			}
 			const clampedIndex = Math.max(
 				0,
 				Math.min(index, session.nodes.length - 1),
@@ -552,6 +581,27 @@ export function LearningPathContainer({
 		},
 		[session, carouselState.currentIndex, activeSessionKey],
 	);
+
+	useEffect(() => {
+		const stage = session?.generation?.stage;
+		if (
+			stage !== "GENERATING_PREVIEW" ||
+			userNavigatedRef.current ||
+			autoRevealedRef.current ||
+			(session?.nodes.length ?? 0) === 0
+		) {
+			return;
+		}
+		autoRevealedRef.current = true;
+		if (carouselState.currentIndex !== 0) {
+			goToSlide(0, false);
+		}
+	}, [
+		carouselState.currentIndex,
+		goToSlide,
+		session?.generation?.stage,
+		session?.nodes.length,
+	]);
 
 	const goToNext = useCallback(() => {
 		goToSlide(carouselState.currentIndex + 1);
@@ -892,13 +942,19 @@ export function LearningPathContainer({
 															animated={
 																moduleStatus === "GENERATING" && !skeletonStatic
 															}
+															draftText={topicDrafts?.[currentSlideNode.id]?.text}
+															isTruncated={topicDrafts?.[currentSlideNode.id]?.truncated}
+															textOffset={topicDrafts?.[currentSlideNode.id]?.textOffset}
+															explanationReady={
+																topicDrafts?.[currentSlideNode.id]?.explanationReady
+															}
 														/>
 													);
 												}
 												return (
 													<ConceptCard
 														node={currentSlideNode}
-														onOpenTOC={() => setIsTOCOpen(true)}
+														onOpenTOC={openTOC}
 														onViewSources={sourcesCallback}
 														isActive={currentSlideNode.id === activeNodeId}
 														quizResult={quizResults[currentSlideNode.id]}
@@ -1013,11 +1069,12 @@ export function LearningPathContainer({
 			)}
 
 			<TableOfContentsModal
-				isOpen={isTOCOpen}
-				onClose={() => setIsTOCOpen(false)}
+				isOpen={tocOpen}
+				onClose={closeTOC}
 				nodes={session.nodes}
 				currentNodeId={currentSlideNode?.id}
 				onSelectTopic={goToSlide}
+				outlineDraft={outlineDraft}
 			/>
 
 			<ToastContainer toasts={toasts} onDismiss={dismissToast} />
