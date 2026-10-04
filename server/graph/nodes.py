@@ -83,6 +83,7 @@ from server.schemas.progress import (
     ResearchDegradedPayload,
     StageChangedPayload,
     TopicContentDeltaPayload,
+    TopicExplanationReadyPayload,
 )
 from server.schemas.generation import GenerationWarning
 from server.schemas.llm import LLMContext
@@ -864,6 +865,19 @@ async def generator_node(
             content_markdown=content.content_markdown,
             citations=list(content.citations or []),
         )
+        if live_output is not None:
+            try:
+                await session_live_stream.publish(
+                    session_id=session_id, job_id=live_output.job_id,
+                    stage=live_output.stage,
+                    event_type=ProgressEventType.TOPIC_EXPLANATION_READY,
+                    payload=TopicExplanationReadyPayload(
+                        node_id=node_id, sequence_index=seq_idx,
+                        attempt=live_output.attempt,
+                    ),
+                )
+            except Exception:
+                logger.debug("explanation_ready publication skipped")
 
         return {
             "generator_results": [
@@ -1087,7 +1101,12 @@ async def quizzer_node(
                 dedupe_key=f"module_ready:{seq_idx}",
             )
         except Exception:
-            pass
+            logger.debug("module_ready event skipped for session %s", session_id)
+        else:
+            await session_live_stream.retire_target(
+                session_id=session_id, target_type="topic",
+                target_id=node["id"], sequence_index=seq_idx,
+            )
         _bump_job_counts(session_id, topics_ready_delta=1)
 
         return {
