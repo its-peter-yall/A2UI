@@ -32,25 +32,49 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Optional, Type, TypeVar, cast
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Literal,
+    Optional,
+    Type,
+    TypeVar,
+    cast,
+)
 
 import instructor
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from tenacity import (
+    AsyncRetrying,
     retry,
+    retry_if_not_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_not_exception_type,
 )
 
 from server.config import settings
 from server.schemas.llm import AIProviderEnum
 from server.utils.prompt_cache import apply_openrouter_cache_control
+from server.utils.safe_logging import log_external_failure
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class StructuredStreamUpdate:
+    kind: Literal["attempt_started", "partial"]
+    attempt: int
+    partial: Optional[BaseModel] = None
+
+
+StreamDeltaCallback = Callable[
+    [StructuredStreamUpdate], Awaitable[None]
+]
 
 
 def sanitize_json_escapes(s: str) -> str:
@@ -308,6 +332,144 @@ class InstructorClient:
                 error=e,
             )
             raise
+
+    async def create_partial_structured(
+        self,
+        role: str,
+        response_model: Type[T],
+        messages: list[dict[str, str]],
+        api_key: str,
+        model_override: Optional[str] = None,
+        attribution_headers: Optional[dict[str, str]] = None,
+        system_prompt: Optional[str] = None,
+        provider: AIProviderEnum = AIProviderEnum.OPENROUTER,
+        reasoning_params: Optional[dict[str, Any]] = None,
+        max_completion_tokens: Optional[int] = None,
+        *,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        initial_attempt: int = 1,
+        **kwargs: Any,
+    ) -> T:
+        """Stream one structured attempt and return the validated model."""
+        if on_delta:
+            await on_delta(StructuredStreamUpdate(
+                kind="attempt_started", attempt=initial_attempt,
+            ))
+        return await self._create_partial_attempt(
+            role=role,
+            response_model=response_model,
+            messages=messages,
+            api_key=api_key,
+            model_override=model_override,
+            attribution_headers=attribution_headers,
+            system_prompt=system_prompt,
+            provider=provider,
+            reasoning_params=reasoning_params,
+            max_completion_tokens=max_completion_tokens,
+            on_delta=on_delta,
+            attempt=initial_attempt,
+            **kwargs,
+        )
+
+    async def _create_partial_attempt(
+        self,
+        role: str,
+        response_model: Type[T],
+        messages: list[dict[str, str]],
+        api_key: str,
+        model_override: Optional[str] = None,
+        attribution_headers: Optional[dict[str, str]] = None,
+        system_prompt: Optional[str] = None,
+        provider: AIProviderEnum = AIProviderEnum.OPENROUTER,
+        reasoning_params: Optional[dict[str, Any]] = None,
+        max_completion_tokens: Optional[int] = None,
+        *,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        attempt: int = 1,
+        **kwargs: Any,
+    ) -> T:
+        """Run one Instructor create_partial call and validate the final."""
+        self._raise_for_invalid_state(role)
+        if not api_key:
+            raise ValueError("AI API key is required")
+        if not model_override or not model_override.strip():
+            raise ValueError(
+                "Select a model in Settings before generating"
+            )
+        if {"stream", "max_retries", "response_model"}.intersection(
+            kwargs
+        ):
+            raise ValueError(
+                "Streaming control arguments are managed internally"
+            )
+        config = MODEL_CONFIGS[role]
+        model_slug = model_override.strip()
+        full_messages: list[dict[str, Any]] = []
+        if system_prompt:
+            full_messages.append(
+                {"role": "system", "content": system_prompt}
+            )
+        full_messages.extend(messages)
+        full_messages = apply_openrouter_cache_control(
+            full_messages, provider.value, model_slug,
+        )
+        max_tokens = config["max_tokens"]
+        if max_completion_tokens and max_completion_tokens > 0:
+            max_tokens = min(max_tokens, max_completion_tokens)
+        base_url, timeout = self._get_provider_config(provider)
+        base_client = AsyncOpenAI(
+            base_url=base_url, api_key=api_key,
+            default_headers=attribution_headers or {},
+            timeout=timeout,
+            max_retries=0,
+        )
+        stream = None
+        try:
+            client = instructor.from_openai(
+                base_client, mode=instructor.Mode.JSON
+            )
+            stream = client.chat.completions.create_partial(
+                model=model_slug,
+                response_model=response_model,
+                messages=full_messages,
+                temperature=config["temperature"],
+                max_tokens=max_tokens,
+                extra_body=(
+                    dict(reasoning_params) if reasoning_params else None
+                ),
+                max_retries=AsyncRetrying(
+                    stop=stop_after_attempt(1), reraise=True
+                ),
+                **kwargs,
+            )
+            last = None
+            async for partial in stream:
+                last = partial
+                if on_delta:
+                    await on_delta(StructuredStreamUpdate(
+                        kind="partial",
+                        attempt=attempt,
+                        partial=partial,
+                    ))
+            if last is None:
+                raise ValueError(
+                    "Provider returned an empty structured stream"
+                )
+            return response_model.model_validate(last.model_dump())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log_external_failure(
+                logger,
+                event=f"partial_generation_failed role={role}",
+                session_id="n/a",
+                error=exc,
+            )
+            raise
+        finally:
+            if stream is not None:
+                await stream.aclose()
+            await base_client.close()
 
     def get_model_config(self, role: str) -> dict[str, Any]:
         """
