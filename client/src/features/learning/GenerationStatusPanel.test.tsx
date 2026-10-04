@@ -116,6 +116,68 @@ describe('GenerationStatusPanel', () => {
     expect(screen.getByText(/partial course retained/i)).toBeInTheDocument();
   });
 
+  it('warns and disables Resume when agent models are incomplete', () => {
+    render(
+      <GenerationStatusPanel
+        generation={{
+          ...generation,
+          stage: 'CANCELLED',
+          can_cancel: false,
+          can_resume: true,
+        }}
+        onCancel={vi.fn()}
+        onResume={vi.fn()}
+        onDelete={vi.fn()}
+        canResumeAgents={false}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /set researcher, planner, generator, and quizzer models in settings before resuming/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /resume generation/i }),
+    ).toBeDisabled();
+  });
+
+  it('omits the agent-model warning once agent models are configured', () => {
+    render(
+      <GenerationStatusPanel
+        generation={{
+          ...generation,
+          stage: 'CANCELLED',
+          can_cancel: false,
+          can_resume: true,
+        }}
+        onCancel={vi.fn()}
+        onResume={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /resume generation/i }),
+    ).toBeEnabled();
+  });
+
+  it('omits the agent-model warning when the job cannot be resumed', () => {
+    render(
+      <GenerationStatusPanel
+        generation={{ ...generation, can_cancel: false, can_resume: false }}
+        onCancel={vi.fn()}
+        onResume={vi.fn()}
+        onDelete={vi.fn()}
+        canResumeAgents={false}
+      />,
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /resume generation/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it('shows degraded and failed stages with warnings and busy controls', () => {
     const del = vi.fn();
     render(
