@@ -1247,7 +1247,9 @@ async def quizzer_node(
                 dedupe_key=f"module_ready:{seq_idx}",
             )
         except Exception:
-            logger.debug("module_ready event skipped for session %s", session_id)
+            logger.debug(
+                "module_ready event skipped for session %s", session_id,
+            )
         else:
             await session_live_stream.retire_target(
                 session_id=session_id, target_type="topic",

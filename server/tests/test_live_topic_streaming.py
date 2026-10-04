@@ -244,7 +244,10 @@ class LiveTopicLifecycleTests(unittest.IsolatedAsyncioTestCase):
         fake = OpenResponse([
             partial_content(content_markdown="Live preview"),
         ], content())
-        with LiveHarness() as h, fake_instructor(fake.stream) as (_, sdk, calls):
+        with (
+            LiveHarness() as h,
+            fake_instructor(fake.stream) as (_, sdk, calls),
+        ):
             task = asyncio.create_task(nodes.generator_node(
                 h.worker_state(), h.runtime,
             ))
@@ -333,11 +336,32 @@ class LiveTopicLifecycleTests(unittest.IsolatedAsyncioTestCase):
             yield content()
 
         with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
-            h.hub.publish = AsyncMock(side_effect=RuntimeError("display failed"))
+            h.hub.publish = AsyncMock(
+                side_effect=RuntimeError("display failed"),
+            )
             result = await nodes.generator_node(h.worker_state(), h.runtime)
             calls.assert_called_once()
             self.assertFalse(result["generator_results"][0]["content_ready"])
             self.assertEqual(h.saved, {})
+
+
+class LiveTopicBudgetGuards(unittest.IsolatedAsyncioTestCase):
+    async def test_corrections_cannot_buy_attempt_six(self):
+        async def stream(**kwargs):
+            yield partial_content(content_markdown="Old")
+            yield partial_content(content_markdown="Changed")
+
+        async def changed(update):
+            if update.kind == "partial":
+                raise nodes.TopicDraftCorrection("changed")
+
+        with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
+            with self.assertRaisesRegex(ValueError, "budget exhausted"):
+                await GeneratorAgent().generate_explanation(
+                    topic(), llm_context=h.llm, initial_attempt=5,
+                    on_delta=changed,
+                )
+            calls.assert_called_once()
 
 
 if __name__ == "__main__":

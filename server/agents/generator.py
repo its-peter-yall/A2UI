@@ -334,7 +334,9 @@ class GeneratorAgent(BaseAgent):
                 nonlocal latest_attempt
                 if update.kind == "attempt_started":
                     latest_attempt = max(latest_attempt, update.attempt)
-                    reset_reason = reason if update.attempt == start else "retry"
+                    reset_reason = (
+                        reason if update.attempt == start else "retry"
+                    )
                     if on_attempt_started is not None:
                         await on_attempt_started(update.attempt, reset_reason)
                 if on_delta is not None:
@@ -360,7 +362,8 @@ class GeneratorAgent(BaseAgent):
                         "Explanation correction budget exhausted"
                     ) from exc
                 active_user_message = (
-                    user_message + "\n\nCORRECTION REQUIRED: Return one complete "
+                    user_message + "\n\nCORRECTION REQUIRED: "
+                    "Return one complete "
                     "consistent explanation without replacing previously "
                     "emitted text."
                 )
@@ -370,7 +373,8 @@ class GeneratorAgent(BaseAgent):
                 if current_attempt >= max_attempts or latest_attempt >= 5:
                     raise
                 active_user_message = (
-                    user_message + "\n\nCORRECTION REQUIRED: Return all required "
+                    user_message + "\n\nCORRECTION REQUIRED: "
+                    "Return all required "
                     "GeneratedContent fields with valid lengths."
                 )
                 current_attempt += 1

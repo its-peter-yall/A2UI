@@ -167,5 +167,28 @@ class LiveReadinessTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(h.hub.retired, [])
 
 
+class LiveReadinessPublicationGuards(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_explanation_signal_keeps_committed_content(self):
+        async def stream(**kwargs):
+            yield content()
+
+        with LiveHarness() as h, fake_instructor(stream):
+            original_publish = h.hub.publish
+
+            async def publish(**kwargs):
+                if kwargs["event_type"] == (
+                    ProgressEventType.TOPIC_EXPLANATION_READY
+                ):
+                    raise RuntimeError("display unavailable")
+                await original_publish(**kwargs)
+
+            h.hub.publish = publish
+            result = await nodes.generator_node(h.worker_state(), h.runtime)
+            self.assertTrue(result["generator_results"][0]["content_ready"])
+            self.assertEqual(h.saved["n0"], content().content_markdown)
+            h.artifacts.persist_topic_error.assert_not_called()
+            self.assertEqual(h.hub.retired, [])
+
+
 if __name__ == "__main__":
     unittest.main()

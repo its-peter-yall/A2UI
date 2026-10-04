@@ -395,7 +395,9 @@ class PlannerAgent(BaseAgent):
                 nonlocal latest_attempt
                 if update.kind == "attempt_started":
                     latest_attempt = max(latest_attempt, update.attempt)
-                    reset_reason = reason if update.attempt == start else "retry"
+                    reset_reason = (
+                        reason if update.attempt == start else "retry"
+                    )
                     if on_attempt_started is not None:
                         await on_attempt_started(update.attempt, reset_reason)
                 if on_delta is not None:

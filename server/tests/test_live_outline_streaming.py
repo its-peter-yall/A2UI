@@ -278,12 +278,14 @@ class LiveOutlineGraphTests(unittest.IsolatedAsyncioTestCase):
         fake = OpenResponse([
             CourseOutline.model_construct(
                 course_title="Al", topics=[TopicNode.model_construct(
-                    index=None, title="To", summary_for_context=None, key_terms=None,
+                    index=None, title="To",
+                    summary_for_context=None, key_terms=None,
                 )],
             ),
             CourseOutline.model_construct(
                 course_title="Alpha", topics=[TopicNode.model_construct(
-                    index=0, title="Topic", summary_for_context=None, key_terms=None,
+                    index=0, title="Topic",
+                    summary_for_context=None, key_terms=None,
                 )],
             ),
         ], outline())
@@ -475,6 +477,84 @@ class LiveOutlineLifecycleTests(unittest.IsolatedAsyncioTestCase):
                     on_delta=AsyncMock(), initial_attempt=5,
                 )
         self.assertEqual(calls, 1)
+
+
+class LiveOutlineRecoveryGuards(unittest.IsolatedAsyncioTestCase):
+    async def test_second_invalid_outline_retains_draft(self):
+        from server.agents.planner import ResumablePlannerError
+
+        async def stream(**kwargs):
+            yield CourseOutline.model_construct(course_title="Draft", topics=[])
+
+        with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
+            with self.assertRaises(ResumablePlannerError):
+                await nodes.outline_planner_node(h.outline_state(), h.runtime)
+            self.assertEqual(calls.call_count, 2)
+            h.artifacts.persist_outline.assert_not_called()
+            self.assertEqual((await h.hub.snapshots("s"))[0].attempt, 2)
+
+    async def test_outline_display_failure_never_retries(self):
+        from server.utils.instructor_client import StreamCallbackError
+
+        async def stream(**kwargs):
+            yield outline()
+
+        with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
+            h.hub.publish = AsyncMock(
+                side_effect=RuntimeError("display failed"),
+            )
+            with self.assertRaises(StreamCallbackError):
+                await nodes.outline_planner_node(h.outline_state(), h.runtime)
+            calls.assert_called_once()
+            h.artifacts.persist_outline.assert_not_called()
+
+    async def test_shrinking_or_reordered_topics_replan_once(self):
+        for malformed in (
+            CourseOutline.model_construct(course_title="Alpha", topics=[]),
+            CourseOutline.model_construct(
+                course_title="Alpha", topics=[topic(1)],
+            ),
+        ):
+            with self.subTest(malformed=malformed):
+                calls = 0
+
+                async def stream(**kwargs):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        yield outline(1, "Alpha")
+                        yield malformed
+                    else:
+                        yield outline()
+
+                with LiveHarness() as h, fake_instructor(stream):
+                    await nodes.outline_planner_node(
+                        h.outline_state(), h.runtime,
+                    )
+                    self.assertEqual(calls, 2)
+                    h.artifacts.persist_outline.assert_called_once()
+
+    async def test_outline_job_cancel_is_restored_after_callback_cleanup(self):
+        from server.graph.runner import GenerationCancelled
+
+        closed = asyncio.Event()
+
+        async def stream(**kwargs):
+            try:
+                yield CourseOutline.model_construct(
+                    course_title="A", topics=None,
+                )
+                h.jobs.is_cancel_requested.return_value = True
+                yield outline()
+            finally:
+                closed.set()
+
+        with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
+            with self.assertRaises(GenerationCancelled):
+                await nodes.outline_planner_node(h.outline_state(), h.runtime)
+            self.assertTrue(closed.is_set())
+            calls.assert_called_once()
+            h.artifacts.persist_outline.assert_not_called()
 
 
 if __name__ == "__main__":
