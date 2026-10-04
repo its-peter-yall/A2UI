@@ -36,6 +36,7 @@ from server.schemas.research import (
     ResearchIteration,
     ResearchPlan,
 )
+from server.utils.instructor_client import StreamDeltaCallback
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,8 @@ class ResearcherAgent(BaseAgent):
         target_theme: Optional[str] = None,
         budget_context: Optional[str] = None,
         uncovered_themes: Optional[Sequence[str]] = None,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        initial_attempt: int = 1,
     ) -> ResearchIteration:
         """Synthesize one theme section from fenced untrusted sources."""
         coverage_json = json.dumps(
@@ -151,10 +154,18 @@ class ResearcherAgent(BaseAgent):
             "coverage_updates with explicit_unknown=true for that theme "
             "instead of inventing claims."
         )
-        return await self.generate(
+        if on_delta is None:
+            return await self.generate(
+                response_model=ResearchIteration,
+                user_message=user_message,
+                llm_context=llm_context,
+            )
+        return await self.generate_streaming(
             response_model=ResearchIteration,
             user_message=user_message,
             llm_context=llm_context,
+            on_delta=on_delta,
+            initial_attempt=initial_attempt,
         )
 
     async def correct_source_ids(
@@ -162,6 +173,9 @@ class ResearcherAgent(BaseAgent):
         draft: ResearchIteration,
         allowed_source_ids: Sequence[str],
         llm_context: LLMContext,
+        *,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        initial_attempt: int = 1,
     ) -> ResearchIteration:
         """Rewrite a draft so source_ids are a subset of allowed IDs."""
         allowed = list(dict.fromkeys(allowed_source_ids))
@@ -171,10 +185,18 @@ class ResearcherAgent(BaseAgent):
             f"Draft JSON: {draft.model_dump_json()}\n"
             "Drop unknown ids. Keep markdown accurate to remaining evidence."
         )
-        return await self.generate(
+        if on_delta is None:
+            return await self.generate(
+                response_model=ResearchIteration,
+                user_message=user_message,
+                llm_context=llm_context,
+            )
+        return await self.generate_streaming(
             response_model=ResearchIteration,
             user_message=user_message,
             llm_context=llm_context,
+            on_delta=on_delta,
+            initial_attempt=initial_attempt,
         )
 
     async def finalize_report(
@@ -186,6 +208,8 @@ class ResearcherAgent(BaseAgent):
         conflicts: Sequence[str],
         llm_context: LLMContext,
         budget_context: Optional[str] = None,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        initial_attempt: int = 1,
     ) -> ResearchFinalization:
         """Produce summary, limitations, and freshness note."""
         coverage_json = json.dumps(
@@ -210,10 +234,18 @@ class ResearcherAgent(BaseAgent):
             "Return ResearchFinalization with summary, limitations, and "
             "freshness_note."
         )
-        return await self.generate(
+        if on_delta is None:
+            return await self.generate(
+                response_model=ResearchFinalization,
+                user_message=user_message,
+                llm_context=llm_context,
+            )
+        return await self.generate_streaming(
             response_model=ResearchFinalization,
             user_message=user_message,
             llm_context=llm_context,
+            on_delta=on_delta,
+            initial_attempt=initial_attempt,
         )
 
 
