@@ -25,10 +25,29 @@ from __future__ import annotations
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Literal,
+    Optional,
+)
+
+from pydantic import BaseModel
 
 from server.schemas.generation import GenerationStage
+from server.schemas.progress import (
+    LIVE_EVENT_TYPES,
+    PAYLOAD_BY_EVENT_TYPE,
+    DraftSnapshot,
+    LiveDraftEvent,
+    ProgressEventType,
+    TargetDraftResetPayload,
+)
 
 TERMINAL_STAGES = frozenset(
     {
@@ -109,6 +128,288 @@ def format_sse_frame(
         f"retry: {retry_ms}\n"
         f"data: {body}\n\n"
     )
+
+
+@dataclass
+class _DraftEntry:
+    event: LiveDraftEvent
+    draft: DraftSnapshot = field(default_factory=DraftSnapshot)
+
+
+class LiveSubscription:
+    def __init__(self, snapshots: list[LiveDraftEvent]) -> None:
+        self.snapshots = snapshots
+        self.queue: asyncio.Queue[LiveDraftEvent] = asyncio.Queue()
+
+    async def next_event(self) -> LiveDraftEvent:
+        return await self.queue.get()
+
+    def push(
+        self,
+        event: LiveDraftEvent,
+        snapshots: list[LiveDraftEvent],
+    ) -> None:
+        self.queue.put_nowait(event)
+
+
+def _target_key(
+    target_type: str,
+    target_id: str,
+    sequence_index: Optional[int],
+) -> str:
+    return json.dumps(
+        [target_type, target_id, sequence_index],
+        separators=(",", ":"),
+    )
+
+
+def _payload_target(
+    session_id: str,
+    event_type: ProgressEventType,
+    payload: BaseModel,
+) -> tuple[str, str, Optional[int]]:
+    if event_type == ProgressEventType.RESEARCH_SOURCES_UPDATED:
+        return "research", session_id, None
+    if event_type == ProgressEventType.RESEARCH_TEXT_DELTA:
+        return "research", payload.report_id, payload.sequence_index
+    if event_type == ProgressEventType.OUTLINE_TEXT_DELTA:
+        return "outline", session_id, None
+    if event_type in (
+        ProgressEventType.TOPIC_CONTENT_DELTA,
+        ProgressEventType.TOPIC_EXPLANATION_READY,
+    ):
+        return "topic", payload.node_id, payload.sequence_index
+    return payload.target_type, payload.target_id, payload.sequence_index
+
+
+class SessionLiveStreamBroadcaster:
+    def __init__(
+        self,
+        *,
+        max_draft_bytes: int = 96_000,
+        subscriber_limit: int = 64,
+    ) -> None:
+        self._max_draft_bytes = max_draft_bytes
+        self._subscriber_limit = subscriber_limit
+        self._lock = asyncio.Lock()
+        self._entries: dict[tuple[str, str], _DraftEntry] = {}
+        self._subscribers: dict[str, set[LiveSubscription]] = {}
+        self._jobs: dict[str, str] = {}
+
+    def _snapshots_locked(
+        self, session_id: str
+    ) -> list[LiveDraftEvent]:
+        return [
+            entry.event.model_copy(deep=True, update={
+                "snapshot": entry.draft.model_copy(deep=True),
+            })
+            for (session, _), entry in self._entries.items()
+            if session == session_id
+        ]
+
+    def _broadcast_locked(
+        self,
+        session_id: str,
+        event: LiveDraftEvent,
+    ) -> None:
+        for subscriber in self._subscribers.get(session_id, set()):
+            subscriber.push(
+                event, self._snapshots_locked(session_id)
+            )
+
+    def _replace_job_locked(
+        self, session_id: str, job_id: str
+    ) -> None:
+        if self._jobs.get(session_id) not in (None, job_id):
+            for key in list(self._entries):
+                if key[0] == session_id:
+                    del self._entries[key]
+        self._jobs[session_id] = job_id
+
+    @asynccontextmanager
+    async def subscribe(
+        self, session_id: str
+    ) -> AsyncIterator[LiveSubscription]:
+        async with self._lock:
+            subscriber = LiveSubscription(
+                self._snapshots_locked(session_id)
+            )
+            self._subscribers.setdefault(session_id, set()).add(
+                subscriber
+            )
+        try:
+            yield subscriber
+        finally:
+            async with self._lock:
+                subscribers = self._subscribers.get(session_id, set())
+                subscribers.discard(subscriber)
+                if not subscribers:
+                    self._subscribers.pop(session_id, None)
+
+    async def snapshots(
+        self, session_id: str
+    ) -> list[LiveDraftEvent]:
+        async with self._lock:
+            return self._snapshots_locked(session_id)
+
+    async def retire_target(
+        self,
+        *,
+        session_id: str,
+        target_type: Literal["research", "outline", "topic"],
+        target_id: str,
+        sequence_index: Optional[int] = None,
+    ) -> None:
+        async with self._lock:
+            self._entries.pop((session_id, _target_key(
+                target_type, target_id, sequence_index,
+            )), None)
+
+    async def clear_session(self, session_id: str) -> None:
+        async with self._lock:
+            for key in list(self._entries):
+                if key[0] == session_id:
+                    del self._entries[key]
+            self._jobs.pop(session_id, None)
+
+    async def begin_target(
+        self,
+        *,
+        session_id: str,
+        job_id: str,
+        stage: GenerationStage,
+        target_type: Literal["research", "outline", "topic"],
+        target_id: str,
+        attempt: int,
+        sequence_index: Optional[int] = None,
+        reason: Literal[
+            "started", "retry", "replan", "correction", "resumed"
+        ] = "started",
+    ) -> None:
+        payload = TargetDraftResetPayload(
+            target_type=target_type,
+            target_id=target_id,
+            sequence_index=sequence_index,
+            attempt=attempt,
+            reason=reason,
+        )
+        target = _target_key(target_type, target_id, sequence_index)
+        async with self._lock:
+            self._replace_job_locked(session_id, job_id)
+            old = self._entries.get((session_id, target))
+            if old is not None and old.event.attempt >= attempt:
+                return
+            event = LiveDraftEvent(
+                session_id=session_id,
+                job_id=job_id,
+                stage=stage,
+                target=target,
+                attempt=attempt,
+                sequence=1,
+                event_type=ProgressEventType.TARGET_DRAFT_RESET,
+                payload=payload,
+            )
+            self._entries[(session_id, target)] = _DraftEntry(event)
+            self._broadcast_locked(session_id, event)
+
+    async def publish(
+        self,
+        *,
+        session_id: str,
+        job_id: str,
+        stage: GenerationStage,
+        event_type: ProgressEventType,
+        payload: BaseModel,
+    ) -> None:
+        if event_type not in LIVE_EVENT_TYPES:
+            raise ValueError(
+                "Use the repository for durable milestones"
+            )
+        if not isinstance(
+            payload, PAYLOAD_BY_EVENT_TYPE[event_type]
+        ):
+            raise ValueError("Wrong live payload class")
+        if event_type == ProgressEventType.TARGET_DRAFT_RESET:
+            await self.begin_target(
+                session_id=session_id,
+                job_id=job_id,
+                stage=stage,
+                target_type=payload.target_type,
+                target_id=payload.target_id,
+                sequence_index=payload.sequence_index,
+                attempt=payload.attempt,
+                reason=payload.reason,
+            )
+            return
+        kind, target_id, index = _payload_target(
+            session_id, event_type, payload
+        )
+        target = _target_key(kind, target_id, index)
+        async with self._lock:
+            self._replace_job_locked(session_id, job_id)
+            key = (session_id, target)
+            old = self._entries.get(key)
+            attempt = getattr(payload, "attempt", 1)
+            if (
+                old is None
+                and event_type
+                != ProgressEventType.RESEARCH_SOURCES_UPDATED
+            ):
+                raise ValueError(
+                    "Begin the target before publishing text"
+                )
+            if old is not None and attempt < old.event.attempt:
+                return
+            if old is not None and attempt != old.event.attempt:
+                raise ValueError(
+                    "Begin a new attempt before publishing"
+                )
+            event = LiveDraftEvent(
+                session_id=session_id,
+                job_id=job_id,
+                stage=stage,
+                target=target,
+                attempt=attempt,
+                sequence=(
+                    old.event.sequence + 1 if old else 1
+                ),
+                event_type=event_type,
+                payload=payload.model_copy(deep=True),
+            )
+            draft = (
+                old.draft.model_copy(deep=True)
+                if old
+                else DraftSnapshot()
+            )
+            if event_type in (
+                ProgressEventType.RESEARCH_TEXT_DELTA,
+                ProgressEventType.TOPIC_CONTENT_DELTA,
+            ):
+                draft.text += payload.text_delta
+            elif event_type == ProgressEventType.OUTLINE_TEXT_DELTA:
+                draft.course_title += payload.course_title_delta or ""
+                if payload.topic_index is not None:
+                    draft.topics[payload.topic_index] = (
+                        draft.topics.get(payload.topic_index, "")
+                        + payload.topic_title_delta
+                    )
+            elif event_type == (
+                ProgressEventType.TOPIC_EXPLANATION_READY
+            ):
+                draft.explanation_ready = True
+            elif event_type == (
+                ProgressEventType.RESEARCH_SOURCES_UPDATED
+            ):
+                draft.unique_source_count = (
+                    payload.unique_source_count
+                )
+                draft.new_sources_count = payload.new_sources_count
+                draft.provider_id = payload.provider_id
+            self._entries[key] = _DraftEntry(event, draft)
+            self._broadcast_locked(session_id, event)
+
+
+session_live_stream = SessionLiveStreamBroadcaster()
 
 
 async def stream_session_events(
