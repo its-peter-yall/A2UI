@@ -36,8 +36,8 @@ updated: 2026-10-04
 
 - [x] Step 1: Brainstorming & Goal Alignment (goal committed 33df5dc; approved by user)
 - [x] Step 2: Technical Research (`docs/realtime-course-generation/research.md`, commit dea0894; reconciled above)
-- [ ] Step 3: Planning Completed (all detailed plan files; P1 planner dispatching, then P2/P3/P4 in parallel)
-- [ ] Step 4: Execution Completed (all workers finished and committed)
+- [ ] Step 3: Planning Completed (plan1.md done `5655061`; P2/P3/P4 planners dispatched)
+- [ ] Step 4: Execution Completed (P1 worker done and verified; P2/P3/P4 pending)
 - [x] Step 5: Unified Code Review (Skipped via --skip review; no reviewer dispatch)
 - [ ] Step 6: Final Verification & Report (`docs/realtime-course-generation/final_report.md`)
 
@@ -121,10 +121,10 @@ Goal alignment notes:
 
 | Plan ID | Title & scope | Worker dependencies | Touched files / subsystems | Planner status | Worker status | Commits |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **P1** | Streaming contracts, `create_partial` agent path, broadcaster, replay foundation | None | `server/schemas/progress.py`, `server/utils/instructor_client.py`, `server/agents/base.py`, `server/services/session_event_stream.py`, SSE framing | Dispatching now (foreground) | Not dispatched | None |
-| **P2** | Live research synthesis and retrieved-source updates | P1 | `server/agents/researcher.py`, `server/services/research_runner.py`, focused research tests | Awaiting P1 contract | Not dispatched; awaits P1 | None |
-| **P3** | Live curriculum and topic generation integration | P1 | `server/agents/planner.py`, `server/agents/generator.py`, `server/graph/nodes.py`, focused graph/agent tests | Awaiting P1 contract | Not dispatched; awaits P1 | None |
-| **P4** | Client streaming state, automatic overlays, topic hydration | P1 | Client contracts, `useGenerationDrafts`, SSE/reducers, `LearningPage`, `LearningPathContainer`, `CourseSourcesPanel`, `TableOfContentsModal`, `SkeletonCard`, colocated tests | Awaiting P1 contract | Not dispatched; awaits P1 | None |
+| **P1** | Streaming contracts, `create_partial` agent path, broadcaster, replay foundation | None | `server/schemas/progress.py`, `server/utils/instructor_client.py`, `server/agents/base.py`, `server/services/session_event_stream.py`, SSE framing | Done (`5655061`) | Completed | `eeebf07`, `724d527`, `c01d11b`, `d9f4472`, `b75f396`, `c195a6e`, `252d559`, `3503448` |
+| **P2** | Live research synthesis and retrieved-source updates | P1 | `server/agents/researcher.py`, `server/services/research_runner.py`, focused research tests | Dispatching (parallel foreground) | Not dispatched | None |
+| **P3** | Live curriculum and topic generation integration | P1 | `server/agents/planner.py`, `server/agents/generator.py`, `server/graph/nodes.py`, focused graph/agent tests | Dispatching (parallel foreground) | Not dispatched | None |
+| **P4** | Client streaming state, automatic overlays, topic hydration | P1 | Client contracts, `useGenerationDrafts`, SSE/reducers, `LearningPage`, `LearningPathContainer`, `CourseSourcesPanel`, `TableOfContentsModal`, `SkeletonCard`, colocated tests | Dispatching (parallel foreground) | Not dispatched | None |
 | **P5** | Integrated acceptance and verification-gate coverage | P2, P3, P4 | Dedicated server/client acceptance tests, `vitest.generation.config.ts`, `verification.md` | Not dispatched | Not dispatched; awaits P2/P3/P4 | None |
 
 ```text
@@ -289,7 +289,11 @@ Run from the stated directories and record actual results:
 
 ## Current checkpoint
 
-**PLANNING IN PROGRESS.** Goal approved (commit `33df5dc`). Research committed
-(`dea0894`) and reconciled into fixed decisions above. P1 planner dispatching now;
-P2/P3/P4 planners follow in parallel once P1's contract plan is committed. No
-workers, paid provider calls, or application code changes yet.
+**P1 COMPLETE.** Plan `plan1.md` (`5655061`); worker landed 8 commits
+(`eeebf07`..`3503448`). Orchestrator re-ran the 9 focused P1 test modules: 30
+tests, OK. Landed contract: `InstructorClient.create_partial_structured`,
+`BaseAgent.generate_streaming`, `SessionLiveStreamBroadcaster`
+(`begin_target`/`publish`/`retire_target`/`subscribe`/`snapshots`/`clear_session`),
+module singleton `session_live_stream`, and the six new typed live payloads in
+`server/schemas/progress.py`. P2/P3/P4 planners now dispatching in parallel
+foreground. No client work, no paid provider calls.
