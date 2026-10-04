@@ -28,7 +28,7 @@ import {
   applyGenerationEvent,
   reconcileGenerationSession,
 } from './generationEvents';
-import type { GenerationEvent } from '@/types/generation';
+import type { GenerationEvent, GenerationEventPayload } from '@/types/generation';
 import type { LearningSessionWithNodes } from '@/types/learning';
 
 const session = {
@@ -109,6 +109,30 @@ describe('applyGenerationEvent', () => {
       event_type: 'stage_changed',
     } as GenerationEvent;
     expect(applyGenerationEvent(bare, event)).toEqual(bare);
+  });
+
+  it('ignores live draft events with id 0 to protect durable milestone cursor', () => {
+    const liveSession = {
+      ...session,
+      generation: { ...session.generation, last_event_id: 3 },
+    } as LearningSessionWithNodes;
+
+    const liveEvent: GenerationEvent = {
+      id: 0,
+      session_id: 'session-1',
+      event_type: 'topic_content_delta',
+      payload: {
+        node_id: 'n1',
+        sequence_index: 0,
+        text_delta: 'delta',
+        attempt: 1,
+      } as unknown as GenerationEventPayload,
+      created_at: '2026-08-01T00:00:00Z',
+    };
+
+    const next = applyGenerationEvent(liveSession, liveEvent);
+    expect(next).toBe(liveSession);
+    expect(next.generation?.last_event_id).toBe(3);
   });
 });
 

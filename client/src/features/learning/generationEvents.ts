@@ -87,6 +87,9 @@ export function applyGenerationEvent(
   session: LearningSessionWithNodes,
   event: GenerationEvent & { generation?: GenerationJobPublic | null },
 ): LearningSessionWithNodes {
+  if (event.id <= 0) {
+    return session;
+  }
   const currentId = session.generation?.last_event_id ?? 0;
   if (event.id <= currentId) {
     return session;
