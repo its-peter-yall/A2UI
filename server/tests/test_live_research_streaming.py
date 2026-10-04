@@ -303,6 +303,139 @@ class LiveResearchStreamingTests(unittest.IsolatedAsyncioTestCase):
             await runner.run(**args)
         self.assertEqual(order, ["section", "ready", "retire"])
 
+    async def test_nonprefix_correction_restarts_only_affected_target(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+
+        async def synthesize(**kwargs):
+            cb, attempt = kwargs["on_delta"], kwargs["initial_attempt"]
+            await cb(StructuredStreamUpdate("attempt_started", attempt))
+            text = "Original " if attempt == 1 else "Corrected evidence. "
+            await cb(StructuredStreamUpdate("partial", attempt,
+                ResearchIteration.model_construct(section_markdown=text)))
+            if attempt == 1:
+                await cb(StructuredStreamUpdate("partial", attempt,
+                    ResearchIteration.model_construct(
+                        section_markdown="Replacement ")))
+            return ResearchIteration(theme="fundamentals",
+                                     section_markdown=text)
+
+        agent.synthesize_iteration.side_effect = synthesize
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            async with hub.subscribe(args["session_id"]) as sub:
+                await runner.run(**args)
+                resets = []
+                texts = []
+                while not sub.queue.empty():
+                    event = sub.queue.get_nowait()
+                    if event.event_type == ProgressEventType.TARGET_DRAFT_RESET:
+                        resets.append(event.payload)
+                    if event.event_type == ProgressEventType.RESEARCH_TEXT_DELTA:
+                        texts.append(event.payload)
+                section_resets = [r for r in resets if r.sequence_index == 0]
+                self.assertEqual([(r.attempt, r.reason)
+                                  for r in section_resets],
+                                 [(1, "started"), (2, "correction")])
+                self.assertEqual("".join(p.text_delta for p in texts
+                                        if p.attempt == 2),
+                                 "Corrected evidence. ")
+                self.assertEqual(agent.synthesize_iteration.await_count, 2)
+                stores.research.upsert_section.assert_called_once()
+
+    async def test_source_id_correction_streams_same_target_new_attempt(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+
+        async def synthesize(**kwargs):
+            cb = kwargs["on_delta"]
+            await cb(StructuredStreamUpdate("attempt_started", 1))
+            draft = ResearchIteration(theme="fundamentals",
+                                      section_markdown="Old ",
+                                      source_ids=["unknown"])
+            await cb(StructuredStreamUpdate("partial", 1, draft))
+            return draft
+
+        async def correct(**kwargs):
+            cb, attempt = kwargs["on_delta"], kwargs["initial_attempt"]
+            await cb(StructuredStreamUpdate("attempt_started", attempt))
+            draft = ResearchIteration(theme="fundamentals",
+                                      section_markdown="Grounded ",
+                                      source_ids=kwargs["allowed_source_ids"])
+            await cb(StructuredStreamUpdate("partial", attempt, draft))
+            return draft
+
+        agent.synthesize_iteration.side_effect = synthesize
+        agent.correct_source_ids.side_effect = correct
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            async with hub.subscribe(args["session_id"]) as sub:
+                await runner.run(**args)
+                events = []
+                while not sub.queue.empty():
+                    events.append(sub.queue.get_nowait())
+                resets = [e.payload for e in events
+                          if e.event_type == ProgressEventType.TARGET_DRAFT_RESET
+                          and e.payload.sequence_index == 0]
+                self.assertEqual([(r.attempt, r.reason) for r in resets],
+                                 [(1, "started"), (2, "correction")])
+                self.assertEqual(agent.correct_source_ids.await_args.kwargs[
+                    "initial_attempt"], 2)
+                saved = stores.research.upsert_section.call_args.kwargs
+                self.assertNotIn("unknown", saved["source_ids"])
+                self.assertEqual(saved["markdown"], "Grounded ")
+
+    async def test_invalid_final_model_never_saves_or_retires_section(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+
+        async def invalid(**kwargs):
+            cb = kwargs["on_delta"]
+            await cb(StructuredStreamUpdate("attempt_started", 1))
+            await cb(StructuredStreamUpdate("partial", 1,
+                ResearchIteration.model_construct(section_markdown="Preview ")))
+            return ResearchIteration.model_validate({"section_markdown": "x"})
+
+        agent.synthesize_iteration.side_effect = invalid
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub), \
+                patch.object(hub, "retire_target", new=AsyncMock()) as retire:
+            with self.assertRaises(ValueError):
+                await runner.run(**args)
+            stores.research.upsert_section.assert_not_called()
+            retire.assert_not_awaited()
+            self.assertFalse(any(
+                c.kwargs["event_type"] == ProgressEventType.RESEARCH_SECTION_READY
+                for c in stores.events.append_once.call_args_list
+            ))
+
+    async def test_transport_retry_resets_section_without_resetting_counts(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+
+        async def synthesize(**kwargs):
+            cb = kwargs["on_delta"]
+            for attempt, text in ((1, "Old "), (2, "Retry evidence. ")):
+                await cb(StructuredStreamUpdate("attempt_started", attempt))
+                await cb(StructuredStreamUpdate("partial", attempt,
+                    ResearchIteration.model_construct(section_markdown=text)))
+            return ResearchIteration(theme="fundamentals",
+                                     section_markdown="Retry evidence. ")
+
+        agent.synthesize_iteration.side_effect = synthesize
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            async with hub.subscribe(args["session_id"]) as sub:
+                await runner.run(**args)
+                events = []
+                while not sub.queue.empty():
+                    events.append(sub.queue.get_nowait())
+                resets = [e.payload for e in events
+                          if e.event_type == ProgressEventType.TARGET_DRAFT_RESET]
+                self.assertEqual([(r.attempt, r.reason) for r in resets],
+                                 [(1, "started"), (2, "retry")])
+                drafts = await hub.snapshots(args["session_id"])
+                counts = [e.snapshot.unique_source_count for e in drafts
+                          if e.snapshot.unique_source_count is not None]
+                self.assertEqual(counts, [1])
+                stores.research.upsert_section.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

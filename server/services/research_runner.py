@@ -82,7 +82,10 @@ from server.services.session_event_stream import (
     SessionLiveStreamBroadcaster,
     session_live_stream,
 )
-from server.utils.instructor_client import StructuredStreamUpdate
+from server.utils.instructor_client import (
+    StreamCallbackError,
+    StructuredStreamUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +107,17 @@ class ResearchCancelled(RuntimeError):
 
 class _ResearchDraftCorrection(RuntimeError):
     """Raised when a live research draft must restart."""
+
+
+def _stream_failure_cause(exc: BaseException) -> BaseException:
+    """Unwrap StreamCallbackError links without reading exception text."""
+    current = exc
+    while (
+        isinstance(current, StreamCallbackError)
+        and current.__cause__ is not None
+    ):
+        current = current.__cause__
+    return current
 
 
 @dataclass
@@ -766,33 +780,56 @@ class ResearchRunner:
                         session_id
                     ),
                 )
-                draft: ResearchIteration = (
-                    await self._agent.synthesize_iteration(
-                        query=query,
-                        plan=plan,
-                        coverage=coverage,
-                        untrusted_source_context=untrusted,
-                        llm_context=llm_context,
-                        target_theme=target_theme,
-                        budget_context=budget_context,
-                        uncovered_themes=uncovered,
-                        on_delta=display.on_delta,
-                        initial_attempt=1,
-                    )
-                )
+                initial_attempt = 1
+                while True:
+                    try:
+                        draft = await self._agent.synthesize_iteration(
+                            query=query,
+                            plan=plan,
+                            coverage=coverage,
+                            untrusted_source_context=untrusted,
+                            llm_context=llm_context,
+                            target_theme=target_theme,
+                            budget_context=budget_context,
+                            uncovered_themes=uncovered,
+                            on_delta=display.on_delta,
+                            initial_attempt=initial_attempt,
+                        )
+                        break
+                    except Exception as exc:
+                        cause = _stream_failure_cause(exc)
+                        if not isinstance(
+                            cause, _ResearchDraftCorrection
+                        ):
+                            raise
+                        if display.attempt >= 5:
+                            raise ValueError(
+                                "Research streaming correction limit"
+                            ) from None
+                        ledger.reserve_llm_turn()
+                        initial_attempt = display.attempt + 1
+                        display = display.new_correction()
+                        budget_context = format_budget_for_prompt(
+                            ledger.remaining_snapshot()
+                        )
                 self._ensure_not_cancelled(session_id)
                 if target_theme:
                     draft = draft.model_copy(
                         update={"theme": target_theme}
                     )
                 allowed_ids = set(sources_by_id.keys())
-                draft = await self._validate_source_ids(
+                draft, display = await self._validate_source_ids(
                     draft=draft,
                     allowed_ids=allowed_ids,
                     ledger=ledger,
                     llm_context=llm_context,
                     warnings=warnings,
+                    display=display,
                 )
+                if target_theme:
+                    draft = draft.model_copy(
+                        update={"theme": target_theme}
+                    )
                 self._ensure_not_cancelled(session_id)
                 await display.finish(draft)
                 self._ensure_not_cancelled(session_id)
@@ -1084,19 +1121,26 @@ class ResearchRunner:
         ledger: ResearchBudgetLedger,
         llm_context: Any,
         warnings: list[GenerationWarning],
-    ) -> ResearchIteration:
-        invalid = [sid for sid in draft.source_ids if sid not in allowed_ids]
+        display: _ResearchTextDisplay,
+    ) -> tuple[ResearchIteration, _ResearchTextDisplay]:
+        invalid = [
+            sid for sid in draft.source_ids if sid not in allowed_ids
+        ]
         if not invalid:
-            return draft
+            return draft, display
         usage = ledger.usage_snapshot()
         turns_left = ledger.budget.max_llm_turns - usage.llm_turns
-        if turns_left >= 1:
+        if turns_left >= 1 and display.attempt < 5:
             try:
                 ledger.reserve_llm_turn()
+                next_attempt = display.attempt + 1
+                display = display.new_correction()
                 corrected = await self._agent.correct_source_ids(
                     draft=draft,
                     allowed_source_ids=sorted(allowed_ids),
                     llm_context=llm_context,
+                    on_delta=display.on_delta,
+                    initial_attempt=next_attempt,
                 )
                 invalid = [
                     sid
@@ -1104,18 +1148,26 @@ class ResearchRunner:
                     if sid not in allowed_ids
                 ]
                 if not invalid:
-                    return corrected
+                    return corrected, display
+                display.stopped = True
                 draft = corrected
             except Exception:
-                pass
-        cleaned_ids = [sid for sid in draft.source_ids if sid in allowed_ids]
+                display.stopped = True
+        cleaned_ids = [
+            sid for sid in draft.source_ids if sid in allowed_ids
+        ]
         warnings.append(
             GenerationWarning(
                 code="invalid_source_ids",
-                message="Dropped source IDs not present in persisted batch.",
+                message=(
+                    "Dropped source IDs not present in persisted batch."
+                ),
             )
         )
-        return draft.model_copy(update={"source_ids": cleaned_ids})
+        return (
+            draft.model_copy(update={"source_ids": cleaned_ids}),
+            display,
+        )
 
     def _persist_hit(
         self,
