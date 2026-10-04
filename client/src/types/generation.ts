@@ -142,7 +142,13 @@ export type ProgressEventType =
   | 'module_failed'
   | 'generation_paused'
   | 'generation_cancelled'
-  | 'generation_complete';
+  | 'generation_complete'
+  | 'research_sources_updated'
+  | 'research_text_delta'
+  | 'outline_text_delta'
+  | 'topic_content_delta'
+  | 'topic_explanation_ready'
+  | 'target_draft_reset';
 
 export type GenerationEventPayload =
   | { previous_stage: GenerationStage; stage: GenerationStage }
@@ -168,6 +174,81 @@ export type GenerationEventPayload =
       counts: GenerationCounts;
       grounding_status: GroundingStatus;
     };
+
+export interface ResearchSourcesUpdatedPayload {
+  unique_source_count: number;
+  new_sources_count: number;
+  provider_id?: string | null;
+}
+
+export interface ResearchTextDeltaPayload {
+  report_id: string;
+  theme: string;
+  sequence_index: number;
+  text_delta: string;
+  attempt: number;
+}
+
+export interface OutlineTextDeltaPayload {
+  course_title_delta?: string | null;
+  topic_index?: number | null;
+  topic_title_delta?: string | null;
+  attempt: number;
+}
+
+export interface TopicContentDeltaPayload {
+  node_id: string;
+  sequence_index: number;
+  text_delta: string;
+  attempt: number;
+}
+
+export interface TopicExplanationReadyPayload {
+  node_id: string;
+  sequence_index: number;
+  attempt: number;
+}
+
+export interface TargetDraftResetPayload {
+  target_type: 'research' | 'outline' | 'topic';
+  target_id: string;
+  sequence_index?: number | null;
+  attempt: number;
+  reason: string;
+}
+
+export interface DraftSnapshot {
+  text: string;
+  text_offset: number;
+  truncated: boolean;
+  course_title: string;
+  topics: Record<string | number, string>;
+  explanation_ready: boolean;
+  unique_source_count?: number | null;
+  new_sources_count?: number | null;
+  provider_id?: string | null;
+}
+
+export type LiveDraftPayload =
+  | ResearchSourcesUpdatedPayload
+  | ResearchTextDeltaPayload
+  | OutlineTextDeltaPayload
+  | TopicContentDeltaPayload
+  | TopicExplanationReadyPayload
+  | TargetDraftResetPayload;
+
+export interface LiveDraftEvent {
+  id: 0;
+  session_id: string;
+  job_id: string;
+  stage: GenerationStage;
+  target: string;
+  attempt: number;
+  sequence: number;
+  event_type: ProgressEventType;
+  payload: LiveDraftPayload;
+  snapshot?: DraftSnapshot | null;
+}
 
 export interface GenerationEvent {
   id: number;
