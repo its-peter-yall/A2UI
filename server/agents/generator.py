@@ -32,13 +32,16 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from server.agents.base import BaseAgent
 from server.schemas.learning import TopicNode
 from server.schemas.llm import LLMContext
+from server.utils.instructor_client import (
+    StreamCallbackError, StreamDeltaCallback, StructuredStreamUpdate,
+)
 from server.utils.mermaid_validator import validate_mermaid_code
 
 
@@ -51,6 +54,10 @@ from server.schemas.generation import (
     SourceCitation,
 )
 from server.services.citation_validation import sanitize_grounded_content
+
+
+class TopicDraftCorrection(ValueError):
+    """Signal replacement of a topic draft requiring isolated correction."""
 
 
 class GeneratedContent(BaseModel):
@@ -264,6 +271,13 @@ class GeneratorAgent(BaseAgent):
         prev_summary: Optional[str] = None,
         next_summary: Optional[str] = None,
         llm_context: Optional[LLMContext] = None,
+        *,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        on_attempt_started: Optional[Callable[
+            [int, Literal["started", "retry", "replan", "correction"]],
+            Awaitable[None],
+        ]] = None,
+        initial_attempt: int = 1,
     ) -> GeneratedContent:
         """
         Generate educational content for a topic with context injection.
@@ -300,12 +314,67 @@ class GeneratorAgent(BaseAgent):
         last_error = None
         active_user_message = user_message
 
-        while current_attempt <= max_attempts:
-            content = await self.generate(
-                response_model=GeneratedContent,
-                user_message=active_user_message,
-                llm_context=llm_context,
+        latest_attempt = initial_attempt - 1
+
+        async def call_content(
+            message: str,
+            reason: Literal["started", "retry", "replan", "correction"],
+        ) -> GeneratedContent:
+            nonlocal latest_attempt
+            if on_delta is None and on_attempt_started is None:
+                return await self.generate(
+                    response_model=GeneratedContent, user_message=message,
+                    llm_context=llm_context,
+                )
+            start = latest_attempt + 1
+            if start > 5:
+                raise ValueError("Explanation attempt budget exhausted")
+
+            async def relay(update: StructuredStreamUpdate) -> None:
+                nonlocal latest_attempt
+                if update.kind == "attempt_started":
+                    latest_attempt = max(latest_attempt, update.attempt)
+                    reset_reason = reason if update.attempt == start else "retry"
+                    if on_attempt_started is not None:
+                        await on_attempt_started(update.attempt, reset_reason)
+                if on_delta is not None:
+                    await on_delta(update)
+
+            return await self.generate_streaming(
+                response_model=GeneratedContent, user_message=message,
+                llm_context=llm_context, on_delta=relay,
+                initial_attempt=start,
             )
+
+        while current_attempt <= max_attempts:
+            try:
+                content = await call_content(
+                    active_user_message,
+                    "started" if current_attempt == 1 else "correction",
+                )
+            except StreamCallbackError as exc:
+                if not isinstance(exc.__cause__, TopicDraftCorrection):
+                    raise
+                if current_attempt >= max_attempts or latest_attempt >= 5:
+                    raise ValueError(
+                        "Explanation correction budget exhausted"
+                    ) from exc
+                active_user_message = (
+                    user_message + "\n\nCORRECTION REQUIRED: Return one complete "
+                    "consistent explanation without replacing previously "
+                    "emitted text."
+                )
+                current_attempt += 1
+                continue
+            except ValidationError:
+                if current_attempt >= max_attempts or latest_attempt >= 5:
+                    raise
+                active_user_message = (
+                    user_message + "\n\nCORRECTION REQUIRED: Return all required "
+                    "GeneratedContent fields with valid lengths."
+                )
+                current_attempt += 1
+                continue
 
             # Check Mermaid syntax
             mermaid_blocks = re.findall(
