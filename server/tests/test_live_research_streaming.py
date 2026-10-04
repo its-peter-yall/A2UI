@@ -211,6 +211,98 @@ class LiveResearchStreamingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(event.payload.unique_source_count, 1)
                 self.assertEqual(stores.research.upsert_source.call_count, 1)
 
+    async def test_two_text_updates_while_synthesis_response_is_open(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+        open_response = asyncio.Event()
+        release = asyncio.Event()
+        closed = asyncio.Event()
+
+        async def chunks():
+            try:
+                yield ResearchIteration.model_construct(
+                    section_markdown="First ",
+                )
+                yield ResearchIteration.model_construct(
+                    section_markdown="First evidence. ",
+                )
+                open_response.set()
+                await release.wait()
+                yield ResearchIteration(
+                    theme="fundamentals",
+                    section_markdown="First evidence. Final.",
+                )
+            finally:
+                closed.set()
+
+        async def synthesize(**kwargs):
+            callback = kwargs["on_delta"]
+            attempt = kwargs["initial_attempt"]
+            await callback(StructuredStreamUpdate("attempt_started", attempt))
+            async for value in chunks():
+                await callback(StructuredStreamUpdate("partial", attempt, value))
+                last = value
+            return ResearchIteration.model_validate(last.model_dump())
+
+        agent.synthesize_iteration.side_effect = synthesize
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            async with hub.subscribe(args["session_id"]) as sub:
+                task = asyncio.create_task(runner.run(**args))
+                try:
+                    await asyncio.wait_for(open_response.wait(), 0.5)
+                    first = await read_until(sub,
+                                            ProgressEventType.RESEARCH_TEXT_DELTA)
+                    second = await read_until(sub,
+                                             ProgressEventType.RESEARCH_TEXT_DELTA)
+                    self.assertEqual(first.payload.text_delta, "First ")
+                    self.assertEqual(second.payload.text_delta, "evidence. ")
+                    self.assertFalse(task.done())
+                    self.assertFalse(closed.is_set())
+                    self.assertEqual(first.payload.attempt, 1)
+                    self.assertEqual(json.loads(first.target),
+                                     ["research", "report-1", 0])
+                    stores.research.upsert_section.assert_not_called()
+                    self.assertFalse(any(
+                        c.kwargs["event_type"]
+                        == ProgressEventType.RESEARCH_SECTION_READY
+                        for c in stores.events.append_once.call_args_list
+                    ))
+                    release.set()
+                    await asyncio.wait_for(task, 0.5)
+                    stores.research.upsert_section.assert_called_once()
+                    saved = stores.research.upsert_section.call_args.kwargs
+                    self.assertEqual(saved["markdown"],
+                                     "First evidence. Final.")
+                finally:
+                    release.set()
+                    if not task.done():
+                        task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+
+    async def test_retire_occurs_after_section_and_durable_ready(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+        hub = SessionLiveStreamBroadcaster()
+        order = []
+        stores.research.upsert_section.side_effect = lambda **kw: (
+            order.append("section") or SimpleNamespace(id="section")
+        )
+
+        def ready(**kwargs):
+            if kwargs["event_type"] == ProgressEventType.RESEARCH_SECTION_READY:
+                order.append("ready")
+
+        stores.events.append_once.side_effect = ready
+        original = hub.retire_target
+
+        async def retire(**kwargs):
+            order.append("retire")
+            await original(**kwargs)
+
+        with patch("server.services.research_runner.session_live_stream", hub), \
+                patch.object(hub, "retire_target", side_effect=retire):
+            await runner.run(**args)
+        self.assertEqual(order, ["section", "ready", "retire"])
+
 
 if __name__ == "__main__":
     unittest.main()

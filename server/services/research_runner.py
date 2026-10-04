@@ -28,8 +28,10 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Optional, Sequence
+from typing import Any, Callable, Optional, Sequence
 from urllib.parse import urlsplit
+
+from pydantic import BaseModel
 
 from server.schemas.generation import (
     GenerationCursor,
@@ -44,6 +46,7 @@ from server.schemas.progress import (
     ResearchDegradedPayload,
     ResearchSectionReadyPayload,
     ResearchSourcesUpdatedPayload,
+    ResearchTextDeltaPayload,
 )
 from server.schemas.research import (
     CoverageItem,
@@ -75,7 +78,11 @@ from server.search.types import (
     SearchErrorClass,
     SearchQuery,
 )
-from server.services.session_event_stream import session_live_stream
+from server.services.session_event_stream import (
+    SessionLiveStreamBroadcaster,
+    session_live_stream,
+)
+from server.utils.instructor_client import StructuredStreamUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +93,17 @@ _FAKE_SOURCE_ID_RE = re.compile(
     r"\[(?:src|source)[:\s]+([^\]]+)\]",
     re.IGNORECASE,
 )
+_DISPLAY_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_DISPLAY_RAW_URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+_DISPLAY_TEXT_LIMIT = 20_000
 
 
 class ResearchCancelled(RuntimeError):
     """Raised when a job cancel flag is observed mid-research."""
+
+
+class _ResearchDraftCorrection(RuntimeError):
+    """Raised when a live research draft must restart."""
 
 
 @dataclass
@@ -227,6 +241,149 @@ def coverage_is_complete(
     return True
 
 
+@dataclass
+class _ResearchTextDisplay:
+    """Project safe cumulative research display text onto a live target."""
+
+    hub: SessionLiveStreamBroadcaster
+    session_id: str
+    job_id: str
+    report_id: str
+    sequence_index: int
+    theme: str
+    field_name: str
+    allowed_ids: set[str]
+    secrets: Sequence[str] = field(repr=False)
+    check_cancelled: Callable[[], None] = field(repr=False)
+    start_reason: str = "started"
+    attempt: int = 0
+    previous_raw: str = field(default="", repr=False)
+    previous_display: str = field(default="", repr=False)
+    stopped: bool = False
+
+    def __post_init__(self) -> None:
+        if self.field_name not in {"section_markdown", "summary"}:
+            raise ValueError("Research display field is not allowed")
+
+    async def on_delta(self, update: StructuredStreamUpdate) -> None:
+        self.check_cancelled()
+        if self.stopped:
+            return
+        if update.kind == "attempt_started":
+            reason = self.start_reason if not self.attempt else "retry"
+            self.attempt = update.attempt
+            self.previous_raw = ""
+            self.previous_display = ""
+            await self.hub.begin_target(
+                session_id=self.session_id,
+                job_id=self.job_id,
+                stage=GenerationStage.RESEARCHING,
+                target_type="research",
+                target_id=self.report_id,
+                sequence_index=self.sequence_index,
+                attempt=self.attempt,
+                reason=reason,
+            )
+            return
+        if update.attempt != self.attempt or update.partial is None:
+            return
+        raw = getattr(update.partial, self.field_name, None)
+        if not isinstance(raw, str) or not raw:
+            return
+        if not raw.startswith(self.previous_raw):
+            raise _ResearchDraftCorrection(
+                "Research display correction"
+            )
+        self.previous_raw = raw
+        safe = self._safe_display(raw, final=False)
+        await self._publish_extension(safe)
+
+    async def _publish_extension(self, safe: str) -> None:
+        if not safe.startswith(self.previous_display):
+            raise _ResearchDraftCorrection(
+                "Research display correction"
+            )
+        suffix = safe[len(self.previous_display):]
+        for offset in range(0, len(suffix), 4000):
+            self.check_cancelled()
+            await self.hub.publish(
+                session_id=self.session_id,
+                job_id=self.job_id,
+                stage=GenerationStage.RESEARCHING,
+                event_type=ProgressEventType.RESEARCH_TEXT_DELTA,
+                payload=ResearchTextDeltaPayload(
+                    report_id=self.report_id,
+                    theme=self.theme,
+                    sequence_index=self.sequence_index,
+                    text_delta=suffix[offset:offset + 4000],
+                    attempt=self.attempt,
+                ),
+            )
+        self.previous_display = safe
+
+    def _safe_display(self, raw: str, *, final: bool) -> str:
+        text = raw
+        for secret in self.secrets:
+            if secret:
+                text = text.replace(secret, "[redacted]")
+        if not final:
+            guarded = [value for value in self.secrets if value]
+            withheld = max((
+                length
+                for value in guarded
+                for length in range(1, len(value))
+                if text.endswith(value[:length])
+            ), default=0)
+            if withheld:
+                text = text[:-withheld]
+            url_prefix = max((
+                length for value in ("http://", "https://")
+                for length in range(1, len(value))
+                if text.lower().endswith(value[:length])
+            ), default=0)
+            if url_prefix:
+                text = text[:-url_prefix]
+        text = _DISPLAY_LINK_RE.sub(r"\1", text)
+        opened = text.rfind("[")
+        closed = text.rfind("]")
+        if opened > closed:
+            text = text[:opened]
+        elif opened >= 0 and text[closed + 1:].startswith("("):
+            text = text[:opened]
+        text = _DISPLAY_RAW_URL_RE.sub("", text)
+        cleaned = sanitize_section_markdown(
+            text, allowed_ids=self.allowed_ids,
+        )
+        if len(cleaned) > _DISPLAY_TEXT_LIMIT:
+            return cleaned[:_DISPLAY_TEXT_LIMIT]
+        return cleaned
+
+    async def finish(self, model: BaseModel) -> None:
+        if not self.attempt or self.stopped:
+            return
+        self.check_cancelled()
+        raw = getattr(model, self.field_name, None)
+        if isinstance(raw, str) and raw:
+            await self._publish_extension(
+                self._safe_display(raw, final=True)
+            )
+
+    def new_correction(self) -> "_ResearchTextDisplay":
+        return _ResearchTextDisplay(
+            hub=self.hub,
+            session_id=self.session_id,
+            job_id=self.job_id,
+            report_id=self.report_id,
+            sequence_index=self.sequence_index,
+            theme=self.theme,
+            field_name=self.field_name,
+            allowed_ids=self.allowed_ids,
+            secrets=self.secrets,
+            check_cancelled=self.check_cancelled,
+            start_reason="correction",
+        )
+
+
 class ResearchRunner:
     """Bounded incremental research orchestrator."""
 
@@ -242,6 +399,7 @@ class ResearchRunner:
         self._research_store = research_store
         self._job_store = job_store
         self._event_store = event_store
+        self._display_secrets: tuple[str, ...] = ()
 
     async def run(
         self,
@@ -594,6 +752,20 @@ class ResearchRunner:
                 budget_context = format_budget_for_prompt(
                     ledger.remaining_snapshot()
                 )
+                display = _ResearchTextDisplay(
+                    hub=session_live_stream,
+                    session_id=session_id,
+                    job_id=job_id,
+                    report_id=report_id,
+                    sequence_index=next_section_index,
+                    theme=target_theme or "research",
+                    field_name="section_markdown",
+                    allowed_ids=set(sources_by_id),
+                    secrets=self._display_secrets,
+                    check_cancelled=lambda: self._ensure_not_cancelled(
+                        session_id
+                    ),
+                )
                 draft: ResearchIteration = (
                     await self._agent.synthesize_iteration(
                         query=query,
@@ -604,8 +776,11 @@ class ResearchRunner:
                         target_theme=target_theme,
                         budget_context=budget_context,
                         uncovered_themes=uncovered,
+                        on_delta=display.on_delta,
+                        initial_attempt=1,
                     )
                 )
+                self._ensure_not_cancelled(session_id)
                 if target_theme:
                     draft = draft.model_copy(
                         update={"theme": target_theme}
@@ -618,6 +793,9 @@ class ResearchRunner:
                     llm_context=llm_context,
                     warnings=warnings,
                 )
+                self._ensure_not_cancelled(session_id)
+                await display.finish(draft)
+                self._ensure_not_cancelled(session_id)
 
                 clean_markdown = sanitize_section_markdown(
                     draft.section_markdown,
@@ -648,6 +826,12 @@ class ResearchRunner:
                         f"research_section_ready:{report_id}:"
                         f"{next_section_index}"
                     ),
+                )
+                await session_live_stream.retire_target(
+                    session_id=session_id,
+                    target_type="research",
+                    target_id=report_id,
+                    sequence_index=next_section_index,
                 )
                 section_markdowns.append(
                     f"## {draft.theme}\n{clean_markdown}"
