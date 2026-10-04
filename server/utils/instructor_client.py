@@ -97,6 +97,26 @@ async def _notify(
         ) from exc
 
 
+def _redact_display_value(value: Any, secret: str) -> Any:
+    if isinstance(value, str):
+        return value.replace(secret, "[redacted]") if secret else value
+    if isinstance(value, BaseModel):
+        return value.model_copy(update={
+            name: _redact_display_value(getattr(value, name), secret)
+            for name in type(value).model_fields
+        })
+    if isinstance(value, list):
+        return [
+            _redact_display_value(item, secret) for item in value
+        ]
+    if isinstance(value, dict):
+        return {
+            name: _redact_display_value(item, secret)
+            for name, item in value.items()
+        }
+    return value
+
+
 def sanitize_json_escapes(s: str) -> str:
     """Sanitize invalid escape sequences in a JSON string.
 
@@ -489,7 +509,7 @@ class InstructorClient:
                 await _notify(on_delta, StructuredStreamUpdate(
                     kind="partial",
                     attempt=attempt,
-                    partial=partial,
+                    partial=_redact_display_value(partial, api_key),
                 ))
             if last is None:
                 raise ValueError(

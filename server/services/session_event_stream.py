@@ -70,6 +70,29 @@ TERMINAL_EVENT_TYPES = frozenset(
     }
 )
 
+ALLOWED_LIVE_STAGES = {
+    ProgressEventType.RESEARCH_SOURCES_UPDATED: {
+        GenerationStage.RESEARCHING,
+    },
+    ProgressEventType.RESEARCH_TEXT_DELTA: {
+        GenerationStage.RESEARCHING,
+    },
+    ProgressEventType.OUTLINE_TEXT_DELTA: {
+        GenerationStage.OUTLINING,
+    },
+    ProgressEventType.TOPIC_CONTENT_DELTA: {
+        GenerationStage.GENERATING_PREVIEW,
+        GenerationStage.GENERATING_BATCH,
+    },
+    ProgressEventType.TOPIC_EXPLANATION_READY: {
+        GenerationStage.GENERATING_PREVIEW,
+        GenerationStage.GENERATING_BATCH,
+    },
+}
+SAFE_RESET_REASONS = {
+    "started", "retry", "replan", "correction", "resumed",
+}
+
 SleepFn = Callable[[float], Awaitable[None]]
 
 
@@ -371,6 +394,21 @@ class SessionLiveStreamBroadcaster:
             "started", "retry", "replan", "correction", "resumed"
         ] = "started",
     ) -> None:
+        if reason not in SAFE_RESET_REASONS:
+            raise ValueError("Reset reason is not allowed")
+        if target_type == "research" and (
+            stage != GenerationStage.RESEARCHING
+        ):
+            raise ValueError("Live payload stage is not allowed")
+        if target_type == "outline" and (
+            stage != GenerationStage.OUTLINING
+        ):
+            raise ValueError("Live payload stage is not allowed")
+        if target_type == "topic" and stage not in (
+            GenerationStage.GENERATING_PREVIEW,
+            GenerationStage.GENERATING_BATCH,
+        ):
+            raise ValueError("Live payload stage is not allowed")
         payload = TargetDraftResetPayload(
             target_type=target_type,
             target_id=target_id,
@@ -417,10 +455,10 @@ class SessionLiveStreamBroadcaster:
             raise ValueError(
                 "Use the repository for durable milestones"
             )
-        if not isinstance(
-            payload, PAYLOAD_BY_EVENT_TYPE[event_type]
-        ):
+        expected = PAYLOAD_BY_EVENT_TYPE[event_type]
+        if type(payload) is not expected:
             raise ValueError("Wrong live payload class")
+        payload = expected.model_validate(payload.model_dump())
         if event_type == ProgressEventType.TARGET_DRAFT_RESET:
             await self.begin_target(
                 session_id=session_id,
@@ -433,16 +471,26 @@ class SessionLiveStreamBroadcaster:
                 reason=payload.reason,
             )
             return
+        allowed = ALLOWED_LIVE_STAGES.get(event_type)
+        if allowed is not None and stage not in allowed:
+            raise ValueError("Live payload stage is not allowed")
         kind, target_id, index = _payload_target(
             session_id, event_type, payload
         )
         target = _target_key(kind, target_id, index)
         async with self._lock:
             self._expire_locked()
-            self._replace_job_locked(session_id, job_id)
+            if self._jobs.get(session_id) not in (None, job_id):
+                raise ValueError(
+                    "Live payload does not match the active job"
+                )
+            if session_id not in self._jobs:
+                self._jobs[session_id] = job_id
             key = (session_id, target)
             old = self._entries.get(key)
             attempt = getattr(payload, "attempt", 1)
+            if old is not None and old.event.stage != stage:
+                raise ValueError("Live payload stage is not allowed")
             if (
                 old is None
                 and event_type
