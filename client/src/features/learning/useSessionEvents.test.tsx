@@ -257,4 +257,54 @@ describe('useSessionEvents', () => {
     });
     expect(source.closed).toBe(false);
   });
+
+  it('routes live draft events to onLiveEvent callback without modifying TanStack Query cache', async () => {
+    const onLiveEventSpy = vi.fn();
+    renderHook(
+      () =>
+        useSessionEvents('session-1', {
+          enabled: true,
+          onLiveEvent: onLiveEventSpy,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
+    const source = FakeEventSource.instances[0];
+
+    const liveDelta = {
+      id: 0,
+      session_id: 'session-1',
+      job_id: 'job-1',
+      stage: 'GENERATING_PREVIEW',
+      target: '["topic","n1",0]',
+      attempt: 1,
+      sequence: 1,
+      event_type: 'topic_content_delta',
+      payload: {
+        node_id: 'n1',
+        sequence_index: 0,
+        text_delta: 'Streamed chunk',
+        attempt: 1,
+      },
+    };
+
+    act(() => {
+      source.emit('topic_content_delta', liveDelta);
+    });
+
+    expect(onLiveEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 0,
+        event_type: 'topic_content_delta',
+        sequence: 1,
+      }),
+    );
+
+    const sessionData = client.getQueryData<LearningSessionWithNodes>([
+      'learningSession',
+      'session-1',
+    ]);
+    expect(sessionData?.generation?.last_event_id).toBe(4);
+  });
 });
