@@ -252,13 +252,8 @@ export function Mermaid({ chart, eager = false }: MermaidProps) {
 							</button>
 						</div>
 						<div 
-							className="mermaid-zoomed-container flex justify-center w-full cursor-pointer" 
+							className="mermaid-zoomed-container flex justify-center w-full cursor-zoom-out" 
 							dangerouslySetInnerHTML={{ __html: svg }} 
-							onClick={(e) => {
-								e.stopPropagation();
-								downloadMermaidAsPng(svg);
-							}}
-							title="Click diagram to download PNG"
 						/>
 					</div>
 				</div>,
