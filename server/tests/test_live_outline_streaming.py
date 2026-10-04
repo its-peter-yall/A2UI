@@ -407,5 +407,75 @@ class LiveOutlineGraphTests(unittest.IsolatedAsyncioTestCase):
                                 for p in payloads))
 
 
+class LiveOutlineLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelled_outline_is_not_persisted(self):
+        fake = OpenResponse([
+            CourseOutline.model_construct(course_title="Live", topics=None),
+        ], outline())
+        with LiveHarness() as h, fake_instructor(fake.stream) as (_, _, calls):
+            task = asyncio.create_task(nodes.outline_planner_node(
+                h.outline_state(), h.runtime,
+            ))
+            await asyncio.wait_for(fake.open.wait(), 1)
+            self.assertEqual(len(await h.hub.snapshots("s")), 1)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(fake.closed.is_set())
+            calls.assert_called_once()
+            h.artifacts.persist_outline.assert_not_called()
+            self.assertEqual(h.hub.retired, [])
+
+    async def test_resolved_depth_counts_preserved_with_live_callback(self):
+        for mode, count in (("lite", 3), ("full", 10), ("custom", 1),
+                            ("custom", 2), ("custom", 30)):
+            with self.subTest(mode=mode, count=count):
+                async def stream(**kwargs):
+                    yield outline(count)
+                with fake_instructor(stream):
+                    result = await PlannerAgent().plan(
+                        "Alpha", mode=mode,
+                        custom_topic_count=count if mode == "custom" else None,
+                        llm_context=LLMContext(api_key="key", model="model",
+                                       agent_models={"planner":
+                                           AgentModelConfig(model="model")}),
+                        on_delta=AsyncMock(), on_attempt_started=AsyncMock(),
+                    )
+                self.assertEqual(len(result.topics), count)
+
+    async def test_invalid_custom_count_fails_before_any_chargeable_call(self):
+        with patch.object(PlannerAgent, "generate_streaming",
+                          new_callable=AsyncMock) as generate:
+            with self.assertRaises(ValueError):
+                await PlannerAgent().plan(
+                    "Alpha", mode="custom", custom_topic_count=31,
+                    llm_context=LLMContext(api_key="key", model="model",
+                                       agent_models={"planner":
+                                           AgentModelConfig(model="model")}),
+                    on_delta=AsyncMock(),
+                )
+            generate.assert_not_called()
+
+    async def test_replan_cannot_start_above_attempt_five(self):
+        from server.agents.planner import ResumablePlannerError
+
+        calls = 0
+        async def stream(**kwargs):
+            nonlocal calls
+            calls += 1
+            yield outline(2)
+
+        with fake_instructor(stream):
+            with self.assertRaises(ResumablePlannerError):
+                await PlannerAgent().plan(
+                    "Alpha", mode="custom", custom_topic_count=1,
+                    llm_context=LLMContext(api_key="key", model="model",
+                                       agent_models={"planner":
+                                           AgentModelConfig(model="model")}),
+                    on_delta=AsyncMock(), initial_attempt=5,
+                )
+        self.assertEqual(calls, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

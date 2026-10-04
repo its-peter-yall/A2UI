@@ -239,5 +239,106 @@ class LiveTopicGraphTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("".join(p.text_delta for p in deltas), "a" * 9001)
 
 
+class LiveTopicLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancellation_closes_provider_without_ready_or_retry(self):
+        fake = OpenResponse([
+            partial_content(content_markdown="Live preview"),
+        ], content())
+        with LiveHarness() as h, fake_instructor(fake.stream) as (_, sdk, calls):
+            task = asyncio.create_task(nodes.generator_node(
+                h.worker_state(), h.runtime,
+            ))
+            await asyncio.wait_for(fake.open.wait(), 1)
+            self.assertEqual(len(await h.hub.snapshots("s")), 1)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertTrue(fake.closed.is_set())
+            calls.assert_called_once()
+            sdk.close.assert_awaited_once()
+            h.artifacts.persist_content_with_citations.assert_not_called()
+            h.artifacts.persist_topic_error.assert_not_called()
+            self.assertEqual(h.hub.retired, [])
+            self.assertEqual(h.events.append_once.call_count, 0)
+
+    async def test_job_cancel_between_chunks_is_not_wrapped_as_failure(self):
+        from server.graph.runner import GenerationCancelled
+
+        closed = asyncio.Event()
+        async def stream(**kwargs):
+            try:
+                yield partial_content(content_markdown="Live")
+                h.jobs.is_cancel_requested.return_value = True
+                yield partial_content(content_markdown="Live next")
+            finally:
+                closed.set()
+
+        with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
+            with self.assertRaises(GenerationCancelled):
+                await nodes.generator_node(h.worker_state(), h.runtime)
+            self.assertTrue(closed.is_set())
+            calls.assert_called_once()
+            h.artifacts.persist_topic_error.assert_not_called()
+            self.assertEqual(h.saved, {})
+
+    async def test_resume_replaces_retained_attempt_without_concatenation(self):
+        from server.schemas.generation import GenerationStage
+        from server.schemas.progress import TopicContentDeltaPayload
+
+        fake = OpenResponse([
+            partial_content(content_markdown="Fresh"),
+        ], content("Fresh explanation. " * 20))
+        with LiveHarness() as h, fake_instructor(fake.stream):
+            await h.hub.begin_target(
+                session_id="s", job_id="j",
+                stage=GenerationStage.GENERATING_PREVIEW,
+                target_type="topic", target_id="n0", sequence_index=0,
+                attempt=2,
+            )
+            await h.hub.publish(
+                session_id="s", job_id="j",
+                stage=GenerationStage.GENERATING_PREVIEW,
+                event_type=ProgressEventType.TOPIC_CONTENT_DELTA,
+                payload=TopicContentDeltaPayload(
+                    node_id="n0", sequence_index=0, attempt=2,
+                    text_delta="Interrupted",
+                ),
+            )
+            task = asyncio.create_task(nodes.generator_node(
+                h.worker_state(), h.runtime,
+            ))
+            try:
+                await asyncio.wait_for(fake.open.wait(), 1)
+                snap = (await h.hub.snapshots("s"))[0]
+                self.assertEqual(snap.attempt, 3)
+                self.assertEqual(snap.snapshot.text, "Fresh")
+                resets = [args for kind, args in h.hub.events
+                          if kind == "reset"]
+                self.assertEqual(resets[-1]["reason"], "resumed")
+            finally:
+                await dispose(task)
+
+    async def test_durable_content_skip_makes_no_stream_call(self):
+        with LiveHarness() as h, patch.object(
+            nodes.generator_agent, "generate_streaming", new_callable=AsyncMock,
+        ) as generate:
+            h.artifacts.has_durable_content.return_value = True
+            result = await nodes.generator_node(h.worker_state(), h.runtime)
+            self.assertTrue(result["generator_results"][0]["content_ready"])
+            generate.assert_not_called()
+            self.assertEqual(h.hub.events, [])
+
+    async def test_arbitrary_display_failure_never_retries_provider(self):
+        async def stream(**kwargs):
+            yield content()
+
+        with LiveHarness() as h, fake_instructor(stream) as (_, _, calls):
+            h.hub.publish = AsyncMock(side_effect=RuntimeError("display failed"))
+            result = await nodes.generator_node(h.worker_state(), h.runtime)
+            calls.assert_called_once()
+            self.assertFalse(result["generator_results"][0]["content_ready"])
+            self.assertEqual(h.saved, {})
+
+
 if __name__ == "__main__":
     unittest.main()

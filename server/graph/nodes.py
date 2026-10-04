@@ -34,6 +34,7 @@ USAGE:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from collections import namedtuple
@@ -506,6 +507,27 @@ def _live_job_id(state: dict[str, Any], session_id: str) -> Optional[str]:
     return None
 
 
+def _check_live_cancel(session_id: str) -> None:
+    """Preserve cooperative cancellation through P1's callback boundary."""
+    try:
+        raise_if_cancel_requested(session_id)
+    except GenerationCancelled as exc:
+        raise asyncio.CancelledError() from exc
+
+
+async def _live_initial_attempt(
+    session_id: str, job_id: str,
+    kind: Literal["outline", "topic"], target_id: str,
+    index: Optional[int] = None,
+) -> int:
+    """Advance only the matching job and target's retained attempt."""
+    target = json.dumps([kind, target_id, index], separators=(",", ":"))
+    snapshots = await session_live_stream.snapshots(session_id)
+    return max((snapshot.attempt for snapshot in snapshots
+                if snapshot.target == target and snapshot.job_id == job_id),
+               default=0) + 1
+
+
 class _OutlineLiveOutput:
     """Invocation-local raw and display buffers for the outline target."""
 
@@ -515,6 +537,7 @@ class _OutlineLiveOutput:
         self.session_id = session_id
         self.job_id = job_id
         self.attempt = 0
+        self.initial_attempt = 1
         self.secrets = secrets
         self.raw_title = ""
         self.raw_topics: dict[int, str] = {}
@@ -526,7 +549,7 @@ class _OutlineLiveOutput:
         self, attempt: int,
         reason: Literal["started", "retry", "replan", "correction"],
     ) -> None:
-        raise_if_cancel_requested(self.session_id)
+        _check_live_cancel(self.session_id)
         self.attempt = attempt
         self.raw_title = self.display_title = ""
         self.raw_topics.clear()
@@ -535,7 +558,9 @@ class _OutlineLiveOutput:
         await session_live_stream.begin_target(
             session_id=self.session_id, job_id=self.job_id,
             stage=GenerationStage.OUTLINING, target_type="outline",
-            target_id=self.session_id, attempt=attempt, reason=reason,
+            target_id=self.session_id, attempt=attempt,
+            reason=("resumed" if attempt == self.initial_attempt
+                    and self.initial_attempt > 1 else reason),
         )
 
     async def field(self, value: Any, index: Optional[int] = None) -> None:
@@ -576,7 +601,7 @@ class _OutlineLiveOutput:
     async def update(self, update: StructuredStreamUpdate) -> None:
         if update.kind != "partial" or update.attempt != self.attempt:
             return
-        raise_if_cancel_requested(self.session_id)
+        _check_live_cancel(self.session_id)
         partial = update.partial
         await self.field(getattr(partial, "course_title", None))
         topics = getattr(partial, "topics", None)
@@ -616,18 +641,27 @@ async def outline_planner_node(
     )
     live_kwargs: dict[str, Any] = {}
     if live_output is not None:
+        live_output.initial_attempt = await _live_initial_attempt(
+            session_id, live_output.job_id, "outline", session_id,
+        )
         live_kwargs = {
+            "initial_attempt": live_output.initial_attempt,
             "on_delta": live_output.update,
             "on_attempt_started": live_output.begin,
         }
-    outline: CourseOutline = await planner_agent.plan(
-        query=state["query"],
-        research_context=report_context,
-        llm_context=llm_ctx,
-        mode=mode,  # type: ignore[arg-type]
-        custom_topic_count=state.get("custom_topic_count"),
-        **live_kwargs,
-    )
+    try:
+        outline: CourseOutline = await planner_agent.plan(
+            query=state["query"],
+            research_context=report_context,
+            llm_context=llm_ctx,
+            mode=mode,  # type: ignore[arg-type]
+            custom_topic_count=state.get("custom_topic_count"),
+            **live_kwargs,
+        )
+    except asyncio.CancelledError as exc:
+        if isinstance(exc.__cause__, GenerationCancelled):
+            raise exc.__cause__
+        raise
 
     generation_artifact_store.persist_outline(session_id, outline)
     try:
@@ -856,6 +890,7 @@ class _TopicLiveOutput:
         self.secrets = secrets
         self.approved_source_ids = approved_source_ids
         self.attempt = 0
+        self.initial_attempt = 1
         self.raw_markdown = ""
         self.display_markdown = ""
 
@@ -863,19 +898,21 @@ class _TopicLiveOutput:
         self, attempt: int,
         reason: Literal["started", "retry", "replan", "correction"],
     ) -> None:
-        raise_if_cancel_requested(self.session_id)
+        _check_live_cancel(self.session_id)
         self.attempt = attempt
         self.raw_markdown = self.display_markdown = ""
         await session_live_stream.begin_target(
             session_id=self.session_id, job_id=self.job_id, stage=self.stage,
             target_type="topic", target_id=self.node_id,
-            sequence_index=self.sequence_index, attempt=attempt, reason=reason,
+            sequence_index=self.sequence_index, attempt=attempt,
+            reason=("resumed" if attempt == self.initial_attempt
+                    and self.initial_attempt > 1 else reason),
         )
 
     async def update(self, update: StructuredStreamUpdate) -> None:
         if update.kind != "partial" or update.attempt != self.attempt:
             return
-        raise_if_cancel_requested(self.session_id)
+        _check_live_cancel(self.session_id)
         value = getattr(update.partial, "content_markdown", None)
         if not isinstance(value, str) or not value:
             return
@@ -947,7 +984,11 @@ async def generator_node(
                 _live_secrets(llm_ctx),
                 set(brief.approved_source_ids) if brief else set(),
             )
+            live_output.initial_attempt = await _live_initial_attempt(
+                session_id, job_id, "topic", node_id, seq_idx,
+            )
             live_kwargs = {
+                "initial_attempt": live_output.initial_attempt,
                 "on_delta": live_output.update,
                 "on_attempt_started": live_output.begin,
             }
@@ -990,6 +1031,10 @@ async def generator_node(
                 }
             ]
         }
+    except asyncio.CancelledError as exc:
+        if isinstance(exc.__cause__, GenerationCancelled):
+            raise exc.__cause__
+        raise
     except GenerationCancelled:
         raise
     except Exception:
