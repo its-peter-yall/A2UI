@@ -29,6 +29,7 @@ import { AlertTriangle, X } from 'lucide-react';
 
 import type { ResearchReport } from '@/types/generation';
 import { cn } from '@/lib/utils';
+import { DraftMarkdownPreview } from './DraftMarkdownPreview';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 function isSafeHttpUrl(url: string): boolean {
@@ -44,12 +45,18 @@ export interface CourseSourcesPanelProps {
   isOpen: boolean;
   onClose: () => void;
   report: ResearchReport | null | undefined;
+  draftText?: string;
+  liveSourceCount?: number;
+  liveProviderId?: string | null;
 }
 
 export function CourseSourcesPanel({
   isOpen,
   onClose,
   report,
+  draftText,
+  liveSourceCount,
+  liveProviderId,
 }: CourseSourcesPanelProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +145,24 @@ export function CourseSourcesPanel({
             )}
           </header>
 
-          {!report && (
+          {!report && (draftText || liveSourceCount !== undefined) && (
+            <div className="rounded-lg border border-[#ffb74d]/30 bg-[#ffb74d]/5 p-3 space-y-2">
+              <p className="text-sm font-semibold text-[#ffb74d]">
+                Research in progress
+              </p>
+              {liveSourceCount !== undefined && (
+                <p className="text-sm text-muted-foreground">
+                  {liveSourceCount} sources retrieved
+                  {liveProviderId ? ` via ${liveProviderId}` : ''}
+                </p>
+              )}
+              {draftText ? (
+                <DraftMarkdownPreview content={draftText} />
+              ) : null}
+            </div>
+          )}
+
+          {!report && !draftText && liveSourceCount === undefined && (
             <p className="text-sm text-muted-foreground">
               Research report not available yet.
             </p>

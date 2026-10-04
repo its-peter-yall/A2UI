@@ -196,4 +196,20 @@ describe('CourseSourcesPanel', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('renders live retrieved source count and streaming synthesis draft before report completes', () => {
+    render(
+      <CourseSourcesPanel
+        isOpen={true}
+        onClose={vi.fn()}
+        report={null}
+        draftText="Synthesizing findings on modern web frameworks..."
+        liveSourceCount={7}
+      />,
+    );
+
+    expect(screen.getByText(/research in progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/7 sources retrieved/i)).toBeInTheDocument();
+    expect(screen.getByText(/synthesizing findings on modern web frameworks/i)).toBeInTheDocument();
+  });
 });
