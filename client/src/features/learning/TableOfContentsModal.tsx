@@ -38,12 +38,18 @@ import { X, Lock, CheckCircle2, PlayCircle, HelpCircle } from "lucide-react";
 import type { ConceptNode } from "@/types/learning";
 import { cn } from "@/lib/utils";
 
+interface OutlineDraftView {
+	courseTitle?: string;
+	topics: Readonly<Record<number, string>>;
+}
+
 interface TableOfContentsModalProps {
 	isOpen: boolean;
 	onClose: () => void;
 	nodes: ConceptNode[];
 	currentNodeId?: string;
 	onSelectTopic: (index: number) => void;
+	outlineDraft?: OutlineDraftView;
 }
 
 function getNumQuizzes(node: ConceptNode): string | number {
@@ -55,12 +61,22 @@ function getNumQuizzes(node: ConceptNode): string | number {
 	return "-";
 }
 
+function getProvisionalTopics(
+	topics: Readonly<Record<number, string>>,
+): Array<{ index: number; title: string }> {
+	return Object.entries(topics)
+		.map(([key, title]) => ({ index: Number(key), title }))
+		.filter((row) => Number.isInteger(row.index))
+		.sort((a, b) => a.index - b.index);
+}
+
 export function TableOfContentsModal({
 	isOpen,
 	onClose,
 	nodes,
 	currentNodeId,
 	onSelectTopic,
+	outlineDraft,
 }: TableOfContentsModalProps) {
 	const modalRef = useRef<HTMLDivElement>(null);
 	const activeRowRef = useRef<HTMLTableRowElement | null>(null);
@@ -148,7 +164,9 @@ export function TableOfContentsModal({
 					</button>
 
 					{/* Title */}
-					<h2 className="text-xl font-bold text-foreground mb-4">Table of Contents</h2>
+					<h2 className="text-xl font-bold text-foreground mb-4">
+						{outlineDraft?.courseTitle || "Table of Contents"}
+					</h2>
 
 					{/* Table Container - Fits exactly 10 items (approx. 48px per row + headers) */}
 					<div className="overflow-x-auto border border-border/60 rounded-lg bg-muted/20">
@@ -163,6 +181,32 @@ export function TableOfContentsModal({
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-border/40 overflow-y-auto block max-h-[480px] w-full scrollbar-thin">
+								{nodes.length === 0 && outlineDraft
+									? getProvisionalTopics(outlineDraft.topics).map((row) => (
+											<tr
+												key={`draft-${row.index}`}
+												className="h-12 flex w-full items-center"
+											>
+												<td className="px-4 text-center font-mono text-muted-foreground w-[10%]">
+													#{row.index + 1}
+												</td>
+												<td className="px-4 w-[50%] overflow-hidden text-ellipsis whitespace-nowrap">
+													<span className="text-muted-foreground font-medium cursor-not-allowed">
+														{row.title}
+													</span>
+												</td>
+												<td className="px-4 text-center text-muted-foreground w-[15%]">
+													-
+												</td>
+												<td className="px-4 text-center w-[15%]" />
+												<td className="px-4 w-[10%] flex justify-center">
+													<span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#ffb74d]/10 text-[#ffb74d] border border-[#ffb74d]/30">
+														Planning...
+													</span>
+												</td>
+											</tr>
+									  ))
+									: null}
 								{nodes.map((node, index) => {
 									const isCurrent = node.id === currentNodeId;
 									const moduleStatus = node.module_status ?? "READY";

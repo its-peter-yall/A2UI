@@ -215,4 +215,48 @@ describe("TableOfContentsModal Component", () => {
 		fireEvent.keyDown(window, { key: "Escape" });
 		expect(onClose).toHaveBeenCalled();
 	});
+
+	test("renders provisional topics and growing titles during outlining", () => {
+		render(
+			<TableOfContentsModal
+				isOpen={true}
+				onClose={vi.fn()}
+				nodes={[]}
+				onSelectTopic={vi.fn()}
+				outlineDraft={{
+					courseTitle: "TypeScript Essentials",
+					topics: {
+						0: "Basic Types",
+						1: "Generics",
+					},
+				}}
+			/>,
+		);
+
+		expect(screen.getByText("TypeScript Essentials")).toBeInTheDocument();
+		expect(screen.getByText("Basic Types")).toBeInTheDocument();
+		expect(screen.getByText("Generics")).toBeInTheDocument();
+		expect(screen.getAllByText("Planning...")).toHaveLength(2);
+	});
+
+	test("disables clicking on provisional outline rows", () => {
+		const handleSelect = vi.fn();
+		render(
+			<TableOfContentsModal
+				isOpen={true}
+				onClose={vi.fn()}
+				nodes={[]}
+				onSelectTopic={handleSelect}
+				outlineDraft={{
+					courseTitle: "TypeScript Essentials",
+					topics: { 0: "Basic Types" },
+				}}
+			/>,
+		);
+
+		const topicSpan = screen.getByText("Basic Types");
+		expect(topicSpan.closest("button")).toBeNull();
+		fireEvent.click(topicSpan);
+		expect(handleSelect).not.toHaveBeenCalled();
+	});
 });
