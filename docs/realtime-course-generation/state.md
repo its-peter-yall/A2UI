@@ -1,14 +1,14 @@
 ---
 objective: realtime-course-generation
 workflow: maw
-status: paused
+status: in-progress
 skipped_phases: [review]
-goal_status: awaiting-written-spec-approval
+goal_status: approved
 design_status: approved
-dag_status: provisional-pre-research
-current_phase: written-spec-review
-resume_gate: explicit-user-approval-and-proceed
-pause_reason: user requested wait after goal.md and fully populated state.md, before research
+dag_status: provisional-awaiting-research
+current_phase: technical-research
+resume_gate: cleared-2026-10-04-user-approved-and-asked-to-proceed
+pause_reason: none; user approved the written goal and authorized proceeding
 created: 2026-10-04
 updated: 2026-10-04
 ---
@@ -20,21 +20,22 @@ updated: 2026-10-04
 - Deliver the genuine real-time, zero-click course-generation UI specified in
   `docs/realtime-course-generation/goal.md`.
 - Invocation: `@maw --skip review`.
-- Research is enabled but has not started. Unified code review alone is skipped.
+- Research is enabled and is the only active phase. Unified code review alone
+  is skipped.
 - Workspace: `D:/Peter/A2UI`; shell: PowerShell; use forward-slash paths.
 - Main orchestrator manages documentation, approvals, DAG, dispatch, and
   verification; it must not implement application code.
-- No subagents have been dispatched and no application code has changed.
+- No application code has changed in this workflow so far.
 - The user approved the proposed design and emphasized actual response streaming.
-- Approval of the written goal is still pending. Stop here until the user
-  approves the goal and explicitly authorizes proceeding to research.
-- Do not interpret elapsed time, the review skip, or design approval as permission
-  to bypass this pause.
+- The user approved the written goal and instructed "proceed" on 2026-10-04.
+  Approval persists; do not ask for it again during this workflow.
+- Research must complete and be reconciled into the DAG before planners are
+  dispatched. Do not run planning, implementation, or verification yet.
 
 ## Workflow milestones
 
-- [ ] Step 1: Brainstorming & Goal Alignment (goal written; written-spec approval pending)
-- [ ] Step 2: Technical Research (`docs/realtime-course-generation/research.md`; blocked by pause)
+- [x] Step 1: Brainstorming & Goal Alignment (goal committed 33df5dc; approved by user)
+- [ ] Step 2: Technical Research (`docs/realtime-course-generation/research.md`; in progress)
 - [ ] Step 3: Planning Completed (all detailed plan files; provisional DAG below only)
 - [ ] Step 4: Execution Completed (all workers finished and committed)
 - [x] Step 5: Unified Code Review (Skipped via --skip review; no reviewer dispatch)
@@ -51,7 +52,8 @@ updated: 2026-10-04
 - [x] Write `goal.md` with user clarification and explicit acceptance criteria.
 - [x] Self-review scope, ambiguity, placeholders, and internal consistency.
 - [x] Fully populate this state, provisional dependency matrix, ownership, and gates.
-- [ ] Obtain explicit approval of the written specification and proceed instruction.
+- [ ] Obtain explicit approval of the written specification and proceed instruction
+  (done 2026-10-04: user approved and said proceed).
 
 ## Initial findings and constraints
 
@@ -167,11 +169,17 @@ orchestrator coordination before editing.
 
 ## Planning and pipelining policy
 
+- Dispatch mode: subagents run in the foreground, never backgrounded.
+  Independent planners are dispatched as parallel foreground agents.
+- Plan document format: planners must NOT prepend the boxed 76-`=` file header
+  block or any decorative header banner to `plan*.md`. Start directly with the
+  plan content. Source code files created by workers still follow the mandatory
+  `AGENTS.md` header convention.
 - After research, agree on the shared stream/event/recovery contract before
   dependent planners hard-code interfaces.
-- Dispatch P1 first. Other planners may work concurrently when their scope and
-  contract inputs are stable; P2/P3/P4 require the P1 plan's interface decisions,
-  not necessarily its completed implementation, to plan.
+- Dispatch the P1 planner first; it defines the shared contract. Then dispatch the
+  P2, P3, and P4 planners in parallel foreground, each receiving P1's contract
+  decisions.
 - Dispatch P1's worker immediately when `plan1.md` is ready. Do not wait for all plans.
 - P2/P3/P4 workers start as soon as their plan is committed and P1's worker is complete.
 - P2/P3/P4 may execute concurrently only after verifying disjoint actual file ownership.
@@ -203,9 +211,9 @@ evidence of A3/A5/A6. Hidden/locked learner content and quizzes retain their rul
 
 | Artifact | Current status | Commit record |
 | :--- | :--- | :--- |
-| `goal.md` | Written; awaiting user review | Goal specification commit identified by git log for this path |
-| `state.md` | Fully populated; paused | State initialization commit identified by git log for this path |
-| `research.md` | Not created; blocked | None |
+| `goal.md` | Written and user-approved | `33df5dc` |
+| `state.md` | Fully populated; in progress | `33df5dc`, plus the approval/resume commit for this file |
+| `research.md` | Researcher dispatched 2026-10-04; not yet reported | Pending researcher commit |
 | `plan1.md` through `plan5.md` | Not created; blocked | None |
 | `review.md` | Intentionally omitted via --skip review | Not applicable |
 | `verification.md` | Not created | None |
@@ -241,7 +249,7 @@ Run from the stated directories and record actual results:
 
 ## Current checkpoint
 
-**PAUSED BEFORE RESEARCH.** Goal and workflow state are prepared. No research,
-planning, implementation, subagent dispatch, paid provider calls, or automated
-test execution has begun. Next action belongs to the user: review `goal.md` and
-authorize proceeding.
+**RESEARCH IN PROGRESS.** Goal approved by the user on 2026-10-04 (commit
+`33df5dc`). The Researcher subagent is the only dispatched agent. No planners,
+workers, paid provider calls, or application code changes yet. After research is
+committed, reconcile the DAG and dispatch the P1 planner in the foreground.
