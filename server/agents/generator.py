@@ -370,6 +370,8 @@ class GeneratorAgent(BaseAgent):
                 current_attempt += 1
                 continue
             except ValidationError:
+                if on_delta is None and on_attempt_started is None:
+                    raise
                 if current_attempt >= max_attempts or latest_attempt >= 5:
                     raise
                 active_user_message = (

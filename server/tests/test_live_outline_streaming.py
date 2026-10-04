@@ -557,5 +557,24 @@ class LiveOutlineRecoveryGuards(unittest.IsolatedAsyncioTestCase):
             h.artifacts.persist_outline.assert_not_called()
 
 
+class LegacyPlannerBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_schema_failure_keeps_single_generate_call(self):
+        from pydantic import ValidationError
+
+        try:
+            CourseOutline.model_validate({})
+        except ValidationError as exc:
+            error = exc
+        with patch.object(
+            PlannerAgent, "generate", new_callable=AsyncMock,
+        ) as call:
+            call.side_effect = error
+            with self.assertRaises(ValidationError):
+                await PlannerAgent().plan(
+                    "Alpha", mode="custom", custom_topic_count=1,
+                )
+            call.assert_awaited_once()
+
+
 if __name__ == "__main__":
     unittest.main()

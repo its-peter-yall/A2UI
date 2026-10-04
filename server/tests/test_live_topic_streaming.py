@@ -364,5 +364,22 @@ class LiveTopicBudgetGuards(unittest.IsolatedAsyncioTestCase):
             calls.assert_called_once()
 
 
+class LegacyGeneratorBoundaryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_legacy_schema_failure_keeps_single_generate_call(self):
+        from pydantic import ValidationError
+
+        try:
+            GeneratedContent.model_validate({})
+        except ValidationError as exc:
+            error = exc
+        with patch.object(
+            GeneratorAgent, "generate", new_callable=AsyncMock,
+        ) as call:
+            call.side_effect = error
+            with self.assertRaises(ValidationError):
+                await GeneratorAgent().generate_explanation(topic())
+            call.assert_awaited_once()
+
+
 if __name__ == "__main__":
     unittest.main()

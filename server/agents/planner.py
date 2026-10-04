@@ -428,6 +428,8 @@ class PlannerAgent(BaseAgent):
                     message, "started" if domain_attempt == 0 else "replan",
                 )
             except (ValidationError, StreamCallbackError) as exc:
+                if on_delta is None and on_attempt_started is None:
+                    raise
                 if isinstance(exc, StreamCallbackError) and not isinstance(
                     exc.__cause__, OutlineDraftCorrection,
                 ):
