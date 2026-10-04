@@ -32,6 +32,8 @@ from __future__ import annotations
 import logging
 from typing import Awaitable, Callable, Literal, Optional
 
+from pydantic import ValidationError
+
 from server.agents.base import BaseAgent
 from server.schemas.learning import (
     CourseOutline,
@@ -42,7 +44,7 @@ from server.schemas.learning import (
 )
 from server.schemas.llm import LLMContext
 from server.utils.instructor_client import (
-    StreamDeltaCallback, StructuredStreamUpdate,
+    StreamCallbackError, StreamDeltaCallback, StructuredStreamUpdate,
 )
 
 
@@ -406,54 +408,54 @@ class PlannerAgent(BaseAgent):
                 on_delta=relay, initial_attempt=start,
             )
 
-        outline = await call_outline(user_message, "started")
-
-        if validate_topic_count_for_mode(outline, mode, custom_topic_count):
-            logger.info(
-                "PlannerAgent created outline: '%s' with %s topics",
-                outline.course_title,
-                len(outline.topics),
-            )
-            return outline
-
         if mode == "custom":
-            # The prompt builder validated this before the first call.
             if custom_topic_count is None:
                 raise ValueError("custom mode requires custom_topic_count")
             min_t = max_t = custom_topic_count
         else:
             min_t, max_t = MODE_TOPIC_BOUNDS[mode]
-        count = len(outline.topics)
-        logger.warning(
-            "Outline topic count %s out of bounds for %s (%s-%s); replan",
-            count,
-            mode,
-            min_t,
-            max_t,
-        )
         constraint = (
             f"EXACTLY {min_t} topics"
             if mode == "custom"
             else f"between {min_t} and {max_t} topics inclusive"
         )
-        replan_message = (
-            f"{user_message}\n\n"
-            f"STRICT MODE CONSTRAINTS: You previously produced {count} "
-            f"topics. You MUST produce {constraint} for {mode} mode. "
-            "No fewer, no more. Regenerate the complete outline."
-        )
-        outline = await call_outline(replan_message, "replan")
-
-        if validate_topic_count_for_mode(outline, mode, custom_topic_count):
-            logger.info(
-                "PlannerAgent replan ok: '%s' with %s topics",
-                outline.course_title,
-                len(outline.topics),
+        message = user_message
+        for domain_attempt in range(2):
+            try:
+                outline = await call_outline(
+                    message, "started" if domain_attempt == 0 else "replan",
+                )
+            except (ValidationError, StreamCallbackError) as exc:
+                if isinstance(exc, StreamCallbackError) and not isinstance(
+                    exc.__cause__, OutlineDraftCorrection,
+                ):
+                    raise
+                if domain_attempt == 1:
+                    raise ResumablePlannerError(
+                        "Outline correction failed validation"
+                    ) from exc
+                message = (
+                    user_message + "\n\nCORRECTION REQUIRED: Return one "
+                    "complete valid outline with consistent ordered titles "
+                    "and contiguous topic indices."
+                )
+                continue
+            if validate_topic_count_for_mode(outline, mode, custom_topic_count):
+                logger.info(
+                    "PlannerAgent created outline with %s topics",
+                    len(outline.topics),
+                )
+                return outline
+            count = len(outline.topics)
+            if domain_attempt == 1:
+                raise OutlineTopicCountError(mode, count, min_t, max_t)
+            message = (
+                f"{user_message}\n\n"
+                f"STRICT MODE CONSTRAINTS: You previously produced {count} "
+                f"topics. You MUST produce {constraint} for {mode} mode. "
+                "No fewer, no more. Regenerate the complete outline."
             )
-            return outline
-
-        final_count = len(outline.topics)
-        raise OutlineTopicCountError(mode, final_count, min_t, max_t)
+        raise ResumablePlannerError("Outline correction budget exhausted")
 
     async def plan_briefs(
         self,

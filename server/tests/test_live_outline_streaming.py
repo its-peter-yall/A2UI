@@ -180,7 +180,7 @@ class LiveHarness:
             ("session_live_stream", self.hub),
         ):
             self.stack.enter_context(patch.object(
-                nodes, name, value, create=True,
+                nodes, name, value,
             ))
         return self
 
@@ -271,6 +271,140 @@ class LivePlannerAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result.topics), 1)
         self.assertEqual(begins, [(3, "started"), (4, "replan")])
         self.assertEqual(calls, 2)
+
+
+class LiveOutlineGraphTests(unittest.IsolatedAsyncioTestCase):
+    async def test_toc_grows_before_provider_finishes(self):
+        fake = OpenResponse([
+            CourseOutline.model_construct(
+                course_title="Al", topics=[TopicNode.model_construct(
+                    index=None, title="To", summary_for_context=None, key_terms=None,
+                )],
+            ),
+            CourseOutline.model_construct(
+                course_title="Alpha", topics=[TopicNode.model_construct(
+                    index=0, title="Topic", summary_for_context=None, key_terms=None,
+                )],
+            ),
+        ], outline())
+        with LiveHarness() as h, fake_instructor(fake.stream):
+            async with h.hub.subscribe("s") as subscription:
+                task = asyncio.create_task(nodes.outline_planner_node(
+                    h.outline_state(), h.runtime,
+                ))
+                try:
+                    titles = []
+                    rows = []
+                    while len(titles) < 2 or len(rows) < 2:
+                        event = await take_type(
+                            subscription, ProgressEventType.OUTLINE_TEXT_DELTA,
+                        )
+                        payload = event.payload
+                        if payload.course_title_delta:
+                            titles.append(payload.course_title_delta)
+                        if payload.topic_title_delta:
+                            rows.append(payload.topic_title_delta)
+                    self.assertEqual("".join(titles), "Alpha")
+                    self.assertEqual("".join(rows), "Topic")
+                    self.assertFalse(task.done())
+                    self.assertFalse(fake.closed.is_set())
+                    h.artifacts.persist_outline.assert_not_called()
+                    self.assertEqual(h.events.append_once.call_count, 0)
+                    snap = (await h.hub.snapshots("s"))[0]
+                    self.assertEqual(snap.target, '["outline","s",null]')
+                    self.assertEqual(snap.snapshot.topics, {0: "Topic"})
+                    fake.release.set()
+                    await task
+                    h.artifacts.persist_outline.assert_called_once()
+                    self.assertEqual(await h.hub.snapshots("s"), [])
+                finally:
+                    await dispose(task)
+
+    async def test_count_replan_replaces_all_old_rows(self):
+        second = OpenResponse([], outline(1, "New"))
+        calls = 0
+
+        async def stream(**kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                yield outline(2, "Old")
+            else:
+                yield CourseOutline.model_construct(
+                    course_title="New", topics=[topic(0)],
+                )
+                async for value in second.stream(**kwargs):
+                    yield value
+
+        with LiveHarness() as h, fake_instructor(stream):
+            task = asyncio.create_task(nodes.outline_planner_node(
+                h.outline_state(), h.runtime,
+            ))
+            try:
+                await asyncio.wait_for(second.open.wait(), 1)
+                snap = (await h.hub.snapshots("s"))[0]
+                self.assertEqual(snap.attempt, 2)
+                self.assertEqual(snap.snapshot.course_title, "New")
+                self.assertEqual(set(snap.snapshot.topics), {0})
+                resets = [args for kind, args in h.hub.events
+                          if kind == "reset"]
+                self.assertEqual(resets[-1]["reason"], "replan")
+                self.assertFalse(task.done())
+                h.artifacts.persist_outline.assert_not_called()
+                second.release.set()
+                await task
+                self.assertEqual(calls, 2)
+            finally:
+                await dispose(task)
+
+    async def test_nonprefix_title_closes_attempt_and_replans(self):
+        calls = 0
+        closed = asyncio.Event()
+
+        async def stream(**kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                try:
+                    yield CourseOutline.model_construct(
+                        course_title="Wrong", topics=None,
+                    )
+                    yield CourseOutline.model_construct(
+                        course_title="Changed", topics=None,
+                    )
+                    self.fail("Correction must close this attempt")
+                finally:
+                    closed.set()
+            else:
+                yield outline(1, "Correct")
+
+        with LiveHarness() as h, fake_instructor(stream):
+            await nodes.outline_planner_node(h.outline_state(), h.runtime)
+            self.assertTrue(closed.is_set())
+            resets = [args for kind, args in h.hub.events if kind == "reset"]
+            self.assertEqual([item["attempt"] for item in resets], [1, 2])
+            self.assertEqual(resets[-1]["reason"], "replan")
+            self.assertEqual(calls, 2)
+            saved = h.artifacts.persist_outline.call_args.args[1]
+            self.assertEqual(saved.course_title, "Correct")
+
+    async def test_ignored_fields_repeats_and_title_cap(self):
+        async def stream(**kwargs):
+            yield CourseOutline.model_construct(course_title=None, topics=None)
+            yield CourseOutline.model_construct(course_title="", topics=[])
+            yield outline(1, "x" * 350)
+            yield outline(1, "x" * 350)
+
+        with LiveHarness() as h, fake_instructor(stream):
+            await nodes.outline_planner_node(h.outline_state(), h.runtime)
+            payloads = [args["payload"] for kind, args in h.hub.events
+                        if kind == "live"]
+            self.assertEqual(sum(len(p.course_title_delta or "")
+                                 for p in payloads), 300)
+            self.assertEqual(sum(p.topic_title_delta is not None
+                                 for p in payloads), 1)
+            self.assertTrue(all(p.course_title_delta or p.topic_title_delta
+                                for p in payloads))
 
 
 if __name__ == "__main__":

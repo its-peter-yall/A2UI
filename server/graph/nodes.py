@@ -36,13 +36,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import namedtuple
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from langgraph.runtime import Runtime
 from langgraph.types import Send
 
 from server.agents.generator import GeneratedContent, generator_agent
-from server.agents.planner import PlannerAgent, ResumablePlannerError, planner_agent
+from server.agents.planner import (
+    OutlineDraftCorrection, PlannerAgent, ResumablePlannerError, planner_agent,
+)
 from server.agents.quizzer import QuizzerAgent, quizzer_agent
 from server.database.generation_artifacts import GenerationArtifactConflict
 from server.database.storage_registry import (
@@ -74,6 +76,7 @@ from server.schemas.progress import (
     ModuleFailedPayload,
     ModuleReadyPayload,
     OutlineReadyPayload,
+    OutlineTextDeltaPayload,
     ProgressEventType,
     ResearchDegradedPayload,
     StageChangedPayload,
@@ -81,6 +84,8 @@ from server.schemas.progress import (
 from server.schemas.generation import GenerationWarning
 from server.schemas.llm import LLMContext
 from server.schemas.search import SearchContext
+from server.services.session_event_stream import session_live_stream
+from server.utils.instructor_client import StructuredStreamUpdate
 from server.services.depth_router import resolve_depth_mode
 from server.services.research_runner import ResearchCancelled, run_research
 
@@ -403,6 +408,96 @@ async def researcher_node(
     }
 
 
+def _live_job_id(state: dict[str, Any], session_id: str) -> Optional[str]:
+    """Resolve a real generation job while retaining legacy node behavior."""
+    job_id = state.get("job_id")
+    if isinstance(job_id, str) and job_id:
+        return job_id
+    job = generation_job_store.get_by_session(session_id)
+    if job is not None and isinstance(job.id, str) and job.id:
+        return job.id
+    return None
+
+
+class _OutlineLiveOutput:
+    """Invocation-local raw and display buffers for the outline target."""
+
+    def __init__(self, session_id: str, job_id: str) -> None:
+        self.session_id = session_id
+        self.job_id = job_id
+        self.attempt = 0
+        self.raw_title = ""
+        self.raw_topics: dict[int, str] = {}
+        self.display_title = ""
+        self.display_topics: dict[int, str] = {}
+        self.topic_count = 0
+
+    async def begin(
+        self, attempt: int,
+        reason: Literal["started", "retry", "replan", "correction"],
+    ) -> None:
+        raise_if_cancel_requested(self.session_id)
+        self.attempt = attempt
+        self.raw_title = self.display_title = ""
+        self.raw_topics.clear()
+        self.display_topics.clear()
+        self.topic_count = 0
+        await session_live_stream.begin_target(
+            session_id=self.session_id, job_id=self.job_id,
+            stage=GenerationStage.OUTLINING, target_type="outline",
+            target_id=self.session_id, attempt=attempt, reason=reason,
+        )
+
+    async def field(self, value: Any, index: Optional[int] = None) -> None:
+        if not isinstance(value, str) or not value:
+            return
+        previous = (self.raw_title if index is None
+                    else self.raw_topics.get(index, ""))
+        if not value.startswith(previous):
+            raise OutlineDraftCorrection("Outline display field changed")
+        display = value[:300]
+        old_display = (self.display_title if index is None
+                       else self.display_topics.get(index, ""))
+        suffix = display[len(old_display):]
+        if index is None:
+            self.raw_title, self.display_title = value, display
+        else:
+            self.raw_topics[index], self.display_topics[index] = value, display
+        if suffix:
+            payload = (
+                OutlineTextDeltaPayload(
+                    course_title_delta=suffix, attempt=self.attempt,
+                ) if index is None else OutlineTextDeltaPayload(
+                    topic_index=index, topic_title_delta=suffix,
+                    attempt=self.attempt,
+                )
+            )
+            await session_live_stream.publish(
+                session_id=self.session_id, job_id=self.job_id,
+                stage=GenerationStage.OUTLINING,
+                event_type=ProgressEventType.OUTLINE_TEXT_DELTA,
+                payload=payload,
+            )
+
+    async def update(self, update: StructuredStreamUpdate) -> None:
+        if update.kind != "partial" or update.attempt != self.attempt:
+            return
+        raise_if_cancel_requested(self.session_id)
+        partial = update.partial
+        await self.field(getattr(partial, "course_title", None))
+        topics = getattr(partial, "topics", None)
+        if topics is None:
+            return
+        if len(topics) < self.topic_count:
+            raise OutlineDraftCorrection("Outline topic list shrank")
+        self.topic_count = len(topics)
+        for position, topic in enumerate(topics):
+            index = getattr(topic, "index", None)
+            if index is not None and index != position:
+                raise OutlineDraftCorrection("Outline topic order changed")
+            await self.field(getattr(topic, "title", None), position)
+
+
 async def outline_planner_node(
     state: CourseState,
     runtime: Any = None,
@@ -420,12 +515,23 @@ async def outline_planner_node(
         report_context = research_store.get_report_context(report_id, max_bytes=8000)
 
     logger.info("Generating TOC outline for session %s (mode=%s)", session_id, mode)
+    job_id = _live_job_id(state, session_id)
+    live_output = (
+        _OutlineLiveOutput(session_id, job_id) if job_id else None
+    )
+    live_kwargs: dict[str, Any] = {}
+    if live_output is not None:
+        live_kwargs = {
+            "on_delta": live_output.update,
+            "on_attempt_started": live_output.begin,
+        }
     outline: CourseOutline = await planner_agent.plan(
         query=state["query"],
         research_context=report_context,
         llm_context=llm_ctx,
         mode=mode,  # type: ignore[arg-type]
         custom_topic_count=state.get("custom_topic_count"),
+        **live_kwargs,
     )
 
     generation_artifact_store.persist_outline(session_id, outline)
@@ -441,6 +547,12 @@ async def outline_planner_node(
         )
     except Exception:
         logger.debug("outline_ready event skipped for session %s", session_id)
+    else:
+        if live_output is not None:
+            await session_live_stream.retire_target(
+                session_id=session_id, target_type="outline",
+                target_id=session_id, sequence_index=None,
+            )
 
     _bump_job_counts(session_id, topics_total=len(outline.topics))
     _fenced_update_stage(
