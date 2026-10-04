@@ -121,6 +121,35 @@ def _stream_failure_cause(exc: BaseException) -> BaseException:
     return current
 
 
+def _plaintext_secret(value: Any) -> Optional[str]:
+    """Return a nonempty secret string without touching mock objects."""
+    if value is None:
+        return None
+    getter = getattr(value, "get_secret_value", None)
+    if callable(getter):
+        try:
+            text = getter()
+        except Exception:
+            return None
+        if isinstance(text, str) and text:
+            return text
+        return None
+    if isinstance(value, str) and value:
+        return value
+    return None
+
+
+def _redact_runtime_secrets(
+    text: str,
+    secrets: Sequence[str],
+) -> str:
+    """Replace exact runtime secret values in persisted public text."""
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[redacted]")
+    return text
+
+
 @dataclass
 class ResearchOutcome:
     """Safe terminal research result without secrets or excerpts."""
@@ -409,12 +438,18 @@ class ResearchRunner:
         research_store: Any,
         job_store: Any,
         event_store: Any,
+        display_secrets: Sequence[str] = (),
     ) -> None:
         self._agent = agent
         self._research_store = research_store
         self._job_store = job_store
         self._event_store = event_store
-        self._display_secrets: tuple[str, ...] = ()
+        self._display_secrets = tuple(
+            dict.fromkeys(
+                item for item in display_secrets
+                if isinstance(item, str) and item
+            )
+        )
 
     async def run(
         self,
@@ -431,6 +466,7 @@ class ResearchRunner:
     ) -> ResearchOutcome:
         """Run the bounded research loop to a terminal status."""
         warnings: list[GenerationWarning] = []
+        runtime_secrets = self._combined_display_secrets(llm_context)
         limitations: list[str] = []
         conflicts: list[str] = []
         completed_themes: list[str] = []
@@ -600,6 +636,9 @@ class ResearchRunner:
                             next_section_index=next_section_index,
                             pending_queries=pending_queries,
                             completed_themes=completed_themes,
+                            job_id=job_id,
+                            display_secrets=runtime_secrets,
+                            allowed_ids=set(sources_by_id),
                         )
                     except SearchError as exc:
                         if exc.error_class in ROTATABLE_SEARCH_ERRORS:
@@ -640,6 +679,9 @@ class ResearchRunner:
                             next_section_index=next_section_index,
                             pending_queries=pending_queries,
                             completed_themes=completed_themes,
+                            job_id=job_id,
+                            display_secrets=runtime_secrets,
+                            allowed_ids=set(sources_by_id),
                         )
                     except ResearchBudgetExceeded as exc:
                         limitations.append(
@@ -776,7 +818,7 @@ class ResearchRunner:
                     theme=target_theme or "research",
                     field_name="section_markdown",
                     allowed_ids=set(sources_by_id),
-                    secrets=self._display_secrets,
+                    secrets=runtime_secrets,
                     check_cancelled=lambda: self._ensure_not_cancelled(
                         session_id
                     ),
@@ -863,6 +905,9 @@ class ResearchRunner:
                 clean_markdown = sanitize_section_markdown(
                     draft.section_markdown,
                     allowed_ids=allowed_ids,
+                )
+                clean_markdown = _redact_runtime_secrets(
+                    clean_markdown, runtime_secrets,
                 )
                 section = self._research_store.upsert_section(
                     report_id=report_id,
@@ -987,6 +1032,9 @@ class ResearchRunner:
                 next_section_index=next_section_index,
                 pending_queries=pending_queries,
                 completed_themes=completed_themes,
+                job_id=job_id,
+                display_secrets=runtime_secrets,
+                allowed_ids=set(sources_by_id),
             )
         except (ResearchCancelled, GenerationCancelled):
             if ledger is not None:
@@ -1030,6 +1078,9 @@ class ResearchRunner:
                 next_section_index=next_section_index,
                 pending_queries=pending_queries,
                 completed_themes=completed_themes,
+                job_id=job_id,
+                display_secrets=runtime_secrets,
+                allowed_ids=set(sources_by_id),
             )
 
     async def _finalize(
@@ -1052,8 +1103,25 @@ class ResearchRunner:
         next_section_index: int,
         pending_queries: list[str],
         completed_themes: list[str],
+        job_id: str = "",
+        display_secrets: Sequence[str] = (),
+        allowed_ids: Optional[set[str]] = None,
     ) -> ResearchOutcome:
         final: Optional[ResearchFinalization] = None
+        summary_display = _ResearchTextDisplay(
+            hub=session_live_stream,
+            session_id=session_id,
+            job_id=job_id,
+            report_id=report_id,
+            sequence_index=next_section_index,
+            theme="summary",
+            field_name="summary",
+            allowed_ids=set(allowed_ids or ()),
+            secrets=display_secrets,
+            check_cancelled=lambda: self._ensure_not_cancelled(
+                session_id
+            ),
+        )
         try:
             if ledger is not None:
                 ledger.reserve_finalization_turn()
@@ -1069,12 +1137,17 @@ class ResearchRunner:
                 conflicts=list(conflicts),
                 llm_context=llm_context,
                 budget_context=finalize_budget,
+                on_delta=summary_display.on_delta,
+                initial_attempt=1,
             )
+            self._ensure_not_cancelled(session_id)
+            await summary_display.finish(final)
         except ResearchBudgetExceeded as exc:
             logger.warning(
                 "finalize_report skipped at budget limit: %s",
                 exc.limit_name,
             )
+            summary_display.stopped = True
             final = ResearchFinalization(
                 summary="Research ended with limited synthesis.",
                 limitations=limitations
@@ -1089,6 +1162,7 @@ class ResearchRunner:
                 cause, (ResearchCancelled, GenerationCancelled)
             ):
                 raise cause
+            summary_display.stopped = True
             self._note_stream_unavailable(
                 session_id, warnings, cause,
             )
@@ -1103,6 +1177,16 @@ class ResearchRunner:
         for item in limitations:
             if item not in merged_limitations:
                 merged_limitations.append(item)
+        summary = _redact_runtime_secrets(
+            final.summary, display_secrets,
+        )
+        merged_limitations = [
+            _redact_runtime_secrets(item, display_secrets)
+            for item in merged_limitations
+        ]
+        freshness_note = _redact_runtime_secrets(
+            final.freshness_note, display_secrets,
+        )
 
         # On degraded paths with no sections, still finalize status
         if status == ResearchStatus.DEGRADED and not section_markdowns:
@@ -1111,9 +1195,9 @@ class ResearchRunner:
                 self._research_store.finalize_report(
                     session_id=session_id,
                     status=status,
-                    summary=final.summary,
+                    summary=summary,
                     limitations=merged_limitations,
-                    freshness_note=final.freshness_note,
+                    freshness_note=freshness_note,
                 )
             except Exception:
                 # mark_degraded may be the only terminal write in some paths
@@ -1122,9 +1206,9 @@ class ResearchRunner:
             self._research_store.finalize_report(
                 session_id=session_id,
                 status=status,
-                summary=final.summary,
+                summary=summary,
                 limitations=merged_limitations,
-                freshness_note=final.freshness_note,
+                freshness_note=freshness_note,
             )
 
         if ledger is not None:
@@ -1267,12 +1351,21 @@ class ResearchRunner:
             )
 
     def _load_research_cursor(self, session_id: str) -> ResearchCursor:
-        getter = getattr(self._job_store, "get_job", None)
-        if getter is None:
-            return ResearchCursor()
-        try:
-            job = getter(session_id)
-        except Exception:
+        job = None
+        by_session = getattr(self._job_store, "get_by_session", None)
+        if callable(by_session):
+            try:
+                job = by_session(session_id)
+            except Exception:
+                job = None
+        if job is None:
+            getter = getattr(self._job_store, "get_job", None)
+            if callable(getter):
+                try:
+                    job = getter(session_id)
+                except Exception:
+                    job = None
+        if job is None:
             return ResearchCursor()
         cursor = getattr(job, "cursor", None)
         if isinstance(cursor, GenerationCursor):
@@ -1362,6 +1455,23 @@ class ResearchRunner:
                 type(exc).__name__,
                 session_id,
             )
+
+    def _combined_display_secrets(
+        self,
+        llm_context: Any,
+    ) -> tuple[str, ...]:
+        values: list[str] = list(self._display_secrets)
+        for name in (
+            "api_key",
+            "openrouter_api_key",
+            "generalcompute_api_key",
+        ):
+            secret = _plaintext_secret(
+                getattr(llm_context, name, None)
+            )
+            if secret:
+                values.append(secret)
+        return tuple(dict.fromkeys(values))
 
     def _note_stream_unavailable(
         self,
@@ -1568,6 +1678,7 @@ async def run_research(
             raise ValueError("No search adapters available for configured providers")
 
         persisted_order: list = []
+        job = None
         try:
             job = generation_job_store.get_by_session(session_id)
             if job is not None:
@@ -1578,6 +1689,14 @@ async def run_research(
                 ]
         except Exception:
             persisted_order = []
+        if job is None:
+            raise ValueError(
+                "Research requires an existing generation job"
+            )
+        display_secrets = [
+            key for key in credentials.values()
+            if isinstance(key, str) and key
+        ]
 
         bootstrap = resolve_research_budget(mode, 3)
         shared_ledger = ResearchBudgetLedger(bootstrap)
@@ -1592,9 +1711,10 @@ async def run_research(
             research_store=research_store,
             job_store=generation_job_store,
             event_store=progress_event_store,
+            display_secrets=display_secrets,
         )
         outcome = await runner.run(
-            job_id=f"job-{session_id}",
+            job_id=str(job.id),
             session_id=session_id,
             query=topic_query,
             resolved_mode=mode,
