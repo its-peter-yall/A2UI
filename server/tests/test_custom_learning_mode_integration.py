@@ -193,20 +193,27 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         research: bool = False,
         outlines: Optional[list[CourseOutline]] = None,
     ) -> Iterator[tuple[AsyncMock, AsyncMock]]:
-        """Keep real cardinality enforcement inside the existing harness."""
+        """Keep real cardinality enforcement inside the existing harness.
+
+        ``outline_planner_node`` always supplies live streaming callbacks, so
+        ``PlannerAgent.plan`` reaches the provider through
+        ``generate_streaming``. Stub that seam (not the legacy ``generate``)
+        so real topic-count enforcement, replan, and durable failure still run.
+        """
         real_plan = nodes.planner_agent.plan
         scenario = AcceptanceScenario(topic_count=count, web_search=research)
         with (
             self.harness._install_fakes(scenario),
             patch.object(nodes.planner_agent, "plan", new=real_plan),
             patch.object(
-                nodes.planner_agent, "generate", new_callable=AsyncMock
-            ) as generate,
+                nodes.planner_agent, "generate_streaming",
+                new_callable=AsyncMock,
+            ) as generate_streaming,
         ):
-            generate.side_effect = (
+            generate_streaming.side_effect = (
                 outlines if outlines is not None else [make_outline(count)]
             )
-            yield generate, nodes.run_research
+            yield generate_streaming, nodes.run_research
 
     async def _start(
         self, count: int, research: bool = False
@@ -237,7 +244,7 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
             for research in (False, True):
                 with (
                     self.subTest(count=count, research=research),
-                    self._externals(count, research) as (generate, search),
+                    self._externals(count, research) as (stream, search),
                     patch(
                         "server.graph.nodes.resolve_depth_mode",
                         new_callable=AsyncMock,
@@ -263,10 +270,10 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                         public["generation"]["counts"]["topics_failed"], 0
                     )
                     resolve.assert_not_awaited()
-                    generate.assert_awaited_once()
+                    stream.assert_awaited_once()
                     self.assertIn(
                         f"EXACTLY {count} topics",
-                        generate.await_args.kwargs["system_prompt_override"],
+                        stream.await_args.kwargs["system_prompt_override"],
                     )
                     self.assertEqual(search.await_count, int(research))
                     result = self.harness._build_result(session_id)
@@ -298,7 +305,7 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         wrong, corrected = make_outline(2), make_outline(5)
-        with self._externals(5, outlines=[wrong, corrected]) as (generate, _):
+        with self._externals(5, outlines=[wrong, corrected]) as (stream, _):
             session_id = await self._start(5)
             await _drain(self.harness.runtime)
             response = await self.client.get(f"/learning/sessions/{session_id}")
@@ -310,11 +317,11 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 [node["sequence_index"] for node in public["nodes"]],
                 list(range(5)),
             )
-            self.assertEqual(generate.await_count, 2)
+            self.assertEqual(stream.await_count, 2)
             self.assertEqual(len(wrong.topics), 2)
             self.assertIn(
                 "EXACTLY 5 topics",
-                generate.await_args_list[1].kwargs["user_message"],
+                stream.await_args_list[1].kwargs["user_message"],
             )
 
     async def test_second_mismatch_is_failed_in_public_read_and_events(
@@ -323,10 +330,10 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         wrong_first, wrong_second = make_outline(2), make_outline(4)
         with self._externals(
             5, outlines=[wrong_first, wrong_second]
-        ) as (generate, _):
+        ) as (stream, _):
             session_id = await self._start(5)
             await _drain(self.harness.runtime)
-            self.assertEqual(generate.await_count, 2)
+            self.assertEqual(stream.await_count, 2)
             response = await self.client.get(f"/learning/sessions/{session_id}")
             self.assertEqual(response.status_code, 200, response.text)
             public = response.json()
@@ -388,7 +395,7 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
         ):
             with (
                 self.subTest(mode=mode),
-                self._externals(count) as (generate, search),
+                self._externals(count) as (stream, search),
                 patch(
                     "server.graph.nodes.resolve_depth_mode",
                     new_callable=AsyncMock,
@@ -417,7 +424,7 @@ class CustomLearningModeIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(public["nodes"]), count)
                 self.assertEqual(resolve.await_count, int(mode == "auto"))
                 search.assert_not_awaited()
-                generate.assert_awaited_once()
+                stream.assert_awaited_once()
 
     async def test_stored_count_survives_http_read_and_resume_on_both_stores(
         self,

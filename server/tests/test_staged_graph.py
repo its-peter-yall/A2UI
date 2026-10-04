@@ -147,13 +147,16 @@ class StagedGraphTests(unittest.IsolatedAsyncioTestCase):
                     "server.graph.nodes.generation_artifact_store", artifacts
                 ),
                 patch("server.graph.nodes.progress_event_store", events),
+                # The node supplies live streaming callbacks, so plan reaches
+                # the provider through generate_streaming, not legacy generate.
                 patch.object(
-                    nodes.planner_agent, "generate", new_callable=AsyncMock
-                ) as generate,
+                    nodes.planner_agent, "generate_streaming",
+                    new_callable=AsyncMock,
+                ) as stream,
                 patch("server.graph.nodes.planner_agent.plan_briefs",
                       new_callable=AsyncMock) as briefs,
             ):
-                generate.side_effect = [_custom_outline(6), _custom_outline(8)]
+                stream.side_effect = [_custom_outline(6), _custom_outline(8)]
                 await run_generation_job(
                     app_state=SimpleNamespace(course_graph=graph),
                     session_id=session["id"], job_store=jobs,
@@ -161,7 +164,7 @@ class StagedGraphTests(unittest.IsolatedAsyncioTestCase):
                     llm_context=LLMContext(api_key="k", model="m"),
                     search_context=SearchContext(),
                 )
-            self.assertEqual(generate.await_count, 2)
+            self.assertEqual(stream.await_count, 2)
             briefs.assert_not_called()
             stored = jobs.get_by_session(session["id"])
             self.assertEqual(stored.stage, GenerationStage.FAILED)
