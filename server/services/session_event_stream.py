@@ -412,6 +412,70 @@ class SessionLiveStreamBroadcaster:
 session_live_stream = SessionLiveStreamBroadcaster()
 
 
+def format_live_sse_frame(event: LiveDraftEvent) -> str:
+    envelope = event.model_dump(mode="json")
+    envelope["payload"] = event.payload.model_dump(mode="json")
+    body = json.dumps(envelope, separators=(",", ":"))
+    return (
+        f"event: {event.event_type.value}\n"
+        "retry: 2000\n"
+        f"data: {body}\n\n"
+    )
+
+
+async def _retire_completed_target(
+    hub: SessionLiveStreamBroadcaster,
+    session_id: str,
+    event: Any,
+) -> None:
+    kind = _event_type_value(event)
+    payload = _payload_dict(event)
+    if kind == "outline_ready":
+        await hub.retire_target(
+            session_id=session_id,
+            target_type="outline",
+            target_id=session_id,
+        )
+    elif kind == "module_ready":
+        await hub.retire_target(
+            session_id=session_id,
+            target_type="topic",
+            target_id=payload["node_id"],
+            sequence_index=payload.get("sequence_index"),
+        )
+    elif kind == "research_section_ready":
+        await hub.retire_target(
+            session_id=session_id,
+            target_type="research",
+            target_id=payload["report_id"],
+            sequence_index=payload["sequence_index"],
+        )
+
+
+def _draft_relevant(draft: LiveDraftEvent, public: Any) -> bool:
+    if public is None:
+        return False
+    public_id = (
+        public.get("id") if isinstance(public, dict)
+        else getattr(public, "id", None)
+    )
+    if public_id is not None and public_id != draft.job_id:
+        return False
+    stage = _stage_from_public(public)
+    target_type = json.loads(draft.target)[0]
+    if stage in ("PAUSED", "FAILED", "CANCELLED"):
+        return True
+    if target_type == "outline":
+        return stage == "OUTLINING"
+    if target_type == "research":
+        return stage == "RESEARCHING"
+    return stage in (
+        "GENERATING_PREVIEW",
+        "GENERATING_BATCH",
+        "PLANNING_BATCH",
+    )
+
+
 async def stream_session_events(
     *,
     session_id: str,
@@ -421,55 +485,142 @@ async def stream_session_events(
     sleep: Optional[SleepFn] = None,
     heartbeat_seconds: float = 15.0,
     poll_seconds: float = 0.5,
+    broadcaster: Optional[SessionLiveStreamBroadcaster] = None,
 ) -> AsyncIterator[str]:
     """Replay events after cursor, then tail until terminal stage/event.
 
     Never cancels generation tasks or deletes sessions on client disconnect.
     """
-    sleeper: SleepFn = sleep or asyncio.sleep
+    hub = broadcaster or session_live_stream
+    sleeper = sleep or asyncio.sleep
     current = cursor
-    last_heartbeat = asyncio.get_event_loop().time()
-
+    last_heartbeat = asyncio.get_running_loop().time()
+    watermarks: dict[tuple[str, int], int] = {}
+    snapshot_pending = True
+    waiter: Optional[asyncio.Task[LiveDraftEvent]] = None
     try:
-        while True:
-            rows = event_store.list_after(session_id, current, limit=100)
-            if rows:
-                for event in rows:
-                    event_id = int(event.id)
-                    event_type = _event_type_value(event)
-                    public = job_store.to_public_by_session(session_id)
-                    if hasattr(public, "model_dump"):
-                        generation = public.model_dump(mode="json")
-                    else:
-                        generation = public
-                    envelope = {
-                        "id": event_id,
-                        "session_id": session_id,
-                        "event_type": event_type,
-                        "payload": _payload_dict(event),
-                        "generation": generation,
-                        "created_at": _created_at_str(event),
-                    }
-                    yield format_sse_frame(
-                        event_id=event_id,
-                        event_type=event_type,
-                        data=envelope,
+        async with hub.subscribe(session_id) as subscription:
+            while True:
+                rows = event_store.list_after(
+                    session_id, current, limit=100
+                )
+                if rows:
+                    for event in rows:
+                        event_id = int(event.id)
+                        event_type = _event_type_value(event)
+                        public = job_store.to_public_by_session(
+                            session_id
+                        )
+                        generation = (
+                            public.model_dump(mode="json")
+                            if hasattr(public, "model_dump")
+                            else public
+                        )
+                        envelope = {
+                            "id": event_id,
+                            "session_id": session_id,
+                            "event_type": event_type,
+                            "payload": _payload_dict(event),
+                            "generation": generation,
+                            "created_at": _created_at_str(event),
+                        }
+                        yield format_sse_frame(
+                            event_id=event_id,
+                            event_type=event_type,
+                            data=envelope,
+                        )
+                        current = event_id
+                        await _retire_completed_target(
+                            hub, session_id, event
+                        )
+                        if event_type in TERMINAL_EVENT_TYPES:
+                            # Do not lose last output on cancellation;
+                            # emit only retained drafts for the current
+                            # job, then close.
+                            for draft in await hub.snapshots(
+                                session_id
+                            ):
+                                if event_type == "generation_cancelled":
+                                    yield format_live_sse_frame(draft)
+                            await hub.clear_session(session_id)
+                            return
+                    continue
+
+                public = job_store.to_public_by_session(session_id)
+                stage = _stage_from_public(public)
+                if snapshot_pending:
+                    for draft in await hub.snapshots(session_id):
+                        if _draft_relevant(draft, public):
+                            yield format_live_sse_frame(draft)
+                            watermarks[
+                                (draft.target, draft.attempt)
+                            ] = draft.sequence
+                    snapshot_pending = False
+                if stage in TERMINAL_STAGES:
+                    if stage not in ("FAILED", "failed"):
+                        await hub.clear_session(session_id)
+                    return
+
+                # Drain without advancing the durable cursor, even
+                # when polls report a newer last_event_id.
+                if waiter is not None and waiter.done():
+                    draft = waiter.result()
+                    waiter = None
+                    key = (draft.target, draft.attempt)
+                    if draft.sequence > watermarks.get(key, 0):
+                        if _draft_relevant(draft, public):
+                            yield format_live_sse_frame(draft)
+                            watermarks[key] = draft.sequence
+                while not subscription.queue.empty():
+                    draft = subscription.queue.get_nowait()
+                    key = (draft.target, draft.attempt)
+                    if draft.sequence > watermarks.get(key, 0):
+                        if _draft_relevant(draft, public):
+                            yield format_live_sse_frame(draft)
+                            watermarks[key] = draft.sequence
+
+                now = asyncio.get_running_loop().time()
+                if (
+                    heartbeat_seconds <= 0
+                    or now - last_heartbeat >= heartbeat_seconds
+                ):
+                    yield ": keepalive\n\n"
+                    last_heartbeat = now
+                if waiter is None:
+                    waiter = asyncio.create_task(
+                        subscription.next_event()
                     )
-                    current = event_id
-                    if event_type in TERMINAL_EVENT_TYPES:
-                        return
-                continue
-
-            public = job_store.to_public_by_session(session_id)
-            stage = _stage_from_public(public)
-            if stage in TERMINAL_STAGES:
-                return
-
-            now = asyncio.get_event_loop().time()
-            if heartbeat_seconds <= 0 or (now - last_heartbeat) >= heartbeat_seconds:
-                yield ": keepalive\n\n"
-                last_heartbeat = now
-
-            await sleeper(poll_seconds if heartbeat_seconds > 0 else 0)
+                timer = asyncio.create_task(sleeper(
+                    poll_seconds if heartbeat_seconds > 0 else 0,
+                ))
+                try:
+                    done, _ = await asyncio.wait(
+                        {waiter, timer},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if timer in done:
+                        timer.result()
+                    if waiter in done:
+                        draft = waiter.result()
+                        waiter = None
+                        key = (draft.target, draft.attempt)
+                        latest_public = (
+                            job_store.to_public_by_session(session_id)
+                        )
+                        if draft.sequence > watermarks.get(key, 0):
+                            if _draft_relevant(draft, latest_public):
+                                yield format_live_sse_frame(draft)
+                                watermarks[key] = draft.sequence
+                finally:
+                    if not timer.done():
+                        timer.cancel()
+                    await asyncio.gather(
+                        timer, return_exceptions=True
+                    )
     except asyncio.CancelledError:
         return
+    finally:
+        if waiter is not None:
+            if not waiter.done():
+                waiter.cancel()
+            await asyncio.gather(waiter, return_exceptions=True)
