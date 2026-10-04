@@ -30,7 +30,7 @@ USAGE:
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Awaitable, Callable, Literal, Optional
 
 from server.agents.base import BaseAgent
 from server.schemas.learning import (
@@ -41,6 +41,9 @@ from server.schemas.learning import (
     validate_topic_count_for_mode,
 )
 from server.schemas.llm import LLMContext
+from server.utils.instructor_client import (
+    StreamDeltaCallback, StructuredStreamUpdate,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -189,6 +192,10 @@ MODE_TEMPLATES: dict[str, str] = {
 }
 
 
+class OutlineDraftCorrection(ValueError):
+    """Signal a changed provisional outline requiring a whole replan."""
+
+
 class OutlineTopicCountError(ValueError):
     """Raised when course outline topic count is outside mode bounds."""
 
@@ -317,6 +324,13 @@ class PlannerAgent(BaseAgent):
         llm_context: Optional[LLMContext] = None,
         mode: ResolvedDepthMode = "full",
         custom_topic_count: Optional[int] = None,
+        *,
+        on_delta: Optional[StreamDeltaCallback] = None,
+        on_attempt_started: Optional[Callable[
+            [int, Literal["started", "retry", "replan", "correction"]],
+            Awaitable[None],
+        ]] = None,
+        initial_attempt: int = 1,
     ) -> CourseOutline:
         """Generate CourseOutline for query under resolved depth mode.
 
@@ -358,13 +372,41 @@ class PlannerAgent(BaseAgent):
             mode,
         )
 
-        outline = await self.generate(
-            response_model=CourseOutline,
-            user_message=user_message,
-            context=context,
-            llm_context=llm_context,
-            system_prompt_override=system_prompt,
-        )
+        latest_attempt = initial_attempt - 1
+
+        async def call_outline(
+            message: str,
+            reason: Literal["started", "retry", "replan", "correction"],
+        ) -> CourseOutline:
+            nonlocal latest_attempt
+            if on_delta is None and on_attempt_started is None:
+                return await self.generate(
+                    response_model=CourseOutline, user_message=message,
+                    context=context, llm_context=llm_context,
+                    system_prompt_override=system_prompt,
+                )
+            start = latest_attempt + 1
+            if start > 5:
+                raise ResumablePlannerError("Outline attempt budget exhausted")
+
+            async def relay(update: StructuredStreamUpdate) -> None:
+                nonlocal latest_attempt
+                if update.kind == "attempt_started":
+                    latest_attempt = max(latest_attempt, update.attempt)
+                    reset_reason = reason if update.attempt == start else "retry"
+                    if on_attempt_started is not None:
+                        await on_attempt_started(update.attempt, reset_reason)
+                if on_delta is not None:
+                    await on_delta(update)
+
+            return await self.generate_streaming(
+                response_model=CourseOutline, user_message=message,
+                context=context, llm_context=llm_context,
+                system_prompt_override=system_prompt,
+                on_delta=relay, initial_attempt=start,
+            )
+
+        outline = await call_outline(user_message, "started")
 
         if validate_topic_count_for_mode(outline, mode, custom_topic_count):
             logger.info(
@@ -400,13 +442,7 @@ class PlannerAgent(BaseAgent):
             f"topics. You MUST produce {constraint} for {mode} mode. "
             "No fewer, no more. Regenerate the complete outline."
         )
-        outline = await self.generate(
-            response_model=CourseOutline,
-            user_message=replan_message,
-            context=context,
-            llm_context=llm_context,
-            system_prompt_override=system_prompt,
-        )
+        outline = await call_outline(replan_message, "replan")
 
         if validate_topic_count_for_mode(outline, mode, custom_topic_count):
             logger.info(
