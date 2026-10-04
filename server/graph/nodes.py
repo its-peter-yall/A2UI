@@ -41,7 +41,9 @@ from typing import Any, Literal, Optional
 from langgraph.runtime import Runtime
 from langgraph.types import Send
 
-from server.agents.generator import GeneratedContent, generator_agent
+from server.agents.generator import (
+    GeneratedContent, TopicDraftCorrection, generator_agent,
+)
 from server.agents.planner import (
     OutlineDraftCorrection, PlannerAgent, ResumablePlannerError, planner_agent,
 )
@@ -80,6 +82,7 @@ from server.schemas.progress import (
     ProgressEventType,
     ResearchDegradedPayload,
     StageChangedPayload,
+    TopicContentDeltaPayload,
 )
 from server.schemas.generation import GenerationWarning
 from server.schemas.llm import LLMContext
@@ -745,6 +748,61 @@ def fan_out_generators(state: CourseState) -> list[Send]:
     return sends
 
 
+class _TopicLiveOutput:
+    """Invocation-local cumulative explanation buffer for one topic."""
+
+    def __init__(
+        self, session_id: str, job_id: str, node_id: str,
+        sequence_index: int, stage: GenerationStage,
+    ) -> None:
+        self.session_id = session_id
+        self.job_id = job_id
+        self.node_id = node_id
+        self.sequence_index = sequence_index
+        self.stage = stage
+        self.attempt = 0
+        self.raw_markdown = ""
+        self.display_markdown = ""
+
+    async def begin(
+        self, attempt: int,
+        reason: Literal["started", "retry", "replan", "correction"],
+    ) -> None:
+        raise_if_cancel_requested(self.session_id)
+        self.attempt = attempt
+        self.raw_markdown = self.display_markdown = ""
+        await session_live_stream.begin_target(
+            session_id=self.session_id, job_id=self.job_id, stage=self.stage,
+            target_type="topic", target_id=self.node_id,
+            sequence_index=self.sequence_index, attempt=attempt, reason=reason,
+        )
+
+    async def update(self, update: StructuredStreamUpdate) -> None:
+        if update.kind != "partial" or update.attempt != self.attempt:
+            return
+        raise_if_cancel_requested(self.session_id)
+        value = getattr(update.partial, "content_markdown", None)
+        if not isinstance(value, str) or not value:
+            return
+        if not value.startswith(self.raw_markdown):
+            raise TopicDraftCorrection("Explanation display field changed")
+        self.raw_markdown = value
+        safe_value = value
+        suffix = safe_value[len(self.display_markdown):]
+        for offset in range(0, len(suffix), 4000):
+            await session_live_stream.publish(
+                session_id=self.session_id, job_id=self.job_id,
+                stage=self.stage,
+                event_type=ProgressEventType.TOPIC_CONTENT_DELTA,
+                payload=TopicContentDeltaPayload(
+                    node_id=self.node_id, sequence_index=self.sequence_index,
+                    text_delta=suffix[offset:offset + 4000],
+                    attempt=self.attempt,
+                ),
+            )
+        self.display_markdown = safe_value
+
+
 async def generator_node(
     state: GeneratorWorkerState,
     runtime: Any = None,
@@ -778,12 +836,26 @@ async def generator_node(
             generation_artifact_store.get_adjacent_summaries(session_id, seq_idx)
         )
 
+        job_id = _live_job_id(state, session_id)
+        live_output = None
+        live_kwargs: dict[str, Any] = {}
+        if job_id:
+            stage = (GenerationStage.GENERATING_PREVIEW if batch_start == 0
+                     else GenerationStage.GENERATING_BATCH)
+            live_output = _TopicLiveOutput(
+                session_id, job_id, node_id, seq_idx, stage,
+            )
+            live_kwargs = {
+                "on_delta": live_output.update,
+                "on_attempt_started": live_output.begin,
+            }
         content: GeneratedContent = await generator_agent.generate_explanation(
             topic=topic,
             brief=brief,
             prev_summary=prev_summary,
             next_summary=next_summary,
             llm_context=llm_ctx,
+            **live_kwargs,
         )
 
         # M13: transactional content + citation replacement (incl. empty).

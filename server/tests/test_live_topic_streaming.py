@@ -15,6 +15,7 @@ KEY COMPONENTS:
 from __future__ import annotations
 
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock, patch
 
@@ -94,6 +95,148 @@ class LiveGeneratorAgentTests(unittest.IsolatedAsyncioTestCase):
         ])
         self.assertEqual(calls, 3)
         self.assertEqual(result.content_markdown, content().content_markdown)
+
+
+class LiveTopicGraphTests(unittest.IsolatedAsyncioTestCase):
+    async def test_topic_grows_before_content_commit(self):
+        fake = OpenResponse([
+            partial_content(content_markdown="Al"),
+            partial_content(content_markdown="Alpha"),
+        ], content())
+        with LiveHarness() as h, fake_instructor(fake.stream):
+            async with h.hub.subscribe("s") as subscription:
+                task = asyncio.create_task(nodes.generator_node(
+                    h.worker_state(), h.runtime,
+                ))
+                try:
+                    first = await take_type(
+                        subscription, ProgressEventType.TOPIC_CONTENT_DELTA,
+                    )
+                    second = await take_type(
+                        subscription, ProgressEventType.TOPIC_CONTENT_DELTA,
+                    )
+                    self.assertEqual(first.payload.text_delta, "Al")
+                    self.assertEqual(second.payload.text_delta, "pha")
+                    self.assertEqual(second.payload.node_id, "n0")
+                    self.assertEqual(second.payload.sequence_index, 0)
+                    self.assertFalse(task.done())
+                    self.assertFalse(fake.closed.is_set())
+                    self.assertEqual(h.saved, {})
+                    h.events.append_once.assert_not_called()
+                    fake.release.set()
+                    result = await task
+                    self.assertTrue(result["generator_results"][0]
+                                    ["content_ready"])
+                finally:
+                    await dispose(task)
+
+    async def test_interleaved_workers_keep_drafts_isolated(self):
+        a_first = asyncio.Event()
+        b_first = asyncio.Event()
+        a_second = asyncio.Event()
+        both_open = asyncio.Event()
+        release = asyncio.Event()
+
+        async def stream(**kwargs):
+            request = str(kwargs["messages"])
+            if "Topic 0" in request:
+                yield partial_content(content_markdown="Alpha")
+                a_first.set()
+                await b_first.wait()
+                yield partial_content(
+                    content_markdown="Alpha grows",
+                )
+                a_second.set()
+                await release.wait()
+                yield content("Alpha grows. " * 30)
+            else:
+                await a_first.wait()
+                yield partial_content(content_markdown="Beta")
+                b_first.set()
+                await a_second.wait()
+                yield partial_content(
+                    content_markdown="Beta grows",
+                )
+                both_open.set()
+                await release.wait()
+                yield content("Beta grows. " * 30)
+
+        with LiveHarness() as h, fake_instructor(stream):
+            tasks = [asyncio.create_task(nodes.generator_node(
+                h.worker_state(index), h.runtime,
+            )) for index in (0, 1)]
+            try:
+                await asyncio.wait_for(both_open.wait(), 1)
+                snaps = await h.hub.snapshots("s")
+                by_node = {json.loads(s.target)[1]: s for s in snaps}
+                self.assertEqual(by_node["n0"].snapshot.text, "Alpha grows")
+                self.assertEqual(by_node["n1"].snapshot.text, "Beta grows")
+                self.assertTrue(all(not task.done() for task in tasks))
+                self.assertEqual(h.saved, {})
+                release.set()
+                await asyncio.gather(*tasks)
+                self.assertTrue(h.saved["n0"].startswith("Alpha grows"))
+                self.assertTrue(h.saved["n1"].startswith("Beta grows"))
+            finally:
+                for task in tasks:
+                    await dispose(task)
+
+    async def test_correction_resets_only_its_topic(self):
+        from server.schemas.generation import GenerationStage
+        from server.schemas.progress import TopicContentDeltaPayload
+
+        calls = 0
+        async def stream(**kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                yield partial_content(content_markdown="Old")
+                yield partial_content(content_markdown="Changed")
+                self.fail("Non-prefix replacement must close old stream")
+            else:
+                yield content("Correct explanation. " * 20)
+
+        with LiveHarness() as h, fake_instructor(stream):
+            await h.hub.begin_target(
+                session_id="s", job_id="j",
+                stage=GenerationStage.GENERATING_PREVIEW,
+                target_type="topic", target_id="n1",
+                sequence_index=1, attempt=1,
+            )
+            await h.hub.publish(
+                session_id="s", job_id="j",
+                stage=GenerationStage.GENERATING_PREVIEW,
+                event_type=ProgressEventType.TOPIC_CONTENT_DELTA,
+                payload=TopicContentDeltaPayload(
+                    node_id="n1", sequence_index=1, text_delta="Sibling",
+                ),
+            )
+            await nodes.generator_node(h.worker_state(), h.runtime)
+            snaps = await h.hub.snapshots("s")
+            by_node = {json.loads(s.target)[1]: s for s in snaps}
+            self.assertEqual(by_node["n0"].attempt, 2)
+            self.assertTrue(by_node["n0"].snapshot.text.startswith("Correct"))
+            self.assertEqual(by_node["n1"].attempt, 1)
+            self.assertEqual(by_node["n1"].snapshot.text, "Sibling")
+            resets = [args for kind, args in h.hub.events
+                      if kind == "reset" and args["target_id"] == "n0"]
+            self.assertEqual(resets[-1]["reason"], "correction")
+            self.assertEqual(calls, 2)
+
+    async def test_large_suffix_is_split_at_payload_limit(self):
+        async def stream(**kwargs):
+            yield content("a" * 9001)
+
+        with LiveHarness() as h, fake_instructor(stream):
+            await nodes.generator_node(h.worker_state(4, 3), h.runtime)
+            deltas = [args["payload"] for kind, args in h.hub.events
+                      if kind == "live" and args["event_type"] ==
+                      ProgressEventType.TOPIC_CONTENT_DELTA]
+            self.assertEqual([len(p.text_delta) for p in deltas],
+                             [4000, 4000, 1001])
+            self.assertTrue(all(p.node_id == "n4" and p.sequence_index == 4
+                                for p in deltas))
+            self.assertEqual("".join(p.text_delta for p in deltas), "a" * 9001)
 
 
 if __name__ == "__main__":
