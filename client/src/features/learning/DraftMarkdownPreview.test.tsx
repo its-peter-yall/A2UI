@@ -58,4 +58,24 @@ describe('DraftMarkdownPreview', () => {
     );
     expect(screen.getByRole('note')).toHaveTextContent(/offset 1200/i);
   });
+
+  it('renders inline and fenced non-mermaid code plus a className', () => {
+    const { container } = render(
+      <DraftMarkdownPreview
+        className="preview-extra"
+        content={'Use `code` and\n\n```js\nconst x = 1;\n```'}
+      />,
+    );
+    expect(container.firstChild).toHaveClass('preview-extra');
+    expect(screen.getByText('code')).toBeInTheDocument();
+    expect(screen.getByText('const x = 1;')).toBeInTheDocument();
+  });
+
+  it('treats missing and invalid hrefs as non-links and strips unclosed tags', () => {
+    render(
+      <DraftMarkdownPreview content={'[No Href]() and [Bad](not a url) Hello <div'} />,
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText(/hello/i)).toBeInTheDocument();
+  });
 });

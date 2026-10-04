@@ -307,4 +307,181 @@ describe('useSessionEvents', () => {
     ]);
     expect(sessionData?.generation?.last_event_id).toBe(4);
   });
+
+  it('parses live snapshots and ignores malformed live frames', async () => {
+    const onLiveEventSpy = vi.fn();
+    renderHook(
+      () =>
+        useSessionEvents('session-1', {
+          enabled: true,
+          onLiveEvent: onLiveEventSpy,
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
+    const source = FakeEventSource.instances[0];
+
+    act(() => {
+      source.emit('topic_content_delta', '{not-json');
+      source.emit('topic_content_delta', {
+        id: 0,
+        session_id: 'session-1',
+        job_id: 'job-1',
+        stage: 'GENERATING_PREVIEW',
+        target: '["topic","n1",0]',
+        attempt: 1,
+        sequence: 2,
+        event_type: 'topic_content_delta',
+        payload: {
+          node_id: 'n1',
+          sequence_index: 0,
+          text_delta: 'snap',
+          attempt: 1,
+        },
+        snapshot: {
+          text: 'Snapshot body',
+          text_offset: 10,
+          truncated: true,
+          course_title: '',
+          topics: { 0: 'Intro' },
+          explanation_ready: true,
+          unique_source_count: 3,
+          new_sources_count: 1,
+          provider_id: 'tavily',
+        },
+      });
+      source.emit('research_sources_updated', {
+        id: 0,
+        session_id: 'session-1',
+        job_id: 'job-1',
+        stage: 'RESEARCHING',
+        target: '["research","session-1",null]',
+        attempt: 1,
+        sequence: 1,
+        event_type: 'research_sources_updated',
+        payload: {
+          unique_source_count: 2,
+          new_sources_count: 2,
+        },
+      });
+    });
+
+    expect(onLiveEventSpy).toHaveBeenCalledTimes(2);
+    expect(onLiveEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          text: 'Snapshot body',
+          truncated: true,
+          provider_id: 'tavily',
+        }),
+      }),
+    );
+  });
+
+  it('does not open EventSource when options.enabled is false', () => {
+    renderHook(
+      () => useSessionEvents('session-1', { enabled: false }),
+      { wrapper },
+    );
+    expect(FakeEventSource.instances.length).toBe(0);
+  });
+
+  it('accepts generation null, snapshot null, and rejects invalid snapshots', async () => {
+    const onLiveEventSpy = vi.fn();
+    renderHook(
+      () =>
+        useSessionEvents('session-1', {
+          enabled: true,
+          onLiveEvent: onLiveEventSpy,
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(FakeEventSource.instances.length).toBe(1));
+    const source = FakeEventSource.instances[0];
+
+    act(() => {
+      source.emit('stage_changed', {
+        id: 5,
+        session_id: 'session-1',
+        event_type: 'stage_changed',
+        payload: { previous_stage: 'RESEARCHING', stage: 'OUTLINING' },
+        generation: null,
+        created_at: 123,
+      });
+      source.emit('stage_changed', {
+        id: 6,
+        session_id: 'session-1',
+        event_type: 'stage_changed',
+        payload: { previous_stage: 'OUTLINING', stage: 'PLANNING_PREVIEW' },
+        generation: { session_id: 'session-1' },
+      });
+      source.emit('outline_text_delta', {
+        id: 0,
+        session_id: 'session-1',
+        job_id: 'job-1',
+        stage: 'OUTLINING',
+        target: '["outline","session-1",null]',
+        attempt: 1,
+        sequence: 3,
+        event_type: 'outline_text_delta',
+        payload: { course_title_delta: 'AI', attempt: 1 },
+        snapshot: null,
+      });
+      source.emit('outline_text_delta', {
+        id: 0,
+        session_id: 'session-1',
+        job_id: 'job-1',
+        stage: 'OUTLINING',
+        target: '["outline","session-1",null]',
+        attempt: 1,
+        sequence: 4,
+        event_type: 'outline_text_delta',
+        payload: { course_title_delta: 'AI', attempt: 1 },
+        snapshot: { text: 1 },
+      });
+      source.emit('research_sources_updated', {
+        id: 0,
+        session_id: 'session-1',
+        job_id: 'job-1',
+        stage: 'RESEARCHING',
+        target: '["research","session-1",null]',
+        attempt: 1,
+        sequence: 5,
+        event_type: 'research_sources_updated',
+        payload: {
+          unique_source_count: 1,
+          new_sources_count: 1,
+          provider_id: null,
+        },
+        snapshot: {
+          text: '',
+          text_offset: 0,
+          truncated: false,
+          course_title: '',
+          topics: { 0: 'Intro', 1: 2 },
+          explanation_ready: false,
+          unique_source_count: null,
+          new_sources_count: null,
+          provider_id: null,
+        },
+      });
+    });
+
+    expect(onLiveEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ snapshot: null }),
+    );
+    expect(onLiveEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          unique_source_count: null,
+          provider_id: null,
+        }),
+      }),
+    );
+    const data = client.getQueryData<LearningSessionWithNodes>([
+      'learningSession',
+      'session-1',
+    ]);
+    expect(data?.generation?.last_event_id).toBe(6);
+  });
 });
