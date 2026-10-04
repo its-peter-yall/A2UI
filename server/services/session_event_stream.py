@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -137,9 +138,15 @@ class _DraftEntry:
 
 
 class LiveSubscription:
-    def __init__(self, snapshots: list[LiveDraftEvent]) -> None:
+    def __init__(
+        self,
+        snapshots: list[LiveDraftEvent],
+        limit: int,
+    ) -> None:
         self.snapshots = snapshots
-        self.queue: asyncio.Queue[LiveDraftEvent] = asyncio.Queue()
+        self.queue: asyncio.Queue[LiveDraftEvent] = asyncio.Queue(
+            maxsize=limit
+        )
 
     async def next_event(self) -> LiveDraftEvent:
         return await self.queue.get()
@@ -149,7 +156,18 @@ class LiveSubscription:
         event: LiveDraftEvent,
         snapshots: list[LiveDraftEvent],
     ) -> None:
-        self.queue.put_nowait(event)
+        if self.queue.full():
+            while not self.queue.empty():
+                self.queue.get_nowait()
+            # All active targets must survive mailbox compaction. With
+            # ordinary limits, <=52 live targets fit in the default 64
+            # slots.
+            if len(snapshots) > self.queue.maxsize:
+                self.queue = asyncio.Queue(maxsize=len(snapshots))
+            for snapshot in snapshots:
+                self.queue.put_nowait(snapshot)
+        else:
+            self.queue.put_nowait(event)
 
 
 def _target_key(
@@ -189,12 +207,15 @@ class SessionLiveStreamBroadcaster:
         max_draft_bytes: int = 96_000,
         subscriber_limit: int = 64,
     ) -> None:
+        if max_draft_bytes <= 0 or subscriber_limit <= 0:
+            raise ValueError("Live stream bounds must be positive")
         self._max_draft_bytes = max_draft_bytes
         self._subscriber_limit = subscriber_limit
         self._lock = asyncio.Lock()
         self._entries: dict[tuple[str, str], _DraftEntry] = {}
         self._subscribers: dict[str, set[LiveSubscription]] = {}
         self._jobs: dict[str, str] = {}
+        self._touched: dict[str, float] = {}
 
     def _snapshots_locked(
         self, session_id: str
@@ -217,6 +238,66 @@ class SessionLiveStreamBroadcaster:
                 event, self._snapshots_locked(session_id)
             )
 
+    def _expire_locked(self) -> None:
+        now = time.monotonic()
+        expired = [
+            session for session, touched in self._touched.items()
+            if now - touched > 1800
+            and not self._subscribers.get(session)
+        ]
+        for session in expired:
+            for key in list(self._entries):
+                if key[0] == session:
+                    del self._entries[key]
+            self._jobs.pop(session, None)
+            self._touched.pop(session, None)
+
+    def _trim_locked(self, session_id: str) -> set[str]:
+        entries = [
+            entry for (session, _), entry in self._entries.items()
+            if session == session_id
+        ]
+
+        def size(entry: _DraftEntry) -> int:
+            draft = entry.draft
+            return (
+                len(draft.text.encode("utf-8"))
+                + len(draft.course_title.encode("utf-8"))
+                + sum(
+                    len(text.encode("utf-8"))
+                    for text in draft.topics.values()
+                )
+            )
+
+        excess = (
+            sum(size(entry) for entry in entries)
+            - self._max_draft_bytes
+        )
+        changed: list[str] = []
+        while excess > 0:
+            entry = max(
+                entries,
+                key=lambda item: len(item.draft.text),
+                default=None,
+            )
+            if entry is None or not entry.draft.text:
+                raise ValueError(
+                    "Outline display fields exceed draft capacity"
+                )
+            removed_bytes = 0
+            removed_chars = 0
+            for char in entry.draft.text:
+                removed_bytes += len(char.encode("utf-8"))
+                removed_chars += 1
+                if removed_bytes >= excess:
+                    break
+            entry.draft.text = entry.draft.text[removed_chars:]
+            entry.draft.text_offset += removed_chars
+            entry.draft.truncated = True
+            excess -= removed_bytes
+            changed.append(entry.event.target)
+        return set(changed)
+
     def _replace_job_locked(
         self, session_id: str, job_id: str
     ) -> None:
@@ -231,8 +312,10 @@ class SessionLiveStreamBroadcaster:
         self, session_id: str
     ) -> AsyncIterator[LiveSubscription]:
         async with self._lock:
+            self._expire_locked()
             subscriber = LiveSubscription(
-                self._snapshots_locked(session_id)
+                self._snapshots_locked(session_id),
+                self._subscriber_limit,
             )
             self._subscribers.setdefault(session_id, set()).add(
                 subscriber
@@ -250,6 +333,7 @@ class SessionLiveStreamBroadcaster:
         self, session_id: str
     ) -> list[LiveDraftEvent]:
         async with self._lock:
+            self._expire_locked()
             return self._snapshots_locked(session_id)
 
     async def retire_target(
@@ -271,6 +355,7 @@ class SessionLiveStreamBroadcaster:
                 if key[0] == session_id:
                     del self._entries[key]
             self._jobs.pop(session_id, None)
+            self._touched.pop(session_id, None)
 
     async def begin_target(
         self,
@@ -295,10 +380,16 @@ class SessionLiveStreamBroadcaster:
         )
         target = _target_key(target_type, target_id, sequence_index)
         async with self._lock:
+            self._expire_locked()
             self._replace_job_locked(session_id, job_id)
             old = self._entries.get((session_id, target))
             if old is not None and old.event.attempt >= attempt:
                 return
+            if old is None and sum(
+                1 for session, _ in self._entries
+                if session == session_id
+            ) >= 52:
+                raise ValueError("Live target capacity exceeded")
             event = LiveDraftEvent(
                 session_id=session_id,
                 job_id=job_id,
@@ -310,6 +401,7 @@ class SessionLiveStreamBroadcaster:
                 payload=payload,
             )
             self._entries[(session_id, target)] = _DraftEntry(event)
+            self._touched[session_id] = time.monotonic()
             self._broadcast_locked(session_id, event)
 
     async def publish(
@@ -346,6 +438,7 @@ class SessionLiveStreamBroadcaster:
         )
         target = _target_key(kind, target_id, index)
         async with self._lock:
+            self._expire_locked()
             self._replace_job_locked(session_id, job_id)
             key = (session_id, target)
             old = self._entries.get(key)
@@ -358,6 +451,11 @@ class SessionLiveStreamBroadcaster:
                 raise ValueError(
                     "Begin the target before publishing text"
                 )
+            if old is None and sum(
+                1 for session, _ in self._entries
+                if session == session_id
+            ) >= 52:
+                raise ValueError("Live target capacity exceeded")
             if old is not None and attempt < old.event.attempt:
                 return
             if old is not None and attempt != old.event.attempt:
@@ -388,11 +486,14 @@ class SessionLiveStreamBroadcaster:
                 draft.text += payload.text_delta
             elif event_type == ProgressEventType.OUTLINE_TEXT_DELTA:
                 draft.course_title += payload.course_title_delta or ""
+                if len(draft.course_title) > 300:
+                    draft.course_title = draft.course_title[:300]
                 if payload.topic_index is not None:
-                    draft.topics[payload.topic_index] = (
+                    title = (
                         draft.topics.get(payload.topic_index, "")
                         + payload.topic_title_delta
                     )
+                    draft.topics[payload.topic_index] = title[:300]
             elif event_type == (
                 ProgressEventType.TOPIC_EXPLANATION_READY
             ):
@@ -406,7 +507,34 @@ class SessionLiveStreamBroadcaster:
                 draft.new_sources_count = payload.new_sources_count
                 draft.provider_id = payload.provider_id
             self._entries[key] = _DraftEntry(event, draft)
-            self._broadcast_locked(session_id, event)
+            changed = self._trim_locked(session_id)
+            self._touched[session_id] = time.monotonic()
+            for changed_target in changed:
+                changed_entry = self._entries[
+                    (session_id, changed_target)
+                ]
+                if changed_target != target:
+                    changed_entry.event = (
+                        changed_entry.event.model_copy(
+                            deep=True,
+                            update={
+                                "sequence": (
+                                    changed_entry.event.sequence + 1
+                                ),
+                            },
+                        )
+                    )
+                replacement = changed_entry.event.model_copy(
+                    deep=True,
+                    update={
+                        "snapshot": changed_entry.draft.model_copy(
+                            deep=True
+                        ),
+                    },
+                )
+                self._broadcast_locked(session_id, replacement)
+            if target not in changed:
+                self._broadcast_locked(session_id, event)
 
 
 session_live_stream = SessionLiveStreamBroadcaster()
