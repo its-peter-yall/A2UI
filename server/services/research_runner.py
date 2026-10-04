@@ -70,6 +70,7 @@ from server.search.source_safety import (
     deduplicate_results,
     format_untrusted_sources,
 )
+from server.graph.runner import GenerationCancelled
 from server.search.types import (
     AllProvidersUnavailable,
     NormalizedSearchResult,
@@ -781,37 +782,62 @@ class ResearchRunner:
                     ),
                 )
                 initial_attempt = 1
-                while True:
-                    try:
-                        draft = await self._agent.synthesize_iteration(
-                            query=query,
-                            plan=plan,
-                            coverage=coverage,
-                            untrusted_source_context=untrusted,
-                            llm_context=llm_context,
-                            target_theme=target_theme,
-                            budget_context=budget_context,
-                            uncovered_themes=uncovered,
-                            on_delta=display.on_delta,
-                            initial_attempt=initial_attempt,
-                        )
-                        break
-                    except Exception as exc:
-                        cause = _stream_failure_cause(exc)
-                        if not isinstance(
-                            cause, _ResearchDraftCorrection
-                        ):
-                            raise
-                        if display.attempt >= 5:
-                            raise ValueError(
-                                "Research streaming correction limit"
-                            ) from None
-                        ledger.reserve_llm_turn()
-                        initial_attempt = display.attempt + 1
-                        display = display.new_correction()
-                        budget_context = format_budget_for_prompt(
-                            ledger.remaining_snapshot()
-                        )
+                try:
+                    while True:
+                        try:
+                            draft = (
+                                await self._agent.synthesize_iteration(
+                                    query=query,
+                                    plan=plan,
+                                    coverage=coverage,
+                                    untrusted_source_context=untrusted,
+                                    llm_context=llm_context,
+                                    target_theme=target_theme,
+                                    budget_context=budget_context,
+                                    uncovered_themes=uncovered,
+                                    on_delta=display.on_delta,
+                                    initial_attempt=initial_attempt,
+                                )
+                            )
+                            break
+                        except Exception as exc:
+                            cause = _stream_failure_cause(exc)
+                            if isinstance(
+                                cause,
+                                (
+                                    ResearchCancelled,
+                                    GenerationCancelled,
+                                ),
+                            ):
+                                raise cause
+                            if not isinstance(
+                                cause, _ResearchDraftCorrection
+                            ):
+                                raise
+                            if display.attempt >= 5:
+                                raise ValueError(
+                                    "Research streaming "
+                                    "correction limit"
+                                ) from None
+                            ledger.reserve_llm_turn()
+                            initial_attempt = display.attempt + 1
+                            display = display.new_correction()
+                            budget_context = format_budget_for_prompt(
+                                ledger.remaining_snapshot()
+                            )
+                except (ResearchCancelled, GenerationCancelled):
+                    raise
+                except Exception as exc:
+                    cause = _stream_failure_cause(exc)
+                    if isinstance(
+                        cause,
+                        (ResearchCancelled, GenerationCancelled),
+                    ):
+                        raise cause
+                    self._note_stream_unavailable(
+                        session_id, warnings, cause,
+                    )
+                    raise
                 self._ensure_not_cancelled(session_id)
                 if target_theme:
                     draft = draft.model_copy(
@@ -962,7 +988,7 @@ class ResearchRunner:
                 pending_queries=pending_queries,
                 completed_themes=completed_themes,
             )
-        except ResearchCancelled:
+        except (ResearchCancelled, GenerationCancelled):
             if ledger is not None:
                 cancel_cursor = ledger.to_cursor(
                     iteration=iteration,
@@ -1055,8 +1081,17 @@ class ResearchRunner:
                 or [f"Stopped at budget limit: {exc.limit_name}."],
                 freshness_note="Retrieval time recorded at run end.",
             )
+        except (ResearchCancelled, GenerationCancelled):
+            raise
         except Exception as exc:
-            logger.warning("finalize_report failed: %s", type(exc).__name__)
+            cause = _stream_failure_cause(exc)
+            if isinstance(
+                cause, (ResearchCancelled, GenerationCancelled)
+            ):
+                raise cause
+            self._note_stream_unavailable(
+                session_id, warnings, cause,
+            )
             final = ResearchFinalization(
                 summary="Research ended with limited synthesis.",
                 limitations=limitations
@@ -1151,7 +1186,19 @@ class ResearchRunner:
                     return corrected, display
                 display.stopped = True
                 draft = corrected
-            except Exception:
+            except (ResearchCancelled, GenerationCancelled):
+                raise
+            except Exception as exc:
+                cause = _stream_failure_cause(exc)
+                if isinstance(
+                    cause,
+                    (ResearchCancelled, GenerationCancelled),
+                ):
+                    raise cause
+                logger.warning(
+                    "Source-id correction failed (%s)",
+                    type(cause).__name__,
+                )
                 display.stopped = True
         cleaned_ids = [
             sid for sid in draft.source_ids if sid in allowed_ids
@@ -1315,6 +1362,24 @@ class ResearchRunner:
                 type(exc).__name__,
                 session_id,
             )
+
+    def _note_stream_unavailable(
+        self,
+        session_id: str,
+        warnings: list[GenerationWarning],
+        cause: BaseException,
+    ) -> None:
+        logger.warning(
+            "Research streaming unavailable (%s)",
+            type(cause).__name__,
+        )
+        warning = GenerationWarning(
+            code="research_stream_unavailable",
+            message="Live research output is unavailable.",
+        )
+        if not any(w.code == warning.code for w in warnings):
+            warnings.append(warning)
+            self._emit_degraded(session_id, warning)
 
     def _emit_degraded(
         self,

@@ -436,6 +436,151 @@ class LiveResearchStreamingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(counts, [1])
                 stores.research.upsert_section.assert_called_once()
 
+    async def test_callback_cancel_is_unwrapped_and_never_degraded(self):
+        from server.services.research_runner import ResearchCancelled
+        from server.utils.instructor_client import StreamCallbackError
+
+        runner, agent, stores, coordinator, args = make_fixture()
+
+        async def synthesize(**kwargs):
+            cb = kwargs["on_delta"]
+            await cb(StructuredStreamUpdate("attempt_started", 1))
+            stores.jobs.is_cancel_requested.return_value = True
+            try:
+                await cb(StructuredStreamUpdate("partial", 1,
+                    ResearchIteration.model_construct(
+                        section_markdown="Must never publish")))
+            except ResearchCancelled as exc:
+                raise StreamCallbackError("Streaming display callback failed") \
+                    from exc
+
+        agent.synthesize_iteration.side_effect = synthesize
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            with self.assertRaises(ResearchCancelled):
+                await runner.run(**args)
+            drafts = await hub.snapshots(args["session_id"])
+            self.assertTrue(all(not e.snapshot.text for e in drafts))
+            stores.research.mark_degraded.assert_not_called()
+            stores.research.upsert_section.assert_not_called()
+            agent.finalize_report.assert_not_awaited()
+            stores.jobs.update_cursor.assert_called()
+
+    async def test_domain_cancel_escapes_correction_and_finalization(self):
+        from server.graph.runner import GenerationCancelled
+        from server.services.research_runner import ResearchCancelled
+
+        for method in ("correct_source_ids", "finalize_report"):
+            for error in (ResearchCancelled("cancel"),
+                          GenerationCancelled("session-1")):
+                with self.subTest(method=method, error=type(error).__name__):
+                    runner, agent, stores, coordinator, args = make_fixture()
+                    agent.synthesize_iteration.return_value = ResearchIteration(
+                        theme="fundamentals", section_markdown="Evidence",
+                        source_ids=["unknown"] if method == "correct_source_ids"
+                        else [],
+                    )
+                    getattr(agent, method).side_effect = error
+                    hub = SessionLiveStreamBroadcaster()
+                    with patch(
+                        "server.services.research_runner.session_live_stream", hub,
+                    ):
+                        with self.assertRaises(type(error)):
+                            await runner.run(**args)
+                    if method == "correct_source_ids":
+                        stores.research.upsert_section.assert_not_called()
+                    stores.research.finalize_report.assert_not_called()
+                    warnings = [c.kwargs["payload"].warning.code
+                                for c in stores.events.append_once.call_args_list
+                                if c.kwargs["event_type"]
+                                == ProgressEventType.RESEARCH_DEGRADED]
+                    # Insufficient coverage was recorded before finalization;
+                    # cancellation must not add a streaming/fallback warning.
+                    self.assertTrue(all(code == "research_incomplete"
+                                        for code in warnings))
+
+    async def test_unexpected_stream_failure_has_safe_warning_no_ready(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+        agent.synthesize_iteration.side_effect = RuntimeError(
+            "provider response Authorization: secret-in-body"
+        )
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            with self.assertLogs("server.services.research_runner", "WARNING") \
+                    as logs:
+                with self.assertRaises(RuntimeError):
+                    await runner.run(**args)
+            wire = json.dumps([c.kwargs["payload"].model_dump(mode="json")
+                               for c in stores.events.append_once.call_args_list])
+            self.assertIn("research_stream_unavailable", wire)
+            self.assertNotIn("secret-in-body", wire)
+            self.assertNotIn("secret-in-body", " ".join(logs.output))
+            stores.research.upsert_section.assert_not_called()
+
+    async def test_finalization_failure_keeps_fixed_safe_fallback(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+        agent.finalize_report.side_effect = RuntimeError("unsafe-key-body")
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            outcome = await runner.run(**args)
+        self.assertTrue(outcome.report_id)
+        saved = stores.research.finalize_report.call_args.kwargs
+        self.assertEqual(saved["summary"],
+                         "Research ended with limited synthesis.")
+        wire = json.dumps([c.kwargs["payload"].model_dump(mode="json")
+                           for c in stores.events.append_once.call_args_list])
+        self.assertIn("research_stream_unavailable", wire)
+        self.assertNotIn("unsafe-key-body", wire)
+
+    async def test_provider_exhaustion_never_claims_live_text(self):
+        from server.search.types import AllProvidersUnavailable
+        from server.schemas.research import ResearchStatus
+        runner, agent, stores, coordinator, args = make_fixture()
+        coordinator.search.side_effect = AllProvidersUnavailable(
+            provider_ids=(SearchProviderId.TAVILY,))
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            outcome = await runner.run(**args)
+            self.assertEqual(outcome.status, ResearchStatus.DEGRADED)
+            agent.synthesize_iteration.assert_not_awaited()
+            stores.research.mark_degraded.assert_called_once()
+            self.assertFalse(any(e.snapshot.text for e in
+                                 await hub.snapshots(args["session_id"])))
+
+    async def test_async_task_cancel_keeps_preview_and_stops_publication(self):
+        runner, agent, stores, coordinator, args = make_fixture()
+        entered, closed = asyncio.Event(), asyncio.Event()
+
+        async def synthesize(**kwargs):
+            try:
+                cb = kwargs["on_delta"]
+                await cb(StructuredStreamUpdate("attempt_started", 1))
+                await cb(StructuredStreamUpdate("partial", 1,
+                    ResearchIteration.model_construct(section_markdown="Preview ")))
+                entered.set()
+                await asyncio.Event().wait()
+            finally:
+                closed.set()
+
+        agent.synthesize_iteration.side_effect = synthesize
+        hub = SessionLiveStreamBroadcaster()
+        with patch("server.services.research_runner.session_live_stream", hub):
+            task = asyncio.create_task(runner.run(**args))
+            try:
+                await asyncio.wait_for(entered.wait(), 0.5)
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
+                self.assertTrue(closed.is_set())
+                drafts = await hub.snapshots(args["session_id"])
+                self.assertTrue(any(e.snapshot.text == "Preview " for e in drafts))
+                stores.research.upsert_section.assert_not_called()
+                agent.finalize_report.assert_not_awaited()
+            finally:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
 
 if __name__ == "__main__":
     unittest.main()
