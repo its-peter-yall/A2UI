@@ -152,8 +152,7 @@ export function LearningPathContainer({
 	const tocOpen = isTOCOpenProp ?? isTOCOpen;
 	const openTOC = onOpenTOC ?? (() => setIsTOCOpen(true));
 	const closeTOC = onCloseTOC ?? (() => setIsTOCOpen(false));
-	const userNavigatedRef = useRef(false);
-	const autoRevealedRef = useRef(false);
+	const [userNavigated, setUserNavigated] = useState(false);
 	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
 	const [prefillMessage, setPrefillMessage] = useState<string>("");
 	// Stable nodeId for chat — only updates when user explicitly opens chat,
@@ -558,7 +557,7 @@ export function LearningPathContainer({
 		(index: number, userInitiated = true) => {
 			if (!session) return;
 			if (userInitiated) {
-				userNavigatedRef.current = true;
+				setUserNavigated(true);
 			}
 			const clampedIndex = Math.max(
 				0,
@@ -582,26 +581,29 @@ export function LearningPathContainer({
 		[session, carouselState.currentIndex, activeSessionKey],
 	);
 
-	useEffect(() => {
-		const stage = session?.generation?.stage;
-		if (
-			stage !== "GENERATING_PREVIEW" ||
-			userNavigatedRef.current ||
-			autoRevealedRef.current ||
-			(session?.nodes.length ?? 0) === 0
-		) {
-			return;
-		}
-		autoRevealedRef.current = true;
-		if (carouselState.currentIndex !== 0) {
-			goToSlide(0, false);
-		}
-	}, [
-		carouselState.currentIndex,
-		goToSlide,
-		session?.generation?.stage,
-		session?.nodes.length,
-	]);
+	// When GENERATING_PREVIEW begins, reveal topic 0 once unless the learner
+	// already moved the carousel. Adjust during render (not an effect) so
+	// manual navigation is never stolen by a delayed setState.
+	if (
+		session?.generation?.stage === "GENERATING_PREVIEW" &&
+		!userNavigated &&
+		carouselState.currentIndex !== 0 &&
+		session.nodes.length > 0
+	) {
+		setCarouselStateBySession((prev) => {
+			const currentIndex = prev[activeSessionKey]?.currentIndex ?? 0;
+			if (currentIndex === 0) {
+				return prev;
+			}
+			return {
+				...prev,
+				[activeSessionKey]: {
+					currentIndex: 0,
+					direction: -1,
+				},
+			};
+		});
+	}
 
 	const goToNext = useCallback(() => {
 		goToSlide(carouselState.currentIndex + 1);
