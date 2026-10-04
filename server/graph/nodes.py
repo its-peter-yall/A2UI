@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections import namedtuple
 from typing import Any, Literal, Optional
 
@@ -412,6 +413,88 @@ async def researcher_node(
     }
 
 
+def _live_secrets(context: LLMContext) -> tuple[str, ...]:
+    """Extract request credentials solely for invocation-local redaction."""
+    values = (
+        context.api_key, context.openrouter_api_key,
+        context.generalcompute_api_key,
+    )
+    return tuple(value.get_secret_value() for value in values
+                 if value is not None and value.get_secret_value())
+
+
+def _redact_live_secrets(text: str, secrets: tuple[str, ...]) -> str:
+    for secret in sorted(set(secrets), key=len, reverse=True):
+        if secret:
+            text = text.replace(secret, "[redacted]")
+    # A prefix of a secret at the open right edge cannot be published yet.
+    hold = 0
+    for secret in secrets:
+        for size in range(1, min(len(secret), len(text)) + 1):
+            if text.endswith(secret[:size]):
+                hold = max(hold, size)
+    return text[:-hold] if hold else text
+
+
+_LIVE_SCHEMES = (
+    "http://", "https://", "javascript:", "data:", "vbscript:",
+)
+_LIVE_SCHEME_TOKEN = re.compile(r"[a-z][a-z0-9+.-]*:", re.IGNORECASE)
+
+
+def _safe_live_display(
+    text: str, *, secrets: tuple[str, ...],
+    approved_source_ids: set[str],
+) -> str:
+    text = _redact_live_secrets(text, secrets)
+    parts: list[str] = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        bracket = index + 1 if text.startswith("![", index) else index
+        if text[bracket:bracket + 1] == "[":
+            close = text.find("]", bracket + 1)
+            if close < 0:
+                break
+            token = text[bracket:close + 1]
+            next_index = close + 1
+            if text[next_index:next_index + 1] == "(":
+                destination_end = text.find(")", next_index + 1)
+                if destination_end < 0:
+                    break
+                index = destination_end + 1
+                continue
+            if token == "[redacted]":
+                parts.append(token)
+            elif token.startswith("[source:"):
+                source_id = token[len("[source:"):-1]
+                if source_id in approved_source_ids:
+                    parts.append(token)
+            index = next_index
+            continue
+        if char == "<":
+            close = text.find(">", index + 1)
+            if close < 0:
+                break
+            index = close + 1
+            continue
+        boundary = index == 0 or not (
+            text[index - 1].isalnum() or text[index - 1] in "_-"
+        )
+        if boundary:
+            remaining = text[index:].lower()
+            if any(scheme.startswith(remaining) for scheme in _LIVE_SCHEMES):
+                break
+            if _LIVE_SCHEME_TOKEN.match(text, index):
+                # Suppress the entire growing destination, including query.
+                while index < len(text) and not text[index].isspace():
+                    index += 1
+                continue
+        parts.append(char)
+        index += 1
+    return "".join(parts)
+
+
 def _live_job_id(state: dict[str, Any], session_id: str) -> Optional[str]:
     """Resolve a real generation job while retaining legacy node behavior."""
     job_id = state.get("job_id")
@@ -426,10 +509,13 @@ def _live_job_id(state: dict[str, Any], session_id: str) -> Optional[str]:
 class _OutlineLiveOutput:
     """Invocation-local raw and display buffers for the outline target."""
 
-    def __init__(self, session_id: str, job_id: str) -> None:
+    def __init__(
+        self, session_id: str, job_id: str, secrets: tuple[str, ...],
+    ) -> None:
         self.session_id = session_id
         self.job_id = job_id
         self.attempt = 0
+        self.secrets = secrets
         self.raw_title = ""
         self.raw_topics: dict[int, str] = {}
         self.display_title = ""
@@ -459,9 +545,13 @@ class _OutlineLiveOutput:
                     else self.raw_topics.get(index, ""))
         if not value.startswith(previous):
             raise OutlineDraftCorrection("Outline display field changed")
-        display = value[:300]
+        display = _safe_live_display(
+            value, secrets=self.secrets, approved_source_ids=set(),
+        )[:300]
         old_display = (self.display_title if index is None
                        else self.display_topics.get(index, ""))
+        if not display.startswith(old_display):
+            raise OutlineDraftCorrection("Outline safe display changed")
         suffix = display[len(old_display):]
         if index is None:
             self.raw_title, self.display_title = value, display
@@ -521,7 +611,8 @@ async def outline_planner_node(
     logger.info("Generating TOC outline for session %s (mode=%s)", session_id, mode)
     job_id = _live_job_id(state, session_id)
     live_output = (
-        _OutlineLiveOutput(session_id, job_id) if job_id else None
+        _OutlineLiveOutput(session_id, job_id, _live_secrets(llm_ctx))
+        if job_id else None
     )
     live_kwargs: dict[str, Any] = {}
     if live_output is not None:
@@ -755,12 +846,15 @@ class _TopicLiveOutput:
     def __init__(
         self, session_id: str, job_id: str, node_id: str,
         sequence_index: int, stage: GenerationStage,
+        secrets: tuple[str, ...], approved_source_ids: set[str],
     ) -> None:
         self.session_id = session_id
         self.job_id = job_id
         self.node_id = node_id
         self.sequence_index = sequence_index
         self.stage = stage
+        self.secrets = secrets
+        self.approved_source_ids = approved_source_ids
         self.attempt = 0
         self.raw_markdown = ""
         self.display_markdown = ""
@@ -788,7 +882,12 @@ class _TopicLiveOutput:
         if not value.startswith(self.raw_markdown):
             raise TopicDraftCorrection("Explanation display field changed")
         self.raw_markdown = value
-        safe_value = value
+        safe_value = _safe_live_display(
+            value, secrets=self.secrets,
+            approved_source_ids=self.approved_source_ids,
+        )
+        if not safe_value.startswith(self.display_markdown):
+            raise TopicDraftCorrection("Explanation safe display changed")
         suffix = safe_value[len(self.display_markdown):]
         for offset in range(0, len(suffix), 4000):
             await session_live_stream.publish(
@@ -845,6 +944,8 @@ async def generator_node(
                      else GenerationStage.GENERATING_BATCH)
             live_output = _TopicLiveOutput(
                 session_id, job_id, node_id, seq_idx, stage,
+                _live_secrets(llm_ctx),
+                set(brief.approved_source_ids) if brief else set(),
             )
             live_kwargs = {
                 "on_delta": live_output.update,
