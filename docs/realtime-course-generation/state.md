@@ -6,7 +6,7 @@ skipped_phases: [review]
 goal_status: approved
 design_status: approved
 dag_status: provisional-awaiting-research
-current_phase: technical-research
+current_phase: planning
 resume_gate: cleared-2026-10-04-user-approved-and-asked-to-proceed
 pause_reason: none; user approved the written goal and authorized proceeding
 created: 2026-10-04
@@ -35,8 +35,8 @@ updated: 2026-10-04
 ## Workflow milestones
 
 - [x] Step 1: Brainstorming & Goal Alignment (goal committed 33df5dc; approved by user)
-- [ ] Step 2: Technical Research (`docs/realtime-course-generation/research.md`; in progress)
-- [ ] Step 3: Planning Completed (all detailed plan files; provisional DAG below only)
+- [x] Step 2: Technical Research (`docs/realtime-course-generation/research.md`, commit dea0894; reconciled above)
+- [ ] Step 3: Planning Completed (all detailed plan files; P1 planner dispatching, then P2/P3/P4 in parallel)
 - [ ] Step 4: Execution Completed (all workers finished and committed)
 - [x] Step 5: Unified Code Review (Skipped via --skip review; no reviewer dispatch)
 - [ ] Step 6: Final Verification & Report (`docs/realtime-course-generation/final_report.md`)
@@ -74,18 +74,58 @@ updated: 2026-10-04
   rendering are risks identified in the specs; design bounded live updates.
 - User workspace was clean at initial inspection; preserve any subsequent user work.
 
-## Dependency matrix and execution status
+## Research reconciliation (research.md, commit dea0894)
 
-This is a fully populated **provisional** decomposition, not a completed set of
-implementation plans. Research may refine ownership/dependencies before dispatch.
+Fixed decisions every planner and worker must treat as given:
+
+1. **Streaming mechanism.** `instructor` 1.15.4 `create_partial` over the existing
+   `AsyncOpenAI` client, `mode=instructor.Mode.JSON`, exactly one LLM call per
+   attempt, full Pydantic validation on the final chunk. No duplicate display call.
+2. **Graph runtime unchanged.** `graph.ainvoke` is preserved. Node functions stream
+   internally and publish deltas. Checkpointing, 15s heartbeat, `Send` fan-out at
+   concurrency 3, batch barriers, and cancellation stay intact.
+3. **Delivery.** An in-process `SessionLiveStreamBroadcaster` in
+   `server/services/session_event_stream.py` pushes deltas directly to connected
+   SSE clients. No database write per token. Only existing durable milestone
+   events continue through the repository facades.
+4. **Reconnect/refresh.** The broadcaster retains the latest accumulated draft per
+   `(session_id, target, attempt)`. A reconnecting or refreshed client receives a
+   current-draft snapshot and then resumes deltas. This is required, not optional.
+5. **Dual cursors.** Durable milestone `last_event_id` and a target-scoped draft
+   `sequence` advance independently. A newer job snapshot watermark must never
+   suppress or duplicate in-flight draft deltas.
+6. **New event types** (payload models with `extra="forbid"`):
+   `research_sources_updated`, `research_text_delta`, `outline_text_delta`,
+   `topic_content_delta`, `topic_explanation_ready`, `target_draft_reset`.
+   Attempt-scoped reset on retry/replan replaces only that target's draft.
+7. **Client isolation.** Drafts live in a dedicated `useGenerationDrafts` hook, not
+   in the TanStack Query cache per token. The cache updates only on milestone events.
+8. **Overlay FSM.** `RESEARCHING` auto-opens Sources when web search is enabled;
+   `OUTLINING` closes Sources and opens TOC; `OUTLINE_READY`/`GENERATING_PREVIEW`
+   closes TOC and hydrates skeletons. Per-attempt manual-dismissal override
+   suppresses auto-reopen for that attempt only.
+9. **Partial markdown safety.** New `DraftMarkdownPreview` suppresses eager Mermaid
+   and sanitizes unclosed tags during streaming.
+10. **No stack deviation, no new dependency.** Verified against installed versions.
+
+Goal alignment notes:
+
+- A15 is satisfied through milestone persistence and draft-cursor semantics verified
+  against both SQLite and Mongo repository implementations. Draft deltas are
+  deliberately in-process and are not persisted; this is an accepted, documented
+  consequence of the no-write-amplification constraint.
+- A3/A5/A6 must be proven by controllable provider fixtures that assert visible
+  growth while the response is still open. Post-completion typing is a failed test.
+
+## Dependency matrix and execution status
 
 | Plan ID | Title & scope | Worker dependencies | Touched files / subsystems | Planner status | Worker status | Commits |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **P1** | Streaming contracts, shared agent path, and replay foundation | None | Server progress schemas, streaming utility/BaseAgent, SSE, event repository parity | Not dispatched; approval/research gate | Not dispatched | None |
-| **P2** | Live research synthesis and retrieved-source updates | P1 | Researcher agent and research runner; focused research tests | Not dispatched; approval/research gate | Not dispatched; awaits P1 | None |
-| **P3** | Live curriculum and topic generation integration | P1 | Planner/generator agents and course graph nodes; focused graph/agent tests | Not dispatched; approval/research gate | Not dispatched; awaits P1 | None |
-| **P4** | Client streaming state, automatic overlays, and topic hydration | P1 | Client contracts, SSE/reducers, page/path/components; colocated client tests | Not dispatched; approval/research gate | Not dispatched; awaits P1 | None |
-| **P5** | Integrated acceptance and verification-gate coverage | P2, P3, P4 | Dedicated server/client acceptance tests, coverage configuration, feature verification docs | Not dispatched; approval/research gate | Not dispatched; awaits P2/P3/P4 | None |
+| **P1** | Streaming contracts, `create_partial` agent path, broadcaster, replay foundation | None | `server/schemas/progress.py`, `server/utils/instructor_client.py`, `server/agents/base.py`, `server/services/session_event_stream.py`, SSE framing | Dispatching now (foreground) | Not dispatched | None |
+| **P2** | Live research synthesis and retrieved-source updates | P1 | `server/agents/researcher.py`, `server/services/research_runner.py`, focused research tests | Awaiting P1 contract | Not dispatched; awaits P1 | None |
+| **P3** | Live curriculum and topic generation integration | P1 | `server/agents/planner.py`, `server/agents/generator.py`, `server/graph/nodes.py`, focused graph/agent tests | Awaiting P1 contract | Not dispatched; awaits P1 | None |
+| **P4** | Client streaming state, automatic overlays, topic hydration | P1 | Client contracts, `useGenerationDrafts`, SSE/reducers, `LearningPage`, `LearningPathContainer`, `CourseSourcesPanel`, `TableOfContentsModal`, `SkeletonCard`, colocated tests | Awaiting P1 contract | Not dispatched; awaits P1 | None |
+| **P5** | Integrated acceptance and verification-gate coverage | P2, P3, P4 | Dedicated server/client acceptance tests, `vitest.generation.config.ts`, `verification.md` | Not dispatched | Not dispatched; awaits P2/P3/P4 | None |
 
 ```text
 Written-goal approval + explicit proceed
@@ -213,7 +253,7 @@ evidence of A3/A5/A6. Hidden/locked learner content and quizzes retain their rul
 | :--- | :--- | :--- |
 | `goal.md` | Written and user-approved | `33df5dc` |
 | `state.md` | Fully populated; in progress | `33df5dc`, plus the approval/resume commit for this file |
-| `research.md` | Researcher dispatched 2026-10-04; not yet reported | Pending researcher commit |
+| `research.md` | Complete; reconciled into fixed decisions | `dea0894` |
 | `plan1.md` through `plan5.md` | Not created; blocked | None |
 | `review.md` | Intentionally omitted via --skip review | Not applicable |
 | `verification.md` | Not created | None |
@@ -249,7 +289,7 @@ Run from the stated directories and record actual results:
 
 ## Current checkpoint
 
-**RESEARCH IN PROGRESS.** Goal approved by the user on 2026-10-04 (commit
-`33df5dc`). The Researcher subagent is the only dispatched agent. No planners,
-workers, paid provider calls, or application code changes yet. After research is
-committed, reconcile the DAG and dispatch the P1 planner in the foreground.
+**PLANNING IN PROGRESS.** Goal approved (commit `33df5dc`). Research committed
+(`dea0894`) and reconciled into fixed decisions above. P1 planner dispatching now;
+P2/P3/P4 planners follow in parallel once P1's contract plan is committed. No
+workers, paid provider calls, or application code changes yet.
