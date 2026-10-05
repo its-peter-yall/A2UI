@@ -74,7 +74,17 @@ function formatDuration(seconds: number): string {
  * Get the mode label for display.
  */
 function getModeLabel(mode: RevisionSummary["mode"]): string {
-	return mode === "full_review" ? "Full Review" : "Quiz Only";
+	return mode === "full_review" ? "Full Review" : "Practice Quizzes";
+}
+
+/**
+ * Get the mode-specific label for the completed-topic count.
+ *
+ * Practice topics finish on submission coverage, not reading, so calling that
+ * "Reviewed" would misdescribe it.
+ */
+function getTopicLabel(mode: RevisionSummary["mode"]): string {
+	return mode === "full_review" ? "Topics Reviewed" : "Topics Finished";
 }
 
 export function RevisionSummaryModal({
@@ -87,7 +97,8 @@ export function RevisionSummaryModal({
 
 	// Focus trap: focus the modal on mount and trap focus
 	useEffect(() => {
-		const previousActiveElement = document.activeElement as HTMLElement | null;
+		const previousActiveElement =
+		document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
 		// Focus the first focusable element, or the modal itself
 		const focusableSelector =
@@ -187,66 +198,80 @@ export function RevisionSummaryModal({
 					exit={{ scale: 0.9, opacity: 0 }}
 					transition={{ type: "spring", stiffness: 300, damping: 25 }}
 					data-testid="revision-summary-modal"
-				>
-					{/* Header */}
-					<div className="flex flex-col items-center gap-2 text-center">
-						<Trophy
-							className="h-10 w-10 text-[var(--cyber-yellow)]"
-							aria-hidden="true"
-							data-testid="celebration-icon"
-						/>
-						<h2 className="text-xl font-bold text-foreground">
-							Revision Complete!
-						</h2>
-						<span
-							className={cn(
-								"inline-block rounded-full px-3 py-0.5 text-xs font-medium",
-								revisionSummary.mode === "full_review"
-									? "bg-primary/20 text-primary"
-									: "bg-blue-500/20 text-blue-400",
-							)}
-							data-testid="mode-badge"
-						>
-							{getModeLabel(revisionSummary.mode)}
-						</span>
-					</div>
-
-					{/* Stats */}
-					<div className="grid grid-cols-2 gap-3" data-testid="stats-section">
-						<div className="rounded-lg bg-muted/50 p-3 text-center">
-							<p className="text-2xl font-bold text-foreground">
-								{revisionSummary.nodes_reviewed}/{revisionSummary.nodes_total}
-							</p>
-							<p className="text-xs text-muted-foreground">Topics Reviewed</p>
-						</div>
-						<div className="rounded-lg bg-muted/50 p-3 text-center">
-							<p className="text-2xl font-bold text-foreground">
-								{quizScore !== null ? `${Math.round(quizScore)}%` : "N/A"}
-							</p>
-							<p className="text-xs text-muted-foreground">Quiz Score</p>
-						</div>
-					</div>
-
-					{/* Quiz breakdown */}
-					{revisionSummary.quizzes_total > 0 && (
-						<div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-							<span data-testid="quizzes-passed">
-								<span className="font-medium text-green-400">
-									{revisionSummary.quizzes_passed}
-								</span>{" "}
-								passed
+					>
+						{/* Header */}
+						<div className="flex flex-col items-center gap-2 text-center">
+							<button
+								type="button"
+								aria-label="Close summary"
+								onClick={onClose}
+								className="absolute right-3 top-3 rounded-md px-2 py-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
+							>
+								Close
+							</button>
+							<Trophy
+								className="h-10 w-10 text-[var(--cyber-yellow)]"
+								aria-hidden="true"
+								data-testid="celebration-icon"
+							/>
+							<h2 className="text-xl font-bold text-foreground">
+								Revision Complete!
+							</h2>
+							<span
+								className={cn(
+									"inline-block rounded-full px-3 py-0.5 text-xs font-medium",
+									revisionSummary.mode === "full_review"
+										? "bg-primary/20 text-primary"
+										: "bg-blue-500/20 text-blue-400",
+								)}
+								data-testid="mode-badge"
+							>
+								{getModeLabel(revisionSummary.mode)}
 							</span>
-							<span className="text-white/20">|</span>
-							<span data-testid="quizzes-failed">
-								<span className="font-medium text-red-400">
-									{revisionSummary.quizzes_failed}
-								</span>{" "}
-								failed
-							</span>
-							<span className="text-white/20">|</span>
-							<span>{revisionSummary.quizzes_total} total</span>
 						</div>
-					)}
+
+						{/* Stats */}
+						<div className="grid grid-cols-2 gap-3" data-testid="stats-section">
+							<div className="rounded-lg bg-muted/50 p-3 text-center">
+								<p className="text-2xl font-bold text-foreground">
+									{revisionSummary.nodes_reviewed}/{revisionSummary.nodes_total}
+								</p>
+								<p className="text-xs text-muted-foreground">
+									{getTopicLabel(revisionSummary.mode)}
+								</p>
+							</div>
+							<div className="rounded-lg bg-muted/50 p-3 text-center">
+								<p className="text-2xl font-bold text-foreground">
+									{quizScore !== null ? `${quizScore}%` : "N/A"}
+								</p>
+								<p className="text-xs text-muted-foreground">Attempt Accuracy</p>
+							</div>
+						</div>
+
+						{/*
+						 * Attempt breakdown. These are attempt counts, not unique
+						 * quiz counts: every retry is another attempt, so labelling
+						 * them "passed"/"failed" would read as topic mastery.
+						 */}
+						{revisionSummary.quizzes_total > 0 && (
+							<div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+								<span data-testid="quizzes-passed">
+									{revisionSummary.quizzes_passed} correct attempts
+								</span>
+								<span className="text-white/20">|</span>
+								<span data-testid="quizzes-failed">
+									{revisionSummary.quizzes_failed} incorrect attempts
+								</span>
+								<span className="text-white/20">|</span>
+								<span>{revisionSummary.quizzes_total} total attempts</span>
+							</div>
+						)}
+
+						{revisionSummary.quizzes_total === 0 && (
+							<p className="text-center text-sm text-muted-foreground">
+								No compatible quiz attempts yet.
+							</p>
+						)}
 
 					{/* Time spent */}
 					{revisionSummary.time_spent_seconds !== null && (
