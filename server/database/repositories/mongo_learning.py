@@ -20,6 +20,7 @@ USAGE:
 """
 from __future__ import annotations
 
+import copy
 import logging
 import uuid
 from dataclasses import replace
@@ -116,24 +117,46 @@ def _revision_quizzes(
 ) -> tuple[QuizCard, ...]:
     if document is None:
         return ()
-    return tuple(QuizSet.model_validate(document['payload']).quizzes)
+    payload = document.get('payload')
+    if not isinstance(payload, dict):
+        return ()
+    try:
+        if 'quizzes' in payload:
+            return tuple(QuizSet.model_validate(payload).quizzes)
+        try:
+            return (QuizCard.model_validate(payload),)
+        except ValidationError:
+            return (convert_legacy_quiz_card(copy.deepcopy(payload)),)
+    except (ValidationError, TypeError, ValueError, AttributeError):
+        logger.warning('Unavailable revision quiz node_id=%s',
+                       document.get('node_id'))
+        return ()
 
 
 def _revision_attempt(
     document: dict[str, Any], started_at: datetime,
 ) -> RevisionAttemptInput:
+    selected = normalize_selected_option_ids(
+        document.get('selected_option_id')
+    )
+    try:
+        number = int(document.get('attempt_number') or 0)
+        score = int(document.get('score_percent') or 0)
+        raw_index = document.get('quiz_index')
+        index = int(raw_index) if raw_index is not None else None
+        created = normalize_revision_timestamp(document['created_at'])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        # Dataclass input can represent incompatible history; P1 omits it.
+        # This timestamp never reaches a result because selection is invalid.
+        number, score, index = 0, 0, None
+        created, selected = started_at, None
     return RevisionAttemptInput(
-        id=document['_id'],
+        id=document.get('_id', ''),
         revision_session_id=document.get('revision_session_id'),
-        node_id=document['node_id'],
-        attempt_number=document['attempt_number'],
-        quiz_index=document.get('quiz_index'),
-        selected_option_ids=normalize_selected_option_ids(
-            document.get('selected_option_id')
-        ),
+        node_id=document.get('node_id', ''), attempt_number=number,
+        quiz_index=index, selected_option_ids=selected,
         is_correct=bool(document.get('is_correct')),
-        score_percent=int(document.get('score_percent') or 0),
-        created_at=normalize_revision_timestamp(document['created_at']),
+        score_percent=score, created_at=created,
     )
 
 

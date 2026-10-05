@@ -639,6 +639,85 @@ class RevisionMongoTests(unittest.TestCase):
         self.assertEqual(self.repo.get_quiz_attempts('n1')
                          ['total_attempts'], 2)
 
+    def test_legacy_single_quiz_and_scalar_attempt_restore_without_rewrite(
+        self,
+    ) -> None:
+        quiz = make_quiz('q0').model_dump(mode='json')
+        self.db.rows['quiz_data'][0].update(payload=quiz, format_version=1)
+        # Stale format-version value must not turn a single card into a set.
+        saved = attempt('scalar')
+        saved.pop('quiz_index')
+        saved['selected_option_id'] = 'q0-0'
+        self.db.rows['quiz_attempts'] = [saved]
+        before = copy.deepcopy(self.db.rows)
+        restored = self.repo.get_revision_session('r1')
+        node = restored['nodes'][0]
+        self.assertEqual(node['quiz_count'], 1)
+        self.assertEqual(node['quiz_results'][0]['quiz_index'], 0)
+        self.assertEqual(node['quiz_results'][0]['selected_option_ids'],
+                         ['q0-0'])
+        self.assertEqual(restored['progress_percent'], 100)
+        self.assertEqual(self.db.rows, before)
+        submitted = self.repo.submit_revision_quiz('r1', 'n1', ['q0-1'])
+        self.assertEqual(submitted['quiz_attempt_count'], 2)
+        self.assertEqual(submitted['revision_node_status'], 'quiz_failed')
+
+    def test_incompatible_attempts_are_retained_not_remapped(self) -> None:
+        bad_index = attempt('bad-index', index=9)
+        missing_index = attempt('missing-index')
+        missing_index.pop('quiz_index')
+        old_option = attempt('old-option')
+        old_option['selected_option_id'] = ['removed-option']
+        bad_time = attempt('bad-time')
+        bad_time['created_at'] = 'unparseable'
+        bad_sequence = attempt('bad-sequence')
+        bad_sequence['attempt_number'] = 'unparseable'
+        bad_score = attempt('bad-score')
+        bad_score['score_percent'] = 0
+        orphan = attempt('orphan')
+        orphan['node_id'] = 'removed-node'
+        self.db.rows['quiz_attempts'] = [
+            bad_index, missing_index, old_option, bad_time,
+            bad_sequence, bad_score, orphan, attempt('valid'),
+        ]
+        before = copy.deepcopy(self.db.rows)
+        restored = self.repo.get_revision_session('r1')
+        self.assertEqual(restored['nodes'][0]['status'], 'pending')
+        self.assertEqual([row['id'] for row in restored['nodes'][0]
+                          ['quiz_results']], ['valid'])
+        self.assertEqual(restored['total_quiz_score_percent'], 100)
+        notices = [notice for notice in restored['notices']
+                   if notice['code'] == 'incompatible_attempts']
+        self.assertEqual(sum(notice['attempt_count'] for notice in notices), 7)
+        self.assertEqual(self.repo.get_revision_summary('r1')
+                         ['quizzes_total'], 1)
+        self.assertEqual(self.db.rows, before)
+
+    def test_missing_quiz_payload_does_not_break_other_topics(self) -> None:
+        self.db.rows['concept_nodes'].append({
+            '_id': 'n2', 'learning_session_id': 's1', 'title': 'Unavailable',
+            'sequence_index': 1, 'status': 'COMPLETED',
+        })
+        self.db.rows['revision_node_progress'].append({
+            '_id': 'p2', 'revision_session_id': 'r1', 'node_id': 'n2',
+            'status': 'quiz_passed', 'reviewed_at': FIRST,
+        })
+        self.db.rows['quiz_data'].append({
+            '_id': 'broken', 'node_id': 'n2', 'payload': 'broken',
+        })
+        stale = attempt('stale')
+        stale['node_id'] = 'n2'
+        self.db.rows['quiz_attempts'] = [stale, attempt('valid')]
+        before = copy.deepcopy(self.db.rows)
+        restored = self.repo.get_revision_session('r1')
+        self.assertEqual(restored['nodes'][1]['quiz_count'], 0)
+        self.assertEqual(restored['nodes'][1]['quiz_results'], [])
+        self.assertEqual(restored['nodes'][0]['quiz_results'][0]['id'], 'valid')
+        summary = self.repo.get_revision_summary('r1')
+        self.assertEqual(summary['nodes_total'], 1)
+        self.assertEqual(summary['quizzes_total'], 1)
+        self.assertEqual(self.db.rows, before)
+
 
 def main() -> None:
     unittest.main()
