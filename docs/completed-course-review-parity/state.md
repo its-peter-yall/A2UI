@@ -138,7 +138,7 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | `[x]` Complete | `9761bb6` `b061f75` `51ae7ca` `eed5232` `a41660d` `288c7e2` `8f38386` `62dafeb` `63eb1e1` |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | `[x]` Complete | `8ecc748` `10f3133` `59e0128` `baa1821` `61a0143` |
 | **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
-| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | In progress; worker dispatched | `58b8231` |
+| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | `[x]` Complete | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` |
 | **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | Planner done / waiting for P6 worker | `0153f92` |
 
 ### Execution graph
@@ -494,10 +494,10 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_mongo_learning` (run BEFORE P3, at baseline) | Baseline check of pre-existing Mongo suite state | FAIL (PRE-EXISTING) — 16 tests, 7 errors, all `KeyError: 'custom_topic_count'`. Reproduced identically at pre-workflow commit `3c8681c` in a detached worktree; both files untouched by P1/P5. Not a workflow regression. P3 was made to fix it; see the post-P3 PASS row below. |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_mongo server.tests.test_migrate_to_mongo server.tests.test_mongo_learning` | P3 Mongo/migration, including the previously failing suite | PASS — 45 tests, OK, 0.154s. The 7 pre-existing `custom_topic_count` errors are RESOLVED by P3 (`a41660d`, `288c7e2`, `51ae7ca`). |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_repository_parity server.tests.test_revision_acceptance` | P7 cross-store acceptance | Not run |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 614 tests, OK, 80.120s |
-| `client/` | `npm run test -- --run` | Full client regression suite | PASS (learning feature) — `npx vitest run src/features/learning`: 32 test files, 262 tests passed, 21.83s, 0 failures. Full-repo client suite deferred to the final gate. |
-| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — built in 12.80s, no type errors (re-verified after P2/P3/P4) |
-| `client/` | `npm run lint` | ESLint/hook checks | PASS — 0 errors; 3 warnings, all unused eslint-disable directives in generated `client/coverage/` assets, pre-existing and unrelated to P1/P5 |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 614 tests, OK, 70.561s (re-verified after P6) |
+| `client/` | `npm run test -- --run` | Full client regression suite | PASS (learning + revision API) — `npx vitest run src/features/learning src/lib/learningApi.test.ts`: 37 test files, 316 tests passed, 22.83s, 0 failures (re-verified after P6). Full-repo client suite deferred to the final gate. |
+| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — built in 19.75s, no type errors (re-verified after P6) |
+| `client/` | `npm run lint` | ESLint/hook checks | PASS — 0 errors, 0 warnings (clean after P6; the earlier 3 generated-`client/coverage/` warnings are gone) |
 | `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | Not run |
 | `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | Not run |
 | Running app | Full Review + Practice, desktop/mobile, right-hand chat, mixed results, refresh, repeated prefill | Actual layout/behavior evidence | Not run |
@@ -614,7 +614,7 @@ change pauses affected downstream work and must be coordinated here first.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: EXECUTION WAVE 3 — P6 WORKER IN PROGRESS, P7 AWAITING P6.**
+**CURRENT GATE: EXECUTION WAVE 4 — P7 WORKER READY TO DISPATCH.**
 
 P1 and P5 are complete. Planner commits `074ce34` and `211ec27`; P1 worker
 `34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce`; P5 worker `9933d74`
@@ -636,11 +636,15 @@ steps, in order:
    was dispatched immediately because P1, P4, and P5 are complete. The P7 worker
    is HELD until the P6 worker completes, because P7 consumes the finished P6
    behavior in its browser-like acceptance suite.
-4. When the P6 worker reports complete, dispatch the P7 worker immediately.
-5. Resolve verification defects with their TDD owners; skip only the standalone
-   unified review. Complete P7 coverage/acceptance and all final gates,
-   including the full-repo client suite and `npm run test:generation:coverage`.
-6. Write/commit `final_report.md`, mark actual milestones complete, set
+4. DONE — P6 worker completed (`93a7eb5` through `b022199`, 11 commits).
+   Orchestrator re-verified: 316 client tests / 37 files pass, full 614-test server
+   suite passes, `npm run build` passes, `npm run lint` is clean.
+5. Dispatch the P7 worker immediately. P7 owns acceptance/parity suites, the
+   focused revision coverage config, browser evidence, and `verification.md`.
+6. Route any defect P7 discovers back to its owning plan's TDD worker; no
+   production fixes belong to P7. Then complete the remaining final gates:
+   full-repo client suite and `npm run test:generation:coverage`.
+7. Write/commit `final_report.md`, mark actual milestones complete, set
    `status: complete` and `current_phase: complete`, add a non-destructive git
    note, and report verified outcomes and remaining caveats to the user.
 
