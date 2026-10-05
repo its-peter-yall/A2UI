@@ -538,7 +538,8 @@ class RevisionMongoTests(unittest.TestCase):
         self.assertEqual(progress['content_reviewed_at'],
                          '2026-10-05T10:00:00+00:00')
         self.assertEqual(self.repo.mark_revision_node_reviewed('r1', 'n1')
-                         ['content_reviewed_at'], reviewed['content_reviewed_at'])
+                         ['content_reviewed_at'],
+                         reviewed['content_reviewed_at'])
         self.db['revision_node_progress'].update_one.assert_any_call(
             {'_id': 'p1', 'content_reviewed_at': {'$exists': False}},
             {'$set': {'content_reviewed_at': FIRST}},

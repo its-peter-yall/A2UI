@@ -494,7 +494,9 @@ class MigrationRevisionRetentionTests(unittest.TestCase):
                 )
                 self.assertEqual(node['quiz_results'][0]['id'], 'saved')
                 self.assertEqual(node['quiz_results'][0]['attempt_number'], 8)
-                self.assertEqual(node['quiz_results'][0]['quiz_attempt_count'], 1)
+                self.assertEqual(
+                    node['quiz_results'][0]['quiz_attempt_count'], 1,
+                )
                 self.assertEqual(len(db.rows['quiz_attempts']), 3)
                 self.assertEqual(restored['total_quiz_score_percent'], 100)
                 self.assertEqual(restored['notices'][0]['code'],
