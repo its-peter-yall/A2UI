@@ -48,8 +48,8 @@ updated: 2026-10-05
 - [x] Step 1: Brainstorming & Goal Alignment (`goal.md` approved by the user on
   2026-10-05; written specification and 7-plan DAG authorized for dispatch).
 - [x] Step 2: Technical Research (Skipped via `--skip research`).
-- [ ] Step 3: Planning Completed (`plan1.md`-`plan5.md` written and committed;
-  `plan6.md` and `plan7.md` pending).
+- [x] Step 3: Planning Completed (`plan1.md` through `plan7.md` all written and
+  committed: `074ce34` `a96bb8a` `5bcb4de` `4817d61` `211ec27` `58b8231` `0153f92`).
 - [ ] Step 4: Execution Completed (P1-P5 complete and independently verified;
   P6 and P7 outstanding).
 - [x] Step 5: Unified Code Review (Skipped via `--skip review`).
@@ -138,8 +138,8 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | `[x]` Complete | `9761bb6` `b061f75` `51ae7ca` `eed5232` `a41660d` `288c7e2` `8f38386` `62dafeb` `63eb1e1` |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | `[x]` Complete | `8ecc748` `10f3133` `59e0128` `baa1821` `61a0143` |
 | **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
-| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | Pending; not dispatched | Pending; not dispatched | None |
-| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | Pending; not dispatched | Pending; not dispatched | None |
+| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | In progress; worker dispatched | `58b8231` |
+| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | Planner done / waiting for P6 worker | `0153f92` |
 
 ### Execution graph
 
@@ -528,8 +528,8 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | `plan3.md` | Written | `5bcb4de` |
 | `plan4.md` | Written | `4817d61` |
 | `plan5.md` | Written | `211ec27` |
-| `plan6.md` | Pending; not dispatched | None |
-| `plan7.md` | Pending; not dispatched | None |
+| `plan6.md` | Written | `58b8231` |
+| `plan7.md` | Written | `0153f92` |
 | `review.md` | Skipped; do not create | None |
 | `verification.md` | Pending P7/final gate | None |
 | `final_report.md` | Pending final verification | None |
@@ -614,7 +614,7 @@ change pauses affected downstream work and must be coordinated here first.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: PLANNING WAVE 3 — P6 AND P7 READY TO DISPATCH.**
+**CURRENT GATE: EXECUTION WAVE 3 — P6 WORKER IN PROGRESS, P7 AWAITING P6.**
 
 P1 and P5 are complete. Planner commits `074ce34` and `211ec27`; P1 worker
 `34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce`; P5 worker `9933d74`
@@ -631,13 +631,16 @@ steps, in order:
    workers completed and were independently re-verified by the orchestrator.
 2. DONE — P3 RESOLVED the 7 pre-existing `custom_topic_count` errors; the full
    614-test server suite and the 45-test Mongo/migration suite now pass.
-3. Dispatch the P6 and P7 planners concurrently in foreground. P6's planning
-   gate is open because P1, P4, and P5 are complete and their component and
-   controller interfaces exist; P7's planning gate is open because P2, P3, and
-   P6 planning prerequisites are met.
-4. Resolve verification defects with their TDD owners; skip only the standalone
-   unified review. Complete P7 coverage/acceptance and all final gates.
-5. Write/commit `final_report.md`, mark actual milestones complete, set
+3. DONE — P6 and P7 planners dispatched concurrently in foreground; committed
+   `58b8231` (12 TDD tasks, 59 steps) and `0153f92` (1869 lines). The P6 worker
+   was dispatched immediately because P1, P4, and P5 are complete. The P7 worker
+   is HELD until the P6 worker completes, because P7 consumes the finished P6
+   behavior in its browser-like acceptance suite.
+4. When the P6 worker reports complete, dispatch the P7 worker immediately.
+5. Resolve verification defects with their TDD owners; skip only the standalone
+   unified review. Complete P7 coverage/acceptance and all final gates,
+   including the full-repo client suite and `npm run test:generation:coverage`.
+6. Write/commit `final_report.md`, mark actual milestones complete, set
    `status: complete` and `current_phase: complete`, add a non-destructive git
    note, and report verified outcomes and remaining caveats to the user.
 
