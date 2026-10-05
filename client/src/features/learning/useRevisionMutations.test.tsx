@@ -16,7 +16,7 @@ import type { ReactNode } from 'react';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { RevisionQuizResponse, RevisionSessionWithProgress } from '@/types/learning';
+import type { RevisionNodeProgressWithDetails, RevisionQuizResponse, RevisionSessionWithProgress } from '@/types/learning';
 import { useRevisionMutations } from './useRevisionMutations';
 import { revisionQueryKeys } from './useRevisionSession';
 
@@ -95,4 +95,26 @@ it('keeps saved results on failed retry and clears only its request pending flag
   await waitFor(() => expect(result.current.quizRequestStates.n?.[0]?.error).toBe('Could not save this answer. Please try again.'));
   expect(result.current.quizRequestStates.n?.[0]?.isPending).toBe(false);
   expect(client.getQueryData(revisionQueryKeys.session('r'))).toEqual(saved);
+});
+
+it('rolls back only review status while retaining a concurrently saved quiz', async () => {
+  const review = deferred<RevisionNodeProgressWithDetails>();
+  const quiz = deferred<RevisionQuizResponse>();
+  api.markNodeReviewed.mockReturnValue(review.promise);
+  api.submitRevisionQuiz.mockReturnValue(quiz.promise);
+  const { client, result } = harness();
+  const full = { ...revision(), mode: 'full_review' satisfies RevisionSessionWithProgress['mode'] };
+  client.setQueryData(revisionQueryKeys.session('r'), full);
+  act(() => result.current.markReviewed('n'));
+  await waitFor(() => expect(client.getQueryData<RevisionSessionWithProgress>(revisionQueryKeys.session('r'))?.nodes[0].status).toBe('reviewed'));
+  expect(client.getQueryData<RevisionSessionWithProgress>(revisionQueryKeys.session('r'))?.nodes[0].content_reviewed_at).toBeNull();
+  expect(client.getQueryData<RevisionSessionWithProgress>(revisionQueryKeys.session('r'))?.status).toBe('in_progress');
+  act(() => result.current.submitAnswer('n', ['b'], 0));
+  await act(async () => quiz.resolve(attempt()));
+  await act(async () => review.reject(new Error('offline')));
+  await waitFor(() => expect(result.current.reviewRequestStates.n?.error).toMatch(/Could not mark/));
+  const final = client.getQueryData<RevisionSessionWithProgress>(revisionQueryKeys.session('r'));
+  expect(final?.nodes[0].status).toBe('pending');
+  expect(final?.nodes[0].quiz_results[0].id).toBe('a');
+  expect(final?.nodes[0].content_reviewed_at).toBeNull();
 });

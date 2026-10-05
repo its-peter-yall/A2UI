@@ -179,7 +179,31 @@ export function useRevisionMutations({
       if (node.node_id !== request.nodeId) throw new Error('Revision review identity mismatch');
       return node;
     },
-    onMutate: (request) => setRequest(request, `review:${request.nodeId}`, { isPending: true }),
+    /**
+     * Optimistically mark only this node's reading status pending-complete.
+     *
+     * No review timestamp is invented, so header and TOC completion still read
+     * `content_reviewed_at` and cannot claim reading is finished before the
+     * server confirms it. Revision-level status and progress stay untouched.
+     */
+    onMutate: async (request) => {
+      setRequest(request, `review:${request.nodeId}`, { isPending: true });
+      const key = revisionQueryKeys.session(request.revisionId);
+      await queryClient.cancelQueries({ queryKey: key, exact: true });
+      const before = queryClient
+        .getQueryData<RevisionSessionWithProgress>(key)
+        ?.nodes.find((node) => node.node_id === request.nodeId);
+      queryClient.setQueryData<RevisionSessionWithProgress>(key, (session) => {
+        if (!session || session.mode !== 'full_review') return session;
+        return {
+          ...session,
+          nodes: session.nodes.map((node) =>
+            node.node_id === request.nodeId ? { ...node, status: 'reviewed' } : node,
+          ),
+        };
+      });
+      return { previousStatus: before?.status };
+    },
     onSuccess: (node: RevisionNodeProgressWithDetails, request) => {
       queryClient.setQueryData<RevisionSessionWithProgress>(
         revisionQueryKeys.session(request.revisionId),
@@ -196,7 +220,30 @@ export function useRevisionMutations({
       setRequest(request, `review:${request.nodeId}`, { isPending: false });
       invalidate(request.revisionId);
     },
-    onError: (error, request) => {
+    onError: (error, request, context) => {
+      /**
+       * Roll back this node's status field only.
+       *
+       * A concurrently saved quiz result on the same node must survive, and a
+       * review that actually succeeded elsewhere must not be undone, so the
+       * revert is skipped once the node carries a real review timestamp.
+       */
+      if (context?.previousStatus) {
+        queryClient.setQueryData<RevisionSessionWithProgress>(
+          revisionQueryKeys.session(request.revisionId),
+          (session) =>
+            session
+              ? {
+                  ...session,
+                  nodes: session.nodes.map((node) =>
+                    node.node_id === request.nodeId && node.content_reviewed_at === null
+                      ? { ...node, status: context.previousStatus ?? 'pending' }
+                      : node,
+                  ),
+                }
+              : session,
+        );
+      }
       setRequest(request, `review:${request.nodeId}`, {
         isPending: false,
         error: 'Could not mark this topic as reviewed. Please try again.',
