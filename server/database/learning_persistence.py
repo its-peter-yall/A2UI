@@ -251,6 +251,7 @@ class LearningManager:
             self._ensure_quiz_data_columns(conn)
             self._ensure_quiz_attempts_columns(conn)
             self._ensure_quiz_attempts_revision_column(conn)
+            self._ensure_revision_review_column(conn)
 
             conn.commit()
             logger.info("Learning tables initialized successfully")
@@ -3227,6 +3228,37 @@ class LearningManager:
             cursor.execute(
                 "ALTER TABLE quiz_attempts ADD COLUMN revision_session_id TEXT"
             )
+
+    def _ensure_revision_review_column(
+        self, conn: sqlite3.Connection,
+    ) -> None:
+        """Add explicit reading metadata once, preserving intentional nulls."""
+        columns = {
+            row["name"]
+            for row in conn.execute(
+                "PRAGMA table_info(revision_node_progress)"
+            ).fetchall()
+        }
+        if "content_reviewed_at" in columns:
+            return
+        conn.execute(
+            "ALTER TABLE revision_node_progress "
+            "ADD COLUMN content_reviewed_at TIMESTAMP"
+        )
+        conn.execute(
+            """
+            UPDATE revision_node_progress
+            SET content_reviewed_at = COALESCE(
+                reviewed_at,
+                (SELECT started_at FROM revision_sessions
+                 WHERE id = revision_node_progress.revision_session_id)
+            )
+            WHERE status = 'reviewed'
+              AND revision_session_id IN (
+                  SELECT id FROM revision_sessions WHERE mode = 'full_review'
+              )
+            """
+        )
 
     def _get_next_revision_number(
         self, original_session_id: str, conn: sqlite3.Connection
