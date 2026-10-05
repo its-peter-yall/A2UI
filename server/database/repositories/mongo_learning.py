@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import ValidationError
@@ -38,8 +39,19 @@ from server.schemas.learning import (
     NodeStatus,
     QuizCard,
     QuizSet,
+    RevisionSessionWithProgress,
     convert_legacy_quiz_card,
     convert_legacy_to_quiz_set,
+)
+from server.services.revision_progress import (
+    RevisionAttemptInput,
+    RevisionNodeInput,
+    RevisionProjection,
+    RevisionProjectionInput,
+    evaluate_revision_selection,
+    normalize_revision_timestamp,
+    normalize_selected_option_ids,
+    project_revision,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,6 +98,40 @@ def _calculate_progress_percent(
         return 0
     bounded = min(max(completed_nodes, 0), total_nodes)
     return (bounded * 100) // total_nodes
+
+
+RevisionBatch = tuple[
+    RevisionProjectionInput,
+    list[RevisionNodeInput],
+    list[RevisionAttemptInput],
+    RevisionProjection,
+]
+
+
+def _revision_quizzes(
+    document: Optional[dict[str, Any]],
+) -> tuple[QuizCard, ...]:
+    if document is None:
+        return ()
+    return tuple(QuizSet.model_validate(document['payload']).quizzes)
+
+
+def _revision_attempt(
+    document: dict[str, Any], started_at: datetime,
+) -> RevisionAttemptInput:
+    return RevisionAttemptInput(
+        id=document['_id'],
+        revision_session_id=document.get('revision_session_id'),
+        node_id=document['node_id'],
+        attempt_number=document['attempt_number'],
+        quiz_index=document.get('quiz_index'),
+        selected_option_ids=normalize_selected_option_ids(
+            document.get('selected_option_id')
+        ),
+        is_correct=bool(document.get('is_correct')),
+        score_percent=int(document.get('score_percent') or 0),
+        created_at=normalize_revision_timestamp(document['created_at']),
+    )
 
 
 class MongoLearningRepository:
@@ -1260,43 +1306,106 @@ class MongoLearningRepository:
             revisions.append(item)
         return revisions, total
 
+    def _load_revision_batch(
+        self, revisions: list[dict[str, Any]],
+    ) -> dict[str, RevisionBatch]:
+        if not revisions:
+            return {}
+        ids = [row['_id'] for row in revisions]
+        progress = list(self._revision_nodes.find({
+            'revision_session_id': {'$in': ids},
+        }))
+        node_ids = sorted({row['node_id'] for row in progress})
+        concepts = {
+            row['_id']: row for row in self._nodes.find({
+                '_id': {'$in': node_ids},
+            })
+        }
+        quizzes = {
+            row['node_id']: row for row in self._quizzes.find({
+                'node_id': {'$in': node_ids},
+            })
+        }
+        saved = list(self._attempts.find({
+            'revision_session_id': {'$in': ids},
+        }))
+        batches = {}
+        for document in revisions:
+            revision = RevisionProjectionInput(
+                id=document['_id'], mode=document['mode'],
+                started_at=normalize_revision_timestamp(
+                    document['started_at']
+                ),
+                stored_status=document.get('status', 'in_progress'),
+                stored_completed_at=(
+                    normalize_revision_timestamp(document['completed_at'])
+                    if document.get('completed_at') is not None else None
+                ),
+            )
+            inputs = []
+            for row in progress:
+                if row['revision_session_id'] != revision.id:
+                    continue
+                concept = concepts.get(row['node_id'])
+                if concept is None:
+                    continue
+                if (concept['learning_session_id']
+                        != document['original_session_id']):
+                    raise ValueError('revision node belongs to another course')
+                inputs.append(RevisionNodeInput(
+                    id=row['_id'], revision_session_id=revision.id,
+                    node_id=row['node_id'], node_title=concept['title'],
+                    sequence_index=concept['sequence_index'],
+                    quizzes=_revision_quizzes(quizzes.get(row['node_id'])),
+                    stored_status=row.get('status', 'pending'),
+                    reviewed_at=(
+                        normalize_revision_timestamp(row['reviewed_at'])
+                        if row.get('reviewed_at') is not None else None
+                    ),
+                    explicit_review_present='content_reviewed_at' in row,
+                    content_reviewed_at=(
+                        normalize_revision_timestamp(
+                            row['content_reviewed_at']
+                        ) if row.get('content_reviewed_at') is not None
+                        else None
+                    ),
+                ))
+            attempts = [
+                _revision_attempt(row, revision.started_at)
+                for row in saved
+                if row.get('revision_session_id') == revision.id
+            ]
+            projection = project_revision(
+                revision=revision, nodes=inputs, attempts=attempts,
+            )
+            batches[revision.id] = (revision, inputs, attempts, projection)
+        return batches
+
+    def _revision_response(
+        self, document: dict[str, Any], projection: RevisionProjection,
+    ) -> dict[str, Any]:
+        return RevisionSessionWithProgress.model_validate({
+            'id': document['_id'],
+            'original_session_id': document['original_session_id'],
+            'revision_number': document['revision_number'],
+            'mode': document['mode'],
+            'status': projection.status,
+            'progress_percent': projection.progress_percent,
+            'total_quiz_score_percent': projection.total_quiz_score_percent,
+            'started_at': document['started_at'],
+            'completed_at': projection.completed_at,
+            'nodes': list(projection.nodes),
+            'notices': list(projection.notices),
+        }).model_dump(mode='json')
+
     def get_revision_session(
-        self,
-        revision_id: str,
+        self, revision_id: str,
     ) -> Optional[dict[str, Any]]:
-        revision = self._revisions.find_one({"_id": revision_id})
-        if revision is None:
+        document = self._revisions.find_one({'_id': revision_id})
+        if document is None:
             return None
-        progress_docs = list(
-            self._revision_nodes.find(
-                {"revision_session_id": revision_id}
-            )
-        )
-        node_ids = [doc["node_id"] for doc in progress_docs]
-        nodes_by_id: dict[str, dict[str, Any]] = {}
-        if node_ids:
-            for node in self._nodes.find({"_id": {"$in": node_ids}}):
-                nodes_by_id[node["_id"]] = node
-        progress_rows = []
-        for doc in progress_docs:
-            node = nodes_by_id.get(doc["node_id"], {})
-            progress_rows.append(
-                {
-                    "id": doc["_id"],
-                    "revision_session_id": doc["revision_session_id"],
-                    "node_id": doc["node_id"],
-                    "node_title": node.get("title"),
-                    "sequence_index": int(node.get("sequence_index") or 0),
-                    "status": doc.get("status"),
-                    "reviewed_at": doc.get("reviewed_at"),
-                }
-            )
-        progress_rows.sort(key=lambda item: item["sequence_index"])
-        result = document_to_row(revision) or {}
-        result["revision_number"] = int(result.get("revision_number") or 0)
-        result["progress_percent"] = int(result.get("progress_percent") or 0)
-        result["nodes"] = progress_rows
-        return result
+        batch = self._load_revision_batch([document])[revision_id]
+        return self._revision_response(document, batch[3])
 
     def delete_revision_session(self, revision_id: str) -> bool:
         self._attempts.delete_many({"revision_session_id": revision_id})

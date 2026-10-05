@@ -19,6 +19,8 @@ USAGE:
 """
 from __future__ import annotations
 
+import copy
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -31,8 +33,15 @@ from server.database.migrate_to_mongo import (
     MIGRATION_TABLES,
     bulk_upsert,
     iter_batches,
+    migrate_table,
     migrate_to_mongo,
     row_to_document,
+)
+from server.tests.test_revision_mongo import (
+    FIRST,
+    START,
+    attempt,
+    make_store,
 )
 
 
@@ -398,6 +407,102 @@ class MigrationOrchestrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.mongo_saver.checkpoints), 1)
         self.settings_repository.put_provider_settings.assert_called_once()
         self.settings_repository.put_web_search_settings.assert_called_once()
+
+
+class MigrationRevisionRetentionTests(unittest.TestCase):
+    def test_review_and_attempt_fields_survive_migration_and_restore(
+        self,
+    ) -> None:
+        db, repository = make_store('full_review')
+        base = {
+            'id': 'p1', 'revision_session_id': 'r1', 'node_id': 'n1',
+            'status': 'reviewed', 'reviewed_at': FIRST,
+        }
+        absent = row_to_document('revision_node_progress', base)
+        self.assertNotIn('content_reviewed_at', absent)
+        connection = sqlite3.connect(':memory:')
+        connection.row_factory = sqlite3.Row
+        self.addCleanup(connection.close)
+        connection.execute(
+            'CREATE TABLE revision_node_progress ('
+            'id TEXT PRIMARY KEY, revision_session_id TEXT, node_id TEXT, '
+            'status TEXT, reviewed_at TEXT, content_reviewed_at TEXT)'
+        )
+        connection.execute(
+            'CREATE TABLE quiz_attempts ('
+            'id TEXT PRIMARY KEY, revision_session_id TEXT, node_id TEXT, '
+            'attempt_number INTEGER, quiz_index INTEGER, '
+            'selected_option_id TEXT, is_correct INTEGER, '
+            'score_percent INTEGER, created_at TEXT)'
+        )
+        saved = attempt('saved', number=8)
+        original = attempt('original', number=7, revision=None)
+        incompatible = attempt('incompatible', index=20, number=9)
+        for row in (saved, original, incompatible):
+            connection.execute(
+                'INSERT INTO quiz_attempts VALUES (?, ?, ?, ?, ?, ?, '
+                '?, ?, ?)',
+                (row['_id'], row['revision_session_id'], row['node_id'],
+                 row['attempt_number'], row['quiz_index'],
+                 json.dumps(row['selected_option_id']),
+                 int(row['is_correct']), row['score_percent'],
+                 row['created_at']),
+            )
+        source_attempts = [dict(row) for row in connection.execute(
+            'SELECT * FROM quiz_attempts ORDER BY id'
+        )]
+        attempts_target = FakeCollection()
+        migrate_table(connection, attempts_target, 'quiz_attempts', [])
+        db.rows['quiz_attempts'] = list(attempts_target.documents.values())
+        self.assertEqual(attempts_target.documents, {
+            row['id']: row_to_document('quiz_attempts', row)
+            for row in source_attempts
+        })
+        for explicit in (None, FIRST):
+            with self.subTest(explicit=explicit):
+                connection.execute('DELETE FROM revision_node_progress')
+                connection.execute(
+                    'INSERT INTO revision_node_progress VALUES '
+                    '(?, ?, ?, ?, ?, ?)',
+                    ('p1', 'r1', 'n1', 'reviewed', FIRST, explicit),
+                )
+                target = FakeCollection()
+                migrate_table(
+                    connection, target, 'revision_node_progress', [],
+                )
+                first_documents = copy.deepcopy(target.documents)
+                migrate_table(
+                    connection, target, 'revision_node_progress', [],
+                )
+                self.assertEqual(target.documents, first_documents)
+                self.assertEqual(
+                    target.documents['p1']['content_reviewed_at'], explicit,
+                )
+                db.rows['revision_node_progress'] = list(
+                    target.documents.values()
+                )
+                restored = repository.get_revision_session('r1')
+                node = restored['nodes'][0]
+                self.assertEqual(
+                    node['content_reviewed_at'],
+                    explicit.replace('+00:00', 'Z')
+                    if explicit is not None else None,
+                )
+                self.assertEqual(
+                    node['status'], 'pending' if explicit is None
+                    else 'reviewed',
+                )
+                self.assertEqual(node['quiz_results'][0]['id'], 'saved')
+                self.assertEqual(node['quiz_results'][0]['attempt_number'], 8)
+                self.assertEqual(node['quiz_results'][0]['quiz_attempt_count'], 1)
+                self.assertEqual(len(db.rows['quiz_attempts']), 3)
+                self.assertEqual(restored['total_quiz_score_percent'], 100)
+                self.assertEqual(restored['notices'][0]['code'],
+                                 'incompatible_attempts')
+        self.assertEqual([dict(row) for row in connection.execute(
+            'SELECT * FROM quiz_attempts ORDER BY id'
+        )], source_attempts)
+        self.assertEqual(db.rows['revision_sessions'][0]['started_at'], START)
 
 
 if __name__ == "__main__":
