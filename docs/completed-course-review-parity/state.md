@@ -48,8 +48,10 @@ updated: 2026-10-05
 - [x] Step 1: Brainstorming & Goal Alignment (`goal.md` approved by the user on
   2026-10-05; written specification and 7-plan DAG authorized for dispatch).
 - [x] Step 2: Technical Research (Skipped via `--skip research`).
-- [ ] Step 3: Planning Completed (`plan1.md` through `plan7.md`; none written).
-- [ ] Step 4: Execution Completed (P1-P7; no workers dispatched).
+- [ ] Step 3: Planning Completed (`plan1.md` and `plan5.md` written and committed;
+  `plan2.md`, `plan3.md`, `plan4.md`, `plan6.md`, `plan7.md` pending).
+- [ ] Step 4: Execution Completed (P1 and P5 complete and independently verified;
+  P2, P3, P4, P6, P7 outstanding).
 - [x] Step 5: Unified Code Review (Skipped via `--skip review`).
 - [ ] Step 6: Final Verification & Report (`verification.md`, `final_report.md`).
 
@@ -131,11 +133,11 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 
 | Plan ID | Title & scope | Worker dependencies | Files / subsystems | Planner status | Worker status | Commits |
 | --- | --- | --- | --- | --- | --- | --- |
-| **P1** | Shared revision contracts and pure progress/result projection | G | Pydantic/TS contracts, repository protocol, shared domain helpers/tests | `[x]` `074ce34` | In progress; worker dispatched | `074ce34` |
+| **P1** | Shared revision contracts and pure progress/result projection | G | Pydantic/TS contracts, repository protocol, shared domain helpers/tests | `[x]` `074ce34` | `[x]` Complete | `34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce` |
 | **P2** | SQLite persistence, compatibility, and serialized revision API | P1 | SQLite LearningManager, revision router handlers, SQL/API tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | Pending; not dispatched | Pending; not dispatched | None |
-| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | In progress; worker dispatched | `211ec27` |
+| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
 | **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | Pending; not dispatched | Pending; not dispatched | None |
 
@@ -487,14 +489,14 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 
 | Working directory | Command / check | Purpose | Current evidence |
 | --- | --- | --- | --- |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_contracts server.tests.test_revision_progress` | P1 schemas/domain projection | Not run |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_contracts server.tests.test_revision_progress server.tests.test_repository_contracts` | P1 schemas/domain projection | PASS — 27 tests, OK, 0.006s |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_sqlite server.tests.test_revision_api` | P2 SQL and serialized routes | Not run |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_mongo server.tests.test_mongo_learning server.tests.test_migrate_to_mongo` | P3 Mongo/migration | Not run |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_repository_parity server.tests.test_revision_acceptance` | P7 cross-store acceptance | Not run |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | Not run |
-| `client/` | `npm run test -- --run` | Full client regression suite | Not run |
-| `client/` | `npm run build` | TypeScript diagnostics and production build | Not run |
-| `client/` | `npm run lint` | ESLint/hook checks | Not run |
+| `client/` | `npm run test -- --run` | Full client regression suite | PARTIAL — focused P1/P5 suites PASS, 57 tests across 8 files in 12.15s (ConceptChatLayout, useConceptChatPanel, curiosityParser, CuriositySpark, ChatPanel, useConceptChat, LearningPathContainer, RevisionPage). Full suite deferred to the final gate. |
+| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — built in 13.86s, no type errors |
+| `client/` | `npm run lint` | ESLint/hook checks | PASS — 0 errors; 3 warnings, all unused eslint-disable directives in generated `client/coverage/` assets, pre-existing and unrelated to P1/P5 |
 | `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | Not run |
 | `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | Not run |
 | Running app | Full Review + Practice, desktop/mobile, right-hand chat, mixed results, refresh, repeated prefill | Actual layout/behavior evidence | Not run |
@@ -532,23 +534,76 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | `final_report.md` | Pending final verification | None |
 
 Planner commits `074ce34` (P1) and `211ec27` (P5) are recorded and verified as
-single-file, path-scoped commits. No worker commits exist yet. Update the matrix,
-this record, and milestones on every actual handoff; never pre-check future work.
+single-file, path-scoped commits. P1 worker commits: `34f01e5` `dac308a`
+`05e13f0` `fffaf88` `24a882d` `b0eb4ce`. P5 worker commits: `9933d74` `e5027c8`
+`a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a`. Orchestrator-verified
+evidence is in the final-verification table. Update the matrix, this record, and
+milestones on every actual handoff; never pre-check future work.
+
+## P1 handoff decisions (recorded for P2/P3/P4/P6 planners)
+
+P1 is the fixed upstream contract. Downstream plans consume it as-is; a contract
+change pauses affected downstream work and must be coordinated here first.
+
+- Attempt payload carries `id`, `revision_session_id`, `node_id`, `quiz_index`,
+  `attempt_number`, `quiz_attempt_count`, `selected_option_ids`, `is_correct`,
+  `score_percent`, `correct_option_ids`, `explanation`, `selected_explanation`,
+  `created_at`, and `revision_node_status`.
+- Node restore adds `content_reviewed_at`, `quiz_count`, and `quiz_results`
+  (latest saved result per attempted quiz index, sorted by index). An unanswered
+  topic returns an empty `quiz_results` list.
+- Latest-attempt selection is deterministic: stored attempt sequence first, with
+  an ID tie-breaker.
+- `revision_node_status` is a mode-aware aggregate topic state and is explicitly
+  NOT the per-quiz correctness indicator.
+- Repository-adapter integration remains PENDING in P2 (SQLite) and P3 (Mongo);
+  P1 deliberately stopped at contracts and pure projection.
+
+## P5 handoff interfaces (recorded for P6)
+
+- `ConceptChatLayout` provides the bounded split/overlay shell: desktop right-hand
+  pane initially 25% width, resizable 25%-38% with mouse and keyboard separator
+  controls clamped in bounds, full-width overlay below a 768px viewport with a
+  close action and no desktop separator, independent scrolling of content and
+  chat, and chat never rendered beneath the final quiz or at bottom-left.
+- `useConceptChatPanel` is the explicit headless controller owning conversation
+  targeting: opening captures its node ID, carousel navigation alone does not
+  rebind or cancel an open conversation, explicit retarget aborts the previous
+  stream and loads the destination conversation, and a prefill arriving during
+  streaming may populate the composer without sending or overwriting the active
+  response.
+- Preservation policy applied to normal learning: `LearningPathContainer`
+  generation, carousel, and learning flow behavior is unchanged and covered by
+  regression tests; only chat layout/controller reuse was introduced.
+- Chat completion semantics: course or revision completion must never delete
+  chat history. No completion flag whose chat-hook semantics clear stored
+  messages may be reused.
+- `ChatPanel` now displays the chat topic title and supports repeated prefill of
+  the same curiosity question after a previous prefill was consumed and after
+  close/reopen, without auto-sending.
+- Revision-page wiring of these interfaces remains PENDING in P6; P5 did not
+  touch `RevisionPage.tsx`.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: EXECUTION — P1 AND P5 WORKERS IN PROGRESS.**
+**CURRENT GATE: PLANNING WAVE 2 — P2, P3, AND P4 READY TO DISPATCH.**
 
-Approval was recorded; the P1 and P5 planners were dispatched concurrently in
-foreground and committed `074ce34` and `211ec27`. Both planners confirmed their
-plans carry no plan-level file banner. Both workers were dispatched immediately
-because their only prerequisite is approval. Remaining steps, in order:
+P1 and P5 are complete. Planner commits `074ce34` and `211ec27`; P1 worker
+`34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce`; P5 worker `9933d74`
+`e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a`. The
+orchestrator independently re-ran the P1 server suites (27 tests, OK), the P1/P5
+focused client suites (57 tests, 8 files), `npm run build`, and `npm run lint`;
+results are in the evidence table. P1 and P5 handoff interfaces are recorded
+above for downstream planners.
 
-1. Verify P1/P5 worker commits and test evidence without reading plan contents;
-   update the matrix, artifact record, and evidence sections on each handoff.
-2. After P1 completes, unblock P2/P3/P4 planning; unblock P6/P7 according to
-   their separate planning and worker prerequisites. Keep stage/commit mutex
-   discipline and never modify another plan owner's source paths.
+Because P1 is complete, the P2, P3, and P4 planning gates are now open. Remaining
+steps, in order:
+
+1. Dispatch P2, P3, and P4 planners concurrently in foreground.
+2. Pipeline the P2/P3/P4 workers immediately as their plans commit; they own
+   disjoint files and may run concurrently under the commit mutex.
+3. Dispatch the P6 planner once P4 and P5 expose the component/controller
+   interfaces, and the P7 planner once P2/P3/P6 plans exist.
 4. Resolve verification defects with their TDD owners; skip only the standalone
    unified review. Complete P7 coverage/acceptance and all final gates.
 5. Write/commit `final_report.md`, mark actual milestones complete, set
