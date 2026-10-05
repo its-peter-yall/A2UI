@@ -38,7 +38,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query, status, Depends, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from server.agents.planner import OutlineTopicCountError
 from server.database.generation_jobs import (
@@ -74,7 +74,7 @@ from server.schemas.learning import (
     QuizAttemptResponse,
     QuizSetHidden,
     RevisionCreateRequest,
-    RevisionNodeProgress,
+    RevisionNodeProgressWithDetails,
     RevisionQuizSubmissionResult,
     RevisionSessionListResponse,
     RevisionSessionResponse,
@@ -777,18 +777,26 @@ def create_revision(
             request.mode,
         )
         return RevisionSessionResponse(**revision)
+    except HTTPException:
+        raise
     except LookupError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+    except ValidationError as exc:
+        logger.error("Invalid revision create response: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from exc
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
-        logger.error(f"Error creating revision session: {e}")
+        logger.error("Revision operation failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
@@ -822,7 +830,7 @@ def get_revisions_for_session(
             total_count=total_count,
         )
     except Exception as e:
-        logger.error(f"Error listing revision sessions: {e}")
+        logger.error("Revision operation failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
@@ -848,7 +856,7 @@ def get_revision(revision_id: str) -> RevisionSessionWithProgress:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting revision session: {e}")
+        logger.error("Revision operation failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
@@ -874,7 +882,7 @@ def delete_revision(revision_id: str) -> DeleteRevisionResponse:
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error deleting revision session: {e}")
+        logger.error("Revision operation failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
@@ -1062,37 +1070,42 @@ async def delete_learning_session(
 
 @router.post(
     "/revisions/{revision_id}/nodes/{node_id}/mark-reviewed",
-    response_model=RevisionNodeProgress,
+    response_model=RevisionNodeProgressWithDetails,
     summary="Mark revision node reviewed",
     description="Mark a revision node as reviewed in full_review mode.",
 )
 def mark_revision_node_reviewed(
     revision_id: str,
     node_id: str,
-) -> RevisionNodeProgress:
-    """Mark a revision node as reviewed."""
+) -> RevisionNodeProgressWithDetails:
+    """Mark a revision node as reviewed and return restored node details."""
     try:
         progress = learning_manager.mark_revision_node_reviewed(
-            revision_id=revision_id,
-            node_id=node_id,
+            revision_id=revision_id, node_id=node_id,
         )
-        return RevisionNodeProgress(**progress)
-    except LookupError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.error(f"Error marking revision node reviewed: {e}")
+        return RevisionNodeProgressWithDetails.model_validate(progress)
+    except HTTPException:
+        raise
+    except ValidationError as exc:
+        logger.error("Invalid revision review response: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from exc
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Revision review failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from exc
 
 
 @router.post(
@@ -1109,28 +1122,33 @@ def submit_revision_quiz(
     """Submit a revision quiz answer and return evaluation result."""
     try:
         result = learning_manager.submit_revision_quiz(
-            revision_id=revision_id,
-            node_id=node_id,
+            revision_id=revision_id, node_id=node_id,
             selected_option_ids=request.selected_option_ids,
             quiz_index=request.quiz_index,
         )
-        return RevisionQuizSubmissionResult(**result)
-    except LookupError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
-    except Exception as e:
-        logger.error(f"Error submitting revision quiz: {e}")
+        return RevisionQuizSubmissionResult.model_validate(result)
+    except HTTPException:
+        raise
+    except ValidationError as exc:
+        logger.error("Invalid revision quiz response: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
-        )
+        ) from exc
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("Revision quiz failed: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
+        ) from exc
 
 
 @router.get(
@@ -1150,7 +1168,7 @@ def get_revision_summary(revision_id: str) -> RevisionSummary:
             detail=str(e),
         )
     except Exception as e:
-        logger.error(f"Error getting revision summary: {e}")
+        logger.error("Revision operation failed: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error",
