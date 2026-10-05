@@ -45,6 +45,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, History } from 'lucide-react';
 import { getRevisionsList } from '@/lib/learningApi';
+import { revisionQueryKeys } from './useRevisionSession';
 import type { RevisionSessionResponse } from '@/types/learning';
 import { cn } from '@/lib/utils';
 
@@ -68,7 +69,7 @@ function formatShortDate(isoString: string): string {
  * Get the mode label for display.
  */
 function getModeLabel(mode: RevisionSessionResponse['mode']): string {
-  return mode === 'full_review' ? 'Full Review' : 'Quiz Only';
+  return mode === 'full_review' ? 'Full Review' : 'Practice Quizzes';
 }
 
 export function RevisionHistoryList({
@@ -78,7 +79,7 @@ export function RevisionHistoryList({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['revisions', sessionId],
+    queryKey: revisionQueryKeys.list(sessionId),
     queryFn: () => getRevisionsList(sessionId),
     enabled: !!sessionId && isExpanded,
     staleTime: 30_000,
@@ -190,7 +191,6 @@ function RevisionRow({
   onClick: () => void;
 }) {
   const score = revision.total_quiz_score_percent;
-  const isPassed = score !== null && score >= 80;
 
   return (
     <button
@@ -227,21 +227,29 @@ function RevisionRow({
         {getModeLabel(revision.mode)}
       </span>
 
+      {/*
+       * Server-authoritative completion. Practice topics finish on submission
+       * coverage, so this reports "practice finished" rather than reviewed, and
+       * never derives a count from topic pass/fail statuses.
+       */}
+      <span className="text-muted-foreground">
+        {revision.progress_percent}%{' '}
+        {revision.mode === 'full_review' ? 'reviewed' : 'practice finished'}
+      </span>
+
       {/* Spacer */}
       <span className="flex-1" />
 
-      {/* Score */}
-      {score !== null && (
-        <span
-          className={cn(
-            'font-medium shrink-0',
-            isPassed ? 'text-green-400' : 'text-red-400'
-          )}
-          data-testid="revision-score"
-        >
-          {Math.round(score)}%
-        </span>
-      )}
+      {/*
+       * Attempt accuracy, not a mastery verdict. A revision has no pass
+       * threshold, and no compatible attempts means unavailable rather than 0%.
+       */}
+      <span
+        className="shrink-0 font-medium text-muted-foreground"
+        data-testid="revision-score"
+      >
+        {score === null ? 'Attempt accuracy: N/A' : `${score}% attempt accuracy`}
+      </span>
 
       {/* Status indicator for in-progress */}
       {revision.status === 'in_progress' && (
