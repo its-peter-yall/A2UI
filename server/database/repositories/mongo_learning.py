@@ -40,6 +40,7 @@ from server.schemas.learning import (
     QuizCard,
     QuizSet,
     RevisionSessionWithProgress,
+    RevisionSummary,
     convert_legacy_quiz_card,
     convert_legacy_to_quiz_set,
 )
@@ -1290,21 +1291,21 @@ class MongoLearningRepository:
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
-        query = {"original_session_id": session_id}
+        query = {'original_session_id': session_id}
         total = self._revisions.count_documents(query)
-        cursor = (
-            self._revisions.find(query)
-            .sort("started_at", DESCENDING)
-            .skip(max(offset, 0))
-            .limit(max(limit, 0))
+        documents = list(
+            self._revisions.find(query).sort('started_at', DESCENDING)
+            .skip(max(offset, 0)).limit(max(limit, 0))
         )
-        revisions = []
-        for row in cursor:
-            item = document_to_row(row) or {}
-            item["revision_number"] = int(item.get("revision_number") or 0)
-            item["progress_percent"] = int(item.get("progress_percent") or 0)
-            revisions.append(item)
-        return revisions, total
+        batches = self._load_revision_batch(documents)
+        responses = []
+        for document in documents:
+            result = self._revision_response(
+                document, batches[document['_id']][3],
+            )
+            result.pop('nodes')
+            responses.append(result)
+        return responses, total
 
     def _load_revision_batch(
         self, revisions: list[dict[str, Any]],
@@ -1494,88 +1495,39 @@ class MongoLearningRepository:
         }
 
     def get_revision_summary(self, revision_id: str) -> dict[str, Any]:
-        revision = self._revisions.find_one({"_id": revision_id})
-        if revision is None:
-            raise LookupError(f"Revision session not found: {revision_id}")
-        progress_docs = list(
-            self._revision_nodes.find({"revision_session_id": revision_id})
-        )
-        nodes_total = len(progress_docs)
-        nodes_reviewed = sum(
-            1 for doc in progress_docs if doc.get("status") != "pending"
-        )
-        attempt_docs = list(
-            self._attempts.find({"revision_session_id": revision_id})
-        )
-        quizzes_total = len(attempt_docs)
-        quizzes_passed = sum(
-            1 for doc in attempt_docs if doc.get("is_correct")
-        )
-        quizzes_failed = max(quizzes_total - quizzes_passed, 0)
-        revision_quiz_score_percent = (
-            (quizzes_passed * 100) // quizzes_total
-            if quizzes_total > 0
-            else None
-        )
-        total_quiz_score_percent = (
-            revision_quiz_score_percent
-            if revision_quiz_score_percent is not None
-            else revision.get("total_quiz_score_percent")
-        )
-        node_ids = [doc["node_id"] for doc in progress_docs]
+        document = self._revisions.find_one({'_id': revision_id})
+        if document is None:
+            raise LookupError(f'Revision session not found: {revision_id}')
+        batch = self._load_revision_batch([document])[revision_id]
+        projection = batch[3]
+        node_ids = sorted(node.node_id for node in batch[1])
         comparison = None
-        if quizzes_total > 0 and node_ids:
-            original_attempts = list(
-                self._attempts.find(
-                    {
-                        "revision_session_id": None,
-                        "node_id": {"$in": node_ids},
-                    }
-                )
-            )
-            original_total = len(original_attempts)
-            if (
-                original_total > 0
-                and revision_quiz_score_percent is not None
-            ):
-                original_passed = sum(
-                    1
-                    for doc in original_attempts
-                    if doc.get("is_correct")
-                )
-                original_score = (original_passed * 100) // original_total
+        if projection.total_attempts and node_ids:
+            originals = list(self._attempts.find({
+                'revision_session_id': None,
+                'node_id': {'$in': node_ids},
+            }))
+            if originals:
+                score = (sum(bool(row.get('is_correct'))
+                             for row in originals) * 100) // len(originals)
                 comparison = {
-                    "original_quiz_score_percent": original_score,
-                    "improvement_percent": (
-                        revision_quiz_score_percent - original_score
+                    'original_quiz_score_percent': score,
+                    'improvement_percent': (
+                        projection.total_quiz_score_percent - score
                     ),
                 }
-        started_at = revision.get("started_at")
-        completed_at = revision.get("completed_at")
-        time_spent_seconds = None
-        if started_at and completed_at:
-            try:
-                from datetime import datetime
-
-                started_dt = datetime.fromisoformat(str(started_at))
-                completed_dt = datetime.fromisoformat(str(completed_at))
-                delta = int((completed_dt - started_dt).total_seconds())
-                time_spent_seconds = max(delta, 0)
-            except ValueError:
-                time_spent_seconds = None
-        return {
-            "revision_id": revision["_id"],
-            "mode": revision.get("mode"),
-            "progress_percent": int(revision.get("progress_percent") or 0),
-            "total_quiz_score_percent": total_quiz_score_percent,
-            "nodes_reviewed": nodes_reviewed,
-            "nodes_total": nodes_total,
-            "quizzes_passed": quizzes_passed,
-            "quizzes_failed": quizzes_failed,
-            "quizzes_total": quizzes_total,
-            "time_spent_seconds": time_spent_seconds,
-            "comparison": comparison,
-        }
+        return RevisionSummary.model_validate({
+            'revision_id': revision_id, 'mode': document['mode'],
+            'progress_percent': projection.progress_percent,
+            'total_quiz_score_percent': projection.total_quiz_score_percent,
+            'nodes_reviewed': projection.nodes_completed,
+            'nodes_total': projection.nodes_total,
+            'quizzes_passed': projection.correct_attempts,
+            'quizzes_failed': projection.incorrect_attempts,
+            'quizzes_total': projection.total_attempts,
+            'time_spent_seconds': projection.time_spent_seconds,
+            'comparison': comparison, 'notices': list(projection.notices),
+        }).model_dump(mode='json')
 
     def _update_revision_progress(
         self,

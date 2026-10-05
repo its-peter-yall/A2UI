@@ -241,6 +241,91 @@ class RevisionMongoTests(unittest.TestCase):
         })
         self.assertEqual(self.db.rows, before)
 
+    def test_history_summary_share_projection_and_original_comparison(
+        self,
+    ) -> None:
+        self.db.rows['revision_sessions'][0].update({
+            'status': 'completed', 'progress_percent': 100,
+            'completed_at': FIRST, 'total_quiz_score_percent': 100,
+        })
+        self.db.rows['revision_node_progress'][0]['status'] = 'quiz_passed'
+        self.db.rows['quiz_attempts'] = [
+            attempt('one'),
+            attempt('old', correct=False, revision=None),
+            attempt('other', revision='r2'),
+        ]
+        before = copy.deepcopy(self.db.rows)
+        restored = self.repo.get_revision_session('r1')
+        history, count = self.repo.get_revisions_for_session('s1')
+        summary = self.repo.get_revision_summary('r1')
+        self.assertEqual(count, 1)
+        for payload in (restored, history[0], summary):
+            self.assertEqual(payload['progress_percent'], 0)
+            self.assertEqual(payload['total_quiz_score_percent'], 100)
+            self.assertIn('completion_recalculated', [
+                notice['code'] for notice in payload['notices']
+            ])
+        self.assertIsNone(restored['completed_at'])
+        self.assertIsNone(history[0]['completed_at'])
+        self.assertEqual(summary['nodes_reviewed'], 0)
+        self.assertEqual(summary['nodes_total'], 1)
+        self.assertEqual(summary['quizzes_total'], 1)
+        self.assertEqual(summary['comparison'], {
+            'original_quiz_score_percent': 0, 'improvement_percent': 100,
+        })
+        RevisionSessionResponse.model_validate(history[0])
+        RevisionSummary.model_validate(summary)
+        self.assertEqual(self.db.rows, before)
+        self.db['quiz_attempts'].find.assert_any_call({
+            'revision_session_id': None, 'node_id': {'$in': ['n1']},
+        })
+
+    def test_history_batches_all_revisions_and_respects_pagination(
+        self,
+    ) -> None:
+        second = dict(self.db.rows['revision_sessions'][0])
+        second.update(_id='r2', revision_number=2, started_at=SECOND)
+        self.db.rows['revision_sessions'].append(second)
+        progress = dict(self.db.rows['revision_node_progress'][0])
+        progress.update(_id='p2', revision_session_id='r2')
+        self.db.rows['revision_node_progress'].append(progress)
+        self.db.rows['quiz_attempts'] = [attempt('one')]
+        history, count = self.repo.get_revisions_for_session('s1')
+        self.assertEqual(count, 2)
+        self.assertEqual([row['id'] for row in history], ['r2', 'r1'])
+        self.assertIsNone(history[0]['total_quiz_score_percent'])
+        self.assertEqual(history[1]['total_quiz_score_percent'], 100)
+        for name in ('revision_node_progress', 'concept_nodes',
+                     'quiz_data', 'quiz_attempts'):
+            self.db[name].find.assert_called_once()
+            self.db[name].find_one.assert_not_called()
+        page, count = self.repo.get_revisions_for_session('s1', 1, 1)
+        self.assertEqual(count, 2)
+        self.assertEqual([row['id'] for row in page], ['r1'])
+
+    def test_quizless_empty_and_reviewable_denominators(self) -> None:
+        self.db.rows['quiz_data'] = []
+        self.db.rows['revision_node_progress'][0]['status'] = 'quiz_passed'
+        for empty in (False, True):
+            with self.subTest(empty=empty):
+                if empty:
+                    self.db.rows['revision_node_progress'] = []
+                restored = self.repo.get_revision_session('r1')
+                summary = self.repo.get_revision_summary('r1')
+                self.assertEqual(restored['status'], 'in_progress')
+                self.assertIsNone(restored['total_quiz_score_percent'])
+                self.assertIsNone(restored['completed_at'])
+                self.assertEqual(summary['nodes_total'], 0)
+                self.assertEqual(summary['quizzes_total'], 0)
+                self.assertIsNone(summary['total_quiz_score_percent'])
+        db, repo = make_store('full_review')
+        db.rows['quiz_data'] = []
+        db.rows['revision_node_progress'][0]['content_reviewed_at'] = FIRST
+        restored = repo.get_revision_session('r1')
+        self.assertEqual(restored['status'], 'completed')
+        self.assertEqual(repo.get_revision_summary('r1')['nodes_total'], 1)
+        self.assertEqual(restored['nodes'][0]['quiz_count'], 0)
+
 
 def main() -> None:
     unittest.main()
