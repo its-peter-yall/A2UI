@@ -135,11 +135,14 @@ class MemoryMongo:
             collection.find.side_effect = (
                 lambda query, projection=None: self.find(name, query)
             )
-            collection.find_one.side_effect = (
-                lambda query, projection=None: next(
-                    iter(self.find(name, query)), None,
-                )
-            )
+
+            def find_one(query, projection=None, sort=None):
+                cursor = self.find(name, query)
+                if sort is not None:
+                    cursor.sort(sort)
+                return next(iter(cursor), None)
+
+            collection.find_one.side_effect = find_one
             collection.count_documents.side_effect = (
                 lambda query: len(self.find(name, query))
             )
@@ -325,6 +328,162 @@ class RevisionMongoTests(unittest.TestCase):
         self.assertEqual(restored['status'], 'completed')
         self.assertEqual(repo.get_revision_summary('r1')['nodes_total'], 1)
         self.assertEqual(restored['nodes'][0]['quiz_count'], 0)
+
+    def test_practice_submission_retry_and_timestamp_contract(self) -> None:
+        self.db.rows['quiz_attempts'] = [
+            attempt('original', number=7, revision=None),
+        ]
+        original = copy.deepcopy([
+            self.db.rows[name] for name in
+            ('learning_sessions', 'concept_nodes', 'quiz_data')
+        ])
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=FIRST):
+            first = self.repo.submit_revision_quiz('r1', 'n1', ['q0-0'])
+        RevisionQuizSubmissionResult.model_validate(first)
+        self.assertEqual(first['attempt_number'], 8)
+        self.assertEqual(first['quiz_attempt_count'], 1)
+        self.assertEqual(first['revision_node_status'], 'pending')
+        self.assertEqual(first['revision_session_id'], 'r1')
+        self.assertEqual(first['correct_option_ids'], ['q0-0'])
+        self.assertEqual(first['explanation'], 'Explanation q0-0')
+        self.assertEqual(self.repo.get_revision_session('r1')
+                         ['progress_percent'], 0)
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=SECOND):
+            wrong = self.repo.submit_revision_quiz(
+                'r1', 'n1', ['q1-1'], quiz_index=1,
+            )
+        self.assertEqual(wrong['revision_node_status'], 'quiz_failed')
+        self.assertEqual(wrong['correct_option_ids'], [])
+        self.assertEqual(wrong['explanation'], '')
+        self.assertEqual(wrong['selected_explanation'], 'Explanation q1-1')
+        completed = self.repo.get_revision_session('r1')
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=THIRD):
+            retry = self.repo.submit_revision_quiz(
+                'r1', 'n1', ['q1-0'], quiz_index=1,
+            )
+        self.assertEqual(retry['quiz_attempt_count'], 2)
+        self.assertEqual(retry['revision_node_status'], 'quiz_passed')
+        restored = self.repo.get_revision_session('r1')
+        self.assertEqual(restored['completed_at'], completed['completed_at'])
+        self.assertEqual(restored['total_quiz_score_percent'], 66)
+        self.assertEqual(restored['progress_percent'], 100)
+        result = restored['nodes'][0]['quiz_results'][1]
+        self.assertEqual({key: value for key, value in retry.items()
+                          if key != 'revision_node_status'}, result)
+        summary = self.repo.get_revision_summary('r1')
+        self.assertEqual((summary['quizzes_passed'], summary['quizzes_failed'],
+                          summary['quizzes_total']), (2, 1, 3))
+        self.assertEqual(summary['time_spent_seconds'], 7200)
+        history, _ = self.repo.get_revisions_for_session('s1')
+        self.assertEqual(history[0]['total_quiz_score_percent'], 66)
+        self.assertEqual([
+            self.db.rows[name] for name in
+            ('learning_sessions', 'concept_nodes', 'quiz_data')
+        ], original)
+        self.db.client.start_session.assert_not_called()
+
+    def test_multi_select_exact_match_uses_stable_ids(self) -> None:
+        self.db.rows['quiz_data'][0]['payload'] = QuizSet(
+            quizzes=[make_quiz('q0', multiple=True)],
+        ).model_dump(mode='json')
+        wrong = self.repo.submit_revision_quiz('r1', 'n1', ['q0-0'])
+        self.assertFalse(wrong['is_correct'])
+        self.assertEqual(wrong['correct_option_ids'], [])
+        correct = self.repo.submit_revision_quiz(
+            'r1', 'n1', ['q0-2', 'q0-0'],
+        )
+        self.assertTrue(correct['is_correct'])
+        self.assertEqual(correct['correct_option_ids'], ['q0-0', 'q0-2'])
+        self.assertEqual(correct['selected_option_ids'], ['q0-2', 'q0-0'])
+        self.assertEqual(correct['quiz_attempt_count'], 2)
+        payload = self.db.rows['quiz_data'][0]['payload']
+        self.assertEqual([option['explanation'] for option in
+                          payload['quizzes'][0]['options']
+                          if option['is_correct']],
+                         ['Explanation q0-0', 'Explanation q0-2'])
+
+    def test_invalid_submission_records_nothing(self) -> None:
+        cases = [
+            ('missing', 'n1', ['q0-0'], 0, LookupError),
+            ('r1', 'foreign', ['q0-0'], 0, LookupError),
+            ('r1', 'n1', ['q0-0'], -1, ValueError),
+            ('r1', 'n1', ['q0-0'], 2, ValueError),
+            ('r1', 'n1', [], 0, ValueError),
+            ('r1', 'n1', ['D'], 0, ValueError),
+            ('r1', 'n1', ['q0-0', 'q0-0'], 0, ValueError),
+            ('r1', 'n1', ['q0-0', 'q0-1'], 0, ValueError),
+        ]
+        for revision, node, selected, index, error in cases:
+            with self.subTest(revision=revision, selected=selected,
+                              node=node, index=index):
+                before = copy.deepcopy(self.db.rows)
+                with self.assertRaises(error):
+                    self.repo.submit_revision_quiz(
+                        revision, node, selected, index,
+                    )
+                self.assertEqual(self.db.rows, before)
+        self.db.rows['concept_nodes'][0]['learning_session_id'] = 'other'
+        before = copy.deepcopy(self.db.rows)
+        with self.assertRaises(ValueError):
+            self.repo.submit_revision_quiz('r1', 'n1', ['q0-0'])
+        self.assertEqual(self.db.rows, before)
+
+    def test_committed_attempt_survives_aggregate_failure(self) -> None:
+        self.db.rows['quiz_attempts'] = [attempt('first')]
+        self.db['revision_sessions'].update_one.side_effect = AutoReconnect(
+            'simulated metadata failure'
+        )
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=SECOND):
+            result = self.repo.submit_revision_quiz(
+                'r1', 'n1', ['q1-1'], quiz_index=1,
+            )
+        RevisionQuizSubmissionResult.model_validate(result)
+        self.assertEqual(result['revision_node_status'], 'quiz_failed')
+        self.assertEqual(self.db.rows['revision_sessions'][0]
+                         ['progress_percent'], 0)
+        restored = self.repo.get_revision_session('r1')
+        history, _ = self.repo.get_revisions_for_session('s1')
+        summary = self.repo.get_revision_summary('r1')
+        for payload in (restored, history[0], summary):
+            self.assertEqual(payload['progress_percent'], 100)
+            self.assertEqual(payload['total_quiz_score_percent'], 50)
+        self.assertEqual(restored['nodes'][0]['quiz_results'][1]['id'],
+                         result['id'])
+        self.assertEqual(len(self.db.rows['quiz_attempts']), 2)
+
+    def test_attempt_insert_failure_keeps_saved_result(self) -> None:
+        self.db.rows['quiz_attempts'] = [attempt('saved', correct=False)]
+        before = copy.deepcopy(self.db.rows)
+        self.db['quiz_attempts'].insert_one.side_effect = AutoReconnect(
+            'simulated insert failure'
+        )
+        with self.assertRaises(AutoReconnect):
+            self.repo.submit_revision_quiz('r1', 'n1', ['q0-0'])
+        self.assertEqual(self.db.rows, before)
+        self.assertEqual(self.repo.get_revision_session('r1')['nodes'][0]
+                         ['quiz_results'][0]['id'], 'saved')
+
+    def test_disproven_completion_reconciles_before_new_evidence(self) -> None:
+        self.db.rows['revision_sessions'][0].update({
+            'status': 'completed', 'progress_percent': 100,
+            'completed_at': THIRD,
+        })
+        self.db.rows['quiz_attempts'] = [attempt('first')]
+        self.assertIsNone(self.repo.get_revision_session('r1')['completed_at'])
+        self.assertEqual(self.db.rows['revision_sessions'][0]
+                         ['completed_at'], THIRD)
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=SECOND):
+            self.repo.submit_revision_quiz('r1', 'n1', ['q1-1'], 1)
+        restored = self.repo.get_revision_session('r1')
+        self.assertEqual(
+            restored['completed_at'],
+            '2026-10-05T11:00:00Z',
+        )
 
 
 def main() -> None:

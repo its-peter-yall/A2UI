@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Optional
 
 from pydantic import ValidationError
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from server.database.repositories.mongo_common import (
     document_to_row,
@@ -39,6 +40,7 @@ from server.schemas.learning import (
     NodeStatus,
     QuizCard,
     QuizSet,
+    RevisionQuizSubmissionResult,
     RevisionSessionWithProgress,
     RevisionSummary,
     convert_legacy_quiz_card,
@@ -1455,44 +1457,47 @@ class MongoLearningRepository:
         selected_option_ids: list[str],
         quiz_index: int = 0,
     ) -> dict[str, Any]:
-        revision = self._revisions.find_one({"_id": revision_id})
-        if revision is None:
-            raise LookupError(f"Revision session not found: {revision_id}")
-        progress = self._revision_nodes.find_one(
-            {"revision_session_id": revision_id, "node_id": node_id}
+        document, batch, target = self._revision_mutation_inputs(
+            revision_id, node_id,
         )
-        if progress is None:
-            raise LookupError(
-                f"Revision node not found for revision {revision_id}: "
-                f"{node_id}"
-            )
-        quiz_result = self.create_quiz_attempt(
-            node_id=node_id,
-            selected_option_ids=selected_option_ids,
-            quiz_index=quiz_index,
-            revision_session_id=revision_id,
+        if quiz_index < 0 or quiz_index >= len(target.quizzes):
+            raise ValueError('Invalid quiz_index')
+        correct = evaluate_revision_selection(
+            target.quizzes[quiz_index], selected_option_ids,
         )
-        next_status = (
-            "quiz_passed" if quiz_result["is_correct"] else "quiz_failed"
+        revision, nodes, attempts = self._prepare_revision_write(batch)
+        last = self._attempts.find_one(
+            {'node_id': node_id},
+            sort=[('attempt_number', DESCENDING), ('_id', DESCENDING)],
         )
-        if progress.get("status") == "quiz_passed":
-            next_status = "quiz_passed"
+        number = int(last['attempt_number']) + 1 if last else 1
         now = utc_iso()
-        set_fields: dict[str, Any] = {"status": next_status}
-        if next_status == "quiz_passed" and progress.get("reviewed_at") is None:
-            set_fields["reviewed_at"] = now
-        self._revision_nodes.update_one(
-            {"revision_session_id": revision_id, "node_id": node_id},
-            {"$set": set_fields},
-        )
-        self._update_revision_progress(revision_id)
-        return {
-            "is_correct": bool(quiz_result["is_correct"]),
-            "correct_option_ids": quiz_result.get("correct_option_ids", []),
-            "explanation": quiz_result.get("explanation"),
-            "selected_explanation": quiz_result.get("selected_explanation"),
-            "revision_node_status": next_status,
+        saved = {
+            '_id': str(uuid.uuid4()), 'revision_session_id': revision_id,
+            'node_id': node_id, 'quiz_index': quiz_index,
+            'attempt_number': number,
+            'selected_option_id': list(selected_option_ids),
+            'is_correct': correct, 'score_percent': 100 if correct else 0,
+            'created_at': now,
         }
+        self._attempts.insert_one(saved)
+        projected = project_revision(
+            revision=revision, nodes=nodes,
+            attempts=attempts + [_revision_attempt(saved, revision.started_at)],
+        )
+        node = next(row for row in projected.nodes if row.node_id == node_id)
+        result = next(row for row in node.quiz_results
+                      if row.quiz_index == quiz_index)
+        try:
+            self._persist_revision_projection(revision_id, projected)
+        except PyMongoError as error:
+            logger.warning(
+                'Revision aggregate deferred revision_id=%s error_type=%s',
+                revision_id, type(error).__name__,
+            )
+        return RevisionQuizSubmissionResult.model_validate({
+            **result.model_dump(), 'revision_node_status': node.status,
+        }).model_dump(mode='json')
 
     def get_revision_summary(self, revision_id: str) -> dict[str, Any]:
         document = self._revisions.find_one({'_id': revision_id})
@@ -1529,63 +1534,58 @@ class MongoLearningRepository:
             'comparison': comparison, 'notices': list(projection.notices),
         }).model_dump(mode='json')
 
-    def _update_revision_progress(
-        self,
-        revision_id: str,
-    ) -> dict[str, Any]:
-        if self._revisions.find_one({"_id": revision_id}) is None:
-            raise LookupError(f"Revision session not found: {revision_id}")
-        progress_docs = list(
-            self._revision_nodes.find({"revision_session_id": revision_id})
-        )
-        total_nodes = len(progress_docs)
-        completed_nodes = sum(
-            1 for doc in progress_docs if doc.get("status") != "pending"
-        )
-        quizzes_passed = sum(
-            1 for doc in progress_docs if doc.get("status") == "quiz_passed"
-        )
-        quizzes_failed = sum(
-            1 for doc in progress_docs if doc.get("status") == "quiz_failed"
-        )
-        progress_percent = _calculate_progress_percent(
-            completed_nodes,
-            total_nodes,
-        )
-        quiz_attempted = quizzes_passed + quizzes_failed
-        total_quiz_score_percent = (
-            (quizzes_passed * 100) // quiz_attempted
-            if quiz_attempted > 0
-            else None
-        )
-        next_status = (
-            "completed"
-            if total_nodes > 0 and completed_nodes >= total_nodes
-            else "in_progress"
-        )
-        now = utc_iso()
-        set_fields: dict[str, Any] = {
-            "progress_percent": progress_percent,
-            "status": next_status,
-            "total_quiz_score_percent": total_quiz_score_percent,
-        }
-        if next_status == "completed":
-            existing = self._revisions.find_one(
-                {"_id": revision_id},
-                {"completed_at": 1},
+    def _revision_mutation_inputs(
+        self, revision_id: str, node_id: str,
+    ) -> tuple[dict[str, Any], RevisionBatch, RevisionNodeInput]:
+        document = self._revisions.find_one({'_id': revision_id})
+        if document is None:
+            raise LookupError(f'Revision session not found: {revision_id}')
+        batch = self._load_revision_batch([document])[revision_id]
+        target = next((node for node in batch[1]
+                       if node.node_id == node_id), None)
+        if target is None:
+            raise LookupError('Revision node not found')
+        return document, batch, target
+
+    def _persist_revision_projection(
+        self, revision_id: str, projection: RevisionProjection,
+    ) -> None:
+        self._revisions.update_one({'_id': revision_id}, {'$set': {
+            'status': projection.status,
+            'progress_percent': projection.progress_percent,
+            'total_quiz_score_percent': projection.total_quiz_score_percent,
+            'completed_at': (
+                projection.completed_at.isoformat()
+                if projection.completed_at is not None else None
+            ),
+        }})
+
+    def _prepare_revision_write(
+        self, batch: RevisionBatch,
+    ) -> tuple[
+        RevisionProjectionInput,
+        list[RevisionNodeInput],
+        list[RevisionAttemptInput],
+    ]:
+        revision, nodes, attempts, projection = batch
+        if (revision.stored_status == 'completed'
+                and projection.status == 'in_progress'):
+            # Validated progress write reconciles disproven history before
+            # new evidence could make the revision complete again.
+            self._persist_revision_projection(revision.id, projection)
+            revision = replace(
+                revision, stored_status='in_progress',
+                stored_completed_at=None,
             )
-            if existing is not None and existing.get("completed_at") is None:
-                set_fields["completed_at"] = now
-        self._revisions.update_one(
-            {"_id": revision_id},
-            {"$set": set_fields},
-        )
-        return {
-            "revision_id": revision_id,
-            "status": next_status,
-            "progress_percent": progress_percent,
-            "total_quiz_score_percent": total_quiz_score_percent,
-        }
+        return revision, nodes, attempts
+
+    def _update_revision_progress(self, revision_id: str) -> dict[str, Any]:
+        document = self._revisions.find_one({'_id': revision_id})
+        if document is None:
+            raise LookupError(f'Revision session not found: {revision_id}')
+        projection = self._load_revision_batch([document])[revision_id][3]
+        self._persist_revision_projection(revision_id, projection)
+        return self._revision_response(document, projection)
 
     def _check_multi_quiz_mastery(
         self,
