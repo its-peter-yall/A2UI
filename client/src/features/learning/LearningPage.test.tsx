@@ -307,12 +307,83 @@ describe('LearningPage controls', () => {
       generation: {
         ...runningSession.generation!,
         stage: 'COMPLETE' as const,
+        can_cancel: false,
+        can_resume: false,
+        counts: {
+          ...runningSession.generation!.counts,
+          topics_total: 9,
+          topics_ready: 9,
+          topics_failed: 0,
+        },
       },
     };
     renderPage(completedSession);
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: /generation status/i })).not.toBeInTheDocument();
     });
+  });
+
+  it('hides generation status panel when COMPLETE_DEGRADED and all topics are ready', async () => {
+    const degradedComplete = {
+      ...runningSession,
+      generation: {
+        ...runningSession.generation!,
+        stage: 'COMPLETE_DEGRADED' as const,
+        grounding_status: 'DEGRADED' as const,
+        can_cancel: false,
+        can_resume: false,
+        counts: {
+          ...runningSession.generation!.counts,
+          topics_total: 9,
+          topics_ready: 9,
+          topics_failed: 0,
+        },
+      },
+    };
+    renderPage(degradedComplete);
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('region', { name: /generation status/i }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows generation status panel when generation failed', async () => {
+    const failedSession = {
+      ...runningSession,
+      generation: {
+        ...runningSession.generation!,
+        stage: 'FAILED' as const,
+        can_cancel: false,
+        can_resume: false,
+      },
+    };
+    renderPage(failedSession);
+    expect(
+      await screen.findByRole('region', { name: /generation status/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows generation status panel when some topics were not generated', async () => {
+    const incompleteSession = {
+      ...runningSession,
+      generation: {
+        ...runningSession.generation!,
+        stage: 'COMPLETE' as const,
+        can_cancel: false,
+        can_resume: false,
+        counts: {
+          ...runningSession.generation!.counts,
+          topics_total: 9,
+          topics_ready: 7,
+          topics_failed: 2,
+        },
+      },
+    };
+    renderPage(incompleteSession);
+    expect(
+      await screen.findByRole('region', { name: /generation status/i }),
+    ).toBeInTheDocument();
   });
 
   it('auto-opens Sources on RESEARCHING, swaps to TOC on OUTLINING, and closes TOC on outline ready', async () => {

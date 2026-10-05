@@ -14,6 +14,7 @@
  * KEY COMPONENTS:
  *    - applyGenerationEvent: Pure session cache reducer
  *    - isTerminalGenerationStage: Terminal stage helper
+ *    - shouldShowGenerationStatusPanel: Hide strip when nothing remains to retry
  *
  * DEPENDENCIES:
  *    - External: None
@@ -39,6 +40,29 @@ export function isTerminalGenerationStage(
 ): boolean {
   if (!stage) return true;
   return TERMINAL_STAGES.has(stage);
+}
+
+/**
+ * Shows the generation strip only while work can still run or be retried.
+ * Research-only warnings (COMPLETE_DEGRADED with every topic ready) hide it.
+ */
+export function shouldShowGenerationStatusPanel(
+  generation: GenerationJobPublic | null | undefined,
+): boolean {
+  if (!generation) {
+    return false;
+  }
+
+  const { stage, counts } = generation;
+  const hasUnfinishedTopics =
+    counts.topics_failed > 0 ||
+    (counts.topics_total > 0 && counts.topics_ready < counts.topics_total);
+
+  if (stage === 'COMPLETE' || stage === 'COMPLETE_DEGRADED') {
+    return hasUnfinishedTopics;
+  }
+
+  return true;
 }
 
 /**

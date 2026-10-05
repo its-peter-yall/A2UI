@@ -56,7 +56,11 @@ import {
 import { cn } from "@/lib/utils";
 import type { LearningSessionWithNodes } from "@/types/learning";
 import type { GenerationStage, ResearchReport } from "@/types/generation";
-import { isTerminalGenerationStage, reconcileGenerationSession } from "./generationEvents";
+import {
+	isTerminalGenerationStage,
+	reconcileGenerationSession,
+	shouldShowGenerationStatusPanel,
+} from "./generationEvents";
 import { useSessionEvents } from "./useSessionEvents";
 import { useGenerationDrafts, type TargetDraft } from "./useGenerationDrafts";
 import { useGenerationOverlays } from "./useGenerationOverlays";
@@ -522,7 +526,8 @@ export function LearningPage() {
 							<SettingsButton />
 						</nav>
 					</div>
-					{session?.generation && session.generation.stage !== "COMPLETE" && (
+					{session?.generation &&
+						shouldShowGenerationStatusPanel(session.generation) && (
 						<div className="pb-3">
 							<GenerationStatusPanel
 								generation={session.generation}

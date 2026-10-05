@@ -71,7 +71,11 @@ export { useLearningMutations } from './useLearningMutations';
 export { useErrorToast, ToastContainer } from './useErrorToast';
 export { useCourseList } from './useCourseList';
 export { useSessionEvents } from './useSessionEvents';
-export { applyGenerationEvent, isTerminalGenerationStage } from './generationEvents';
+export {
+  applyGenerationEvent,
+  isTerminalGenerationStage,
+  shouldShowGenerationStatusPanel,
+} from './generationEvents';
 export type { UseCourseListOptions } from './useCourseList';
 export type { UseLearningMutationsProps } from './useLearningMutations';
 export type { NodeActions, NodeStateResult } from './useNodeState';

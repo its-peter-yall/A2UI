@@ -27,6 +27,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyGenerationEvent,
   reconcileGenerationSession,
+  shouldShowGenerationStatusPanel,
 } from './generationEvents';
 import type { GenerationEvent, GenerationEventPayload } from '@/types/generation';
 import type { LearningSessionWithNodes } from '@/types/learning';
@@ -209,5 +210,72 @@ describe('reconcileGenerationSession', () => {
     } as LearningSessionWithNodes;
 
     expect(reconcileGenerationSession(current, repaired)).toBe(repaired);
+  });
+});
+
+describe('shouldShowGenerationStatusPanel', () => {
+  const generation = session.generation;
+
+  it('hides the strip when every topic is ready, including degraded complete', () => {
+    expect(generation).toBeTruthy();
+    if (!generation) {
+      return;
+    }
+    expect(
+      shouldShowGenerationStatusPanel({
+        ...generation,
+        stage: 'COMPLETE_DEGRADED',
+        counts: {
+          ...generation.counts,
+          topics_total: 9,
+          topics_ready: 9,
+          topics_failed: 0,
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowGenerationStatusPanel({
+        ...generation,
+        stage: 'COMPLETE',
+        counts: {
+          ...generation.counts,
+          topics_total: 9,
+          topics_ready: 9,
+          topics_failed: 0,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it('shows the strip when generation failed or topics remain unfinished', () => {
+    expect(generation).toBeTruthy();
+    if (!generation) {
+      return;
+    }
+    expect(
+      shouldShowGenerationStatusPanel({
+        ...generation,
+        stage: 'FAILED',
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowGenerationStatusPanel({
+        ...generation,
+        stage: 'COMPLETE',
+        counts: {
+          ...generation.counts,
+          topics_total: 9,
+          topics_ready: 7,
+          topics_failed: 2,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowGenerationStatusPanel({
+        ...generation,
+        stage: 'CANCELLED',
+        can_resume: true,
+      }),
+    ).toBe(true);
   });
 });
