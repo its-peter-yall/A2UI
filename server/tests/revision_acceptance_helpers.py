@@ -22,16 +22,23 @@ import json
 import sqlite3
 from contextlib import ExitStack, closing, contextmanager
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Iterator
 from unittest.mock import patch
 from uuid import UUID
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from server.database.repositories.facade import RepositoryFacade
 from server.database.repositories.mongo_learning import (
     MongoLearningRepository,
 )
 from server.database.repositories.sqlite import SqliteLearningRepository
+from server.routers.learning import router
 from server.schemas.learning import (
-    RevisionSessionResponse, RevisionSessionWithProgress, RevisionSummary,
+    NodeStatus, RevisionSessionResponse, RevisionSessionWithProgress,
+    RevisionSummary,
 )
 from server.tests.test_revision_mongo import MemoryMongo
 from server.tests.test_revision_sqlite import (
@@ -157,3 +164,114 @@ def run_transcript(fixture: AcceptanceFixture, backend: str) -> dict:
         repo.get_revisions_for_session(fixture.session)[0][0]
     ).model_dump(mode="json")
     return result
+
+
+@contextmanager
+def route_client(fixture: AcceptanceFixture, backend: str):
+    """Actual router and late-bound facade; isolated external read ports."""
+    app = FastAPI()
+    app.include_router(router)
+    facade = RepositoryFacade(lambda: fixture.repositories[backend])
+    with ExitStack() as stack:
+        stack.enter_context(patch(
+            "server.routers.learning.learning_manager", facade
+        ))
+        stack.enter_context(patch(
+            "server.routers.learning.generation_job_store",
+            SimpleNamespace(to_public_by_session=lambda _: None),
+        ))
+        stack.enter_context(patch(
+            "server.routers.learning.research_store",
+            SimpleNamespace(get_citations_by_session=lambda _: {}),
+        ))
+        yield stack.enter_context(TestClient(app, raise_server_exceptions=False))
+
+
+def wire_fixture(backend: str, mode: str) -> dict:
+    """Capture real response bodies for page acceptance; no files written."""
+    with AcceptanceFixture(mode) as fixture:
+        with frozen_writes(START, 20):
+            second = fixture.manager.create_concept_node(
+                fixture.session, 1, "Topic B", "# Plain heading\n\n"
+                "Fallback paragraph without curiosity.", NodeStatus.COMPLETED,
+            )["id"]
+            fixture.execute(
+                "INSERT INTO revision_node_progress "
+                "(id, revision_session_id, node_id, status) "
+                "VALUES (?, ?, ?, 'pending')",
+                ("reading-progress", fixture.revision_id, second),
+            )
+        fixture.refresh_mongo()
+        with route_client(fixture, backend) as client:
+            rid = fixture.revision_id
+            base = f"/learning/revisions/{rid}"
+
+            def get(url: str) -> dict:
+                response = client.get(url)
+                if response.status_code != 200:
+                    raise AssertionError(response.text)
+                return response.json()
+
+            def submit(index: int, option: str, timestamp: str, number: int):
+                with frozen_writes(timestamp, number):
+                    response = client.post(
+                        f"{base}/nodes/{fixture.node}/submit-quiz",
+                        json={"selected_option_ids": [option],
+                              "quiz_index": index},
+                    )
+                if response.status_code != 200:
+                    raise AssertionError(response.text)
+                return response.json()
+
+            result = {
+                "original": get(f"/learning/sessions/{fixture.session}"),
+                "initial": get(base),
+                "original_before": fixture.raw_snapshot(backend, True),
+            }
+            first = submit(0, "q0-0", FIRST, 100)
+            result["partial"] = get(base)
+            second_attempt = submit(1, "q1-1", SECOND, 200)
+            result["before_review"] = get(base)
+            result["reviews"] = []
+            if mode == "full_review":
+                for node in (fixture.node, second):
+                    with frozen_writes(SECOND, 250):
+                        response = client.post(f"{base}/nodes/{node}/mark-reviewed")
+                    if response.status_code != 200:
+                        raise AssertionError(response.text)
+                    result["reviews"].append(response.json())
+            result["mixed"] = get(base)
+            result["summary_mixed"] = get(f"{base}/summary")
+            retry = submit(1, "q1-0", THIRD, 300)
+            result["retry"] = get(base)
+            result["summary_retry"] = get(f"{base}/summary")
+            result["listed"] = get(
+                f"/learning/sessions/{fixture.session}/revisions"
+            )
+            with frozen_writes(THIRD, 400):
+                response = client.post(
+                    f"/learning/sessions/{fixture.session}/revisions",
+                    json={"mode": mode},
+                )
+            if response.status_code != 201:
+                raise AssertionError(response.text)
+            result["fresh"] = get(f"/learning/revisions/{response.json()['id']}")
+            result["submissions"] = [first, second_attempt, retry]
+            result["original_after"] = fixture.raw_snapshot(backend, True)
+            return result
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--wire", action="store_true")
+    args = parser.parse_args()
+    if not args.wire:
+        parser.error("Choose --wire; browser serving uses the ASGI factory")
+    print(json.dumps({mode: wire_fixture("sqlite", mode)
+                      for mode in ("full_review", "quiz_only")}))
+
+
+if __name__ == "__main__":
+    main()
