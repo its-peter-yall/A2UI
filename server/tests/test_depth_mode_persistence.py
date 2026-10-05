@@ -11,11 +11,14 @@ USAGE:
 """
 from __future__ import annotations
 
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
 from server.database.learning_persistence import LearningManager
+from server.database.repositories.sqlite import SqliteLearningRepository
+from server.schemas.learning import NodeStatus
 
 
 class DepthModePersistenceTests(unittest.TestCase):
