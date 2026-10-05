@@ -291,6 +291,152 @@ class RevisionSqliteTests(RevisionSqliteFixture, unittest.TestCase):
             self.assertLessEqual(len(lists), 5)
         self.assertEqual(self.snapshot(), before)
 
+    def test_submit_restores_complete_identity_and_practice_coverage(
+        self,
+    ) -> None:
+        revision_id = self.revision()
+        original = self.snapshot(original_only=True)
+        correct = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["q0-0"], 0
+        )
+        self.assertEqual(correct["revision_session_id"], revision_id)
+        self.assertEqual(correct["node_id"], self.node)
+        self.assertEqual(correct["quiz_index"], 0)
+        self.assertEqual(correct["attempt_number"], 1)
+        self.assertEqual(correct["quiz_attempt_count"], 1)
+        self.assertEqual(correct["score_percent"], 100)
+        self.assertEqual(correct["correct_option_ids"], ["q0-0"])
+        self.assertIsNone(correct["selected_explanation"])
+        self.assertEqual(correct["revision_node_status"], "pending")
+        partial = self.manager.get_revision_session(revision_id)
+        self.assertEqual(partial["progress_percent"], 0)
+        wrong = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["q1-1"], 1
+        )
+        self.assertEqual(wrong["revision_node_status"], "quiz_failed")
+        self.assertEqual(wrong["correct_option_ids"], [])
+        self.assertEqual(wrong["explanation"], "")
+        self.assertEqual(wrong["selected_explanation"], "Explanation q1-1")
+        complete = self.manager.get_revision_session(revision_id)
+        self.assertEqual(complete["status"], "completed")
+        self.assertEqual(complete["progress_percent"], 100)
+        self.assertEqual(complete["total_quiz_score_percent"], 50)
+        self.assertEqual(complete["nodes"][0]["quiz_results"], [
+            {k: v for k, v in correct.items()
+             if k != "revision_node_status"},
+            {k: v for k, v in wrong.items()
+             if k != "revision_node_status"},
+        ])
+        saved = self.rows("quiz_attempts")
+        retry = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["q1-0"], 1
+        )
+        after = self.manager.get_revision_session(revision_id)
+        self.assertEqual(retry["attempt_number"], 3)
+        self.assertEqual(retry["quiz_attempt_count"], 2)
+        self.assertEqual(retry["revision_node_status"], "quiz_passed")
+        self.assertEqual(after["completed_at"], complete["completed_at"])
+        self.assertEqual(after["total_quiz_score_percent"], 66)
+        by_id = {r[0]: r for r in self.rows("quiz_attempts")}
+        self.assertTrue(all(by_id[row[0]] == row for row in saved))
+        self.assertEqual(len(by_id), 3)
+        self.assertEqual(self.snapshot(original_only=True), original)
+
+    def test_multiple_choice_is_exact_match_and_preserves_ids(self) -> None:
+        self.execute(
+            "UPDATE quiz_data SET payload = ? WHERE node_id = ?",
+            (QuizSet(quizzes=[make_quiz("multi", True)]).model_dump_json(),
+             self.node),
+        )
+        revision_id = self.revision()
+        partial = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["multi-0"], 0
+        )
+        self.assertFalse(partial["is_correct"])
+        self.assertEqual(partial["correct_option_ids"], [])
+        result = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["multi-2", "multi-0"], 0
+        )
+        self.assertTrue(result["is_correct"])
+        self.assertEqual(result["selected_option_ids"], ["multi-2", "multi-0"])
+        self.assertEqual(result["correct_option_ids"], ["multi-0", "multi-2"])
+        self.assertEqual(result["quiz_attempt_count"], 2)
+        self.assertEqual(self.manager.get_revision_session(revision_id)[
+            "nodes"
+        ][0]["quiz_results"][0]["id"], result["id"])
+
+    def test_invalid_submissions_write_nothing(self) -> None:
+        revision_id = self.revision()
+        self.manager.submit_revision_quiz(revision_id, self.node, ["q0-1"], 0)
+        cases = (
+            ("missing", self.node, ["q0-0"], 0, LookupError),
+            (revision_id, "missing", ["q0-0"], 0, LookupError),
+            (revision_id, self.node, ["q0-0"], -1, ValueError),
+            (revision_id, self.node, ["q0-0"], 2, ValueError),
+            (revision_id, self.node, ["A"], 0, ValueError),
+            (revision_id, self.node, [], 0, ValueError),
+            (revision_id, self.node, ["q0-0", "q0-0"], 0, ValueError),
+            (revision_id, self.node, ["q0-0", "q0-1"], 0, ValueError),
+            (revision_id, self.node, ["q1-0"], 0, ValueError),
+        )
+        for rid, node, ids, index, error in cases:
+            with self.subTest(index=index, ids=ids, node=node, rid=rid):
+                before = self.snapshot()
+                with self.assertRaises(error):
+                    self.manager.submit_revision_quiz(rid, node, ids, index)
+                self.assertEqual(self.snapshot(), before)
+        # Missing membership even when the node belongs to the course.
+        extra = self.manager.create_concept_node(
+            self.session, 1, "Not participating", "# Original",
+            NodeStatus.COMPLETED, quiz=make_quiz("extra"),
+        )["id"]
+        before = self.snapshot()
+        with self.assertRaises(LookupError):
+            self.manager.submit_revision_quiz(
+                revision_id, extra, ["extra-0"], 0
+            )
+        self.assertEqual(self.snapshot(), before)
+        # Corrupt membership cannot authorize a different original course.
+        other_session = self.manager.create_learning_session("Other", "Other")[
+            "id"
+        ]
+        foreign = self.manager.create_concept_node(
+            other_session, 0, "Foreign", "# Original", NodeStatus.COMPLETED,
+            quiz=make_quiz("foreign"),
+        )["id"]
+        self.execute(
+            "INSERT INTO revision_node_progress "
+            "(id, revision_session_id, node_id, status) VALUES (?, ?, ?, ?)",
+            ("foreign-progress", revision_id, foreign, "pending"),
+        )
+        before = self.snapshot()
+        with self.assertRaises(LookupError):
+            self.manager.submit_revision_quiz(
+                revision_id, foreign, ["foreign-0"], 0
+            )
+        self.assertEqual(self.snapshot(), before)
+
+    def test_failed_aggregate_update_rolls_back_attempt_and_metadata(
+        self,
+    ) -> None:
+        revision_id = self.revision()
+        self.seed_attempt(revision_id, 1, 0, "q0-1", False)
+        self.execute(
+            "UPDATE revision_sessions SET status = 'completed', "
+            "progress_percent = 100, completed_at = ? WHERE id = ?",
+            (THIRD, revision_id),
+        )
+        before = self.snapshot()
+        with patch.object(
+            self.manager, "_update_revision_progress",
+            side_effect=sqlite3.OperationalError("injected write failure"),
+        ):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.manager.submit_revision_quiz(
+                    revision_id, self.node, ["q1-0"], 1
+                )
+        self.assertEqual(self.snapshot(), before)
+
 
 def main() -> None:
     unittest.main()

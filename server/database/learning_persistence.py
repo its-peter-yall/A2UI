@@ -1120,173 +1120,134 @@ class LearningManager:
         finally:
             conn.close()
 
+    def _require_revision_row(
+        self, conn: sqlite3.Connection, revision_id: str,
+    ) -> sqlite3.Row:
+        """Require an existing revision on the caller's connection."""
+        row = conn.execute(
+            "SELECT * FROM revision_sessions WHERE id = ?", (revision_id,),
+        ).fetchone()
+        if row is None:
+            raise LookupError("Revision session not found")
+        return row
+
+    def _require_revision_member(
+        self, nodes: list[RevisionNodeInput], node_id: str,
+    ) -> RevisionNodeInput:
+        """Require a participating node, not merely a course node."""
+        node = next((n for n in nodes if n.node_id == node_id), None)
+        if node is None:
+            raise LookupError("Revision node not found")
+        return node
+
+    def _prepare_revision_write(
+        self, conn: sqlite3.Connection, revision_id: str,
+        before: RevisionProjection,
+    ) -> None:
+        """Invalidate disproven completion only within a valid transaction."""
+        if before.status != "completed":
+            conn.execute(
+                "UPDATE revision_sessions SET completed_at = NULL "
+                "WHERE id = ?", (revision_id,),
+            )
+
     def submit_revision_quiz(
-        self,
-        revision_id: str,
-        node_id: str,
-        selected_option_ids: List[str],
-        quiz_index: int = 0,
+        self, revision_id: str, node_id: str,
+        selected_option_ids: List[str], quiz_index: int = 0,
     ) -> Dict[str, Any]:
-        """Submit quiz answer for a revision node and track progress."""
+        """Validate then append one attempt and reconcile atomically.
+
+        Args:
+            revision_id: Owning revision identifier.
+            node_id: Participating concept node identifier.
+            selected_option_ids: Nonempty stable option IDs.
+            quiz_index: Zero-based index of an available quiz.
+        Returns:
+            Complete immediate P1 attempt payload with aggregate topic status.
+        Raises:
+            LookupError: Revision or course-owned membership is missing.
+            ValueError: Quiz index or selection is invalid.
+            sqlite3.Error: The transaction fails; no partial write is saved.
+        """
         conn = self._get_connection()
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT id
-                FROM revision_sessions
-                WHERE id = ?
-                """,
-                (revision_id,),
+            row = self._require_revision_row(conn, revision_id)
+            before, nodes = self._project_revision_row(conn, row)
+            node = self._require_revision_member(nodes, node_id)
+            if quiz_index < 0 or quiz_index >= len(node.quizzes):
+                raise ValueError("Quiz index is outside available quizzes")
+            correct = evaluate_revision_selection(
+                node.quizzes[quiz_index], selected_option_ids
             )
-            if cursor.fetchone() is None:
-                raise LookupError(f"Revision session not found: {revision_id}")
-
-            cursor.execute(
-                """
-                SELECT status
-                FROM revision_node_progress
-                WHERE revision_session_id = ? AND node_id = ?
-                """,
-                (revision_id, node_id),
-            )
-            progress_row = cursor.fetchone()
-            if progress_row is None:
-                raise LookupError(
-                    f"Revision node not found for revision {revision_id}: {node_id}"
-                )
-
-            quiz_result = self.create_quiz_attempt(
-                node_id=node_id,
-                selected_option_ids=selected_option_ids,
-                quiz_index=quiz_index,
-                revision_session_id=revision_id,
-                conn=conn,
-            )
-
-            next_status = "quiz_passed" if quiz_result["is_correct"] else "quiz_failed"
-            if progress_row["status"] == "quiz_passed":
-                next_status = "quiz_passed"
-
+            # No write occurs before every membership/range/ID check above.
+            self._prepare_revision_write(conn, revision_id, before)
+            number = conn.execute(
+                "SELECT COALESCE(MAX(attempt_number), 0) + 1 "
+                "FROM quiz_attempts WHERE node_id = ?", (node_id,),
+            ).fetchone()[0]
+            attempt_id = str(uuid.uuid4())
             now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(
-                """
-                UPDATE revision_node_progress
-                SET status = ?,
-                    reviewed_at = CASE
-                        WHEN ? = 'quiz_passed'
-                            THEN COALESCE(reviewed_at, ?)
-                        ELSE reviewed_at
-                    END
-                WHERE revision_session_id = ? AND node_id = ?
-                """,
-                (next_status, next_status, now, revision_id, node_id),
+            stored_ids = (selected_option_ids[0]
+                          if len(selected_option_ids) == 1
+                          else json.dumps(selected_option_ids))
+            conn.execute(
+                "INSERT INTO quiz_attempts "
+                "(id, node_id, attempt_number, quiz_index, "
+                "revision_session_id, "
+                "selected_option_id, is_correct, score_percent, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (attempt_id, node_id, number, quiz_index, revision_id,
+                 stored_ids, int(correct), 100 if correct else 0, now),
             )
-
-            self._update_revision_progress(revision_id, conn)
+            projection = self._update_revision_progress(revision_id, conn)
+            projected_node = next(
+                n for n in projection.nodes if n.node_id == node_id
+            )
+            result = next(
+                r for r in projected_node.quiz_results if r.id == attempt_id
+            ).model_dump(mode="json")
+            result["revision_node_status"] = projected_node.status
             conn.commit()
-            return {
-                "is_correct": bool(quiz_result["is_correct"]),
-                "correct_option_ids": quiz_result.get("correct_option_ids", []),
-                "explanation": quiz_result.get("explanation"),
-                "selected_explanation": quiz_result.get("selected_explanation"),
-                "revision_node_status": next_status,
-            }
-        except sqlite3.Error as e:
-            logger.error(f"Error submitting revision quiz: {e}")
+            return result
+        except Exception:
+            conn.rollback()
             raise
         finally:
             conn.close()
 
     def _update_revision_progress(
-        self,
-        revision_id: str,
+        self, revision_id: str,
         conn: Optional[sqlite3.Connection] = None,
-    ) -> Dict[str, Any]:
-        """Recalculate and persist revision-level progress metadata."""
+    ) -> RevisionProjection:
+        """Persist projection caches, sharing the attempt/review transaction."""
         owns_connection = conn is None
         active_conn = conn or self._get_connection()
         try:
-            cursor = active_conn.cursor()
-            cursor.execute(
-                """
-                SELECT id
-                FROM revision_sessions
-                WHERE id = ?
-                """,
-                (revision_id,),
+            row = self._require_revision_row(active_conn, revision_id)
+            projection, _ = self._project_revision_row(active_conn, row)
+            for node in projection.nodes:
+                active_conn.execute(
+                    "UPDATE revision_node_progress SET status = ? "
+                    "WHERE id = ? AND revision_session_id = ?",
+                    (node.status, node.id, revision_id),
+                )
+            active_conn.execute(
+                "UPDATE revision_sessions SET status = ?, "
+                "progress_percent = ?, total_quiz_score_percent = ?, "
+                "completed_at = ? WHERE id = ?",
+                (projection.status, projection.progress_percent,
+                 projection.total_quiz_score_percent,
+                 projection.completed_at.isoformat()
+                 if projection.completed_at is not None else None,
+                 revision_id),
             )
-            if cursor.fetchone() is None:
-                raise LookupError(f"Revision session not found: {revision_id}")
-
-            cursor.execute(
-                """
-                SELECT
-                    COUNT(*) AS total_nodes,
-                    SUM(CASE WHEN status != 'pending' THEN 1 ELSE 0 END)
-                        AS completed_nodes,
-                    SUM(CASE WHEN status = 'quiz_passed' THEN 1 ELSE 0 END)
-                        AS quizzes_passed,
-                    SUM(CASE WHEN status = 'quiz_failed' THEN 1 ELSE 0 END)
-                        AS quizzes_failed
-                FROM revision_node_progress
-                WHERE revision_session_id = ?
-                """,
-                (revision_id,),
-            )
-            row = cursor.fetchone()
-            total_nodes = int(row["total_nodes"] or 0) if row else 0
-            completed_nodes = int(row["completed_nodes"] or 0) if row else 0
-            quizzes_passed = int(row["quizzes_passed"] or 0) if row else 0
-            quizzes_failed = int(row["quizzes_failed"] or 0) if row else 0
-
-            progress_percent = self._calculate_progress_percent(
-                completed_nodes=completed_nodes,
-                total_nodes=total_nodes,
-            )
-            quiz_attempted = quizzes_passed + quizzes_failed
-            total_quiz_score_percent = (
-                (quizzes_passed * 100) // quiz_attempted if quiz_attempted > 0 else None
-            )
-            revision_status = (
-                "completed"
-                if total_nodes > 0 and completed_nodes >= total_nodes
-                else "in_progress"
-            )
-            now = datetime.now(timezone.utc).isoformat()
-
-            cursor.execute(
-                """
-                UPDATE revision_sessions
-                SET status = ?,
-                    progress_percent = ?,
-                    total_quiz_score_percent = ?,
-                    completed_at = CASE
-                        WHEN ? = 'completed'
-                            THEN COALESCE(completed_at, ?)
-                        ELSE completed_at
-                    END
-                WHERE id = ?
-                """,
-                (
-                    revision_status,
-                    progress_percent,
-                    total_quiz_score_percent,
-                    revision_status,
-                    now,
-                    revision_id,
-                ),
-            )
-
             if owns_connection:
                 active_conn.commit()
-
-            return {
-                "revision_id": revision_id,
-                "status": revision_status,
-                "progress_percent": progress_percent,
-                "total_quiz_score_percent": total_quiz_score_percent,
-            }
+            return projection
+        except Exception:
+            if owns_connection:
+                active_conn.rollback()
+            raise
         finally:
             if owns_connection:
                 active_conn.close()
