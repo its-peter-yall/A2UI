@@ -50,6 +50,7 @@ interface ChatPanelProps {
 	onClose: () => void;
 	sessionId: string;
 	nodeId: string;
+	topicTitle?: string;
 	selectedHeadingIds?: string[];
 	onClearHeadings?: () => void;
 	isCourseComplete?: boolean;
@@ -83,6 +84,7 @@ export function ChatPanel({
 	onClose,
 	sessionId,
 	nodeId,
+	topicTitle,
 	selectedHeadingIds = [],
 	onClearHeadings = () => {},
 	isCourseComplete = false,
@@ -107,6 +109,7 @@ export function ChatPanel({
 
 	const [input, setInput] = useState("");
 	const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+	const [lastPrefill, setLastPrefill] = useState<string | null>(null);
 	const [containerHeight, setContainerHeight] = useState<number>(0);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -125,11 +128,12 @@ export function ChatPanel({
 		[],
 	);
 
-	// Reset input when panel closes (during render to avoid effect state cascade)
+	// Reset input and prefill tracking when panel closes (during render to avoid effect state cascade)
 	if (isOpen !== prevIsOpen) {
 		setPrevIsOpen(isOpen);
 		if (!isOpen) {
 			setInput("");
+			setLastPrefill(null);
 		}
 	}
 
@@ -194,11 +198,12 @@ export function ChatPanel({
 
 	// Apply prefill message from curiosity questions (or other callers).
 	// Uses the render-time derivation pattern (not useEffect) to avoid cascading renders.
-	const [lastPrefill, setLastPrefill] = useState<string | null>(null);
 	if (prefillMessage && prefillMessage !== lastPrefill) {
 		setLastPrefill(prefillMessage);
 		setInput(prefillMessage);
 		onPrefillConsumed?.();
+	} else if (!prefillMessage && lastPrefill !== null) {
+		setLastPrefill(null);
 	}
 	useEffect(() => {
 		if (lastPrefill) {
@@ -293,10 +298,20 @@ export function ChatPanel({
 			>
 					{/* Header */}
 					<div className="flex items-center justify-between px-4 py-3 border-b">
-						<div className="flex items-center gap-2">
-							<MessageCircle className="h-5 w-5 text-(--cyber-yellow)" />
-							<h2 id="chat-panel-title" className="font-semibold text-sm">
-								Ask about this concept
+						<div className="flex items-center gap-2 min-w-0">
+							<MessageCircle className="h-5 w-5 text-(--cyber-yellow) shrink-0" />
+							<h2
+								id="chat-panel-title"
+								className="font-semibold text-sm truncate"
+								title={
+									topicTitle
+										? `Chat: ${topicTitle}`
+										: "Ask about this concept"
+								}
+							>
+								{topicTitle
+									? `Chat: ${topicTitle}`
+									: "Ask about this concept"}
 							</h2>
 						</div>
 						<div className="flex items-center gap-1">

@@ -303,3 +303,189 @@ describe("ChatPanel web search", () => {
 		expect(screen.getByText("Chat request failed")).toBeInTheDocument();
 	});
 });
+
+describe("ChatPanel topic title, repeated prefill, and streaming composer", () => {
+	beforeEach(() => {
+		mocks.capability = true;
+		mocks.hook.messages = [];
+		mocks.hook.isStreaming = false;
+		mocks.hook.error = null;
+		mocks.hook.webSearchEnabled = false;
+		mocks.hook.streamingStatus = null;
+		mocks.hook.streamingWarning = null;
+		mocks.hook.sendMessage.mockReset();
+		mocks.hook.clearChat.mockReset();
+		mocks.hook.resetChat.mockReset();
+		mocks.hook.stopStreaming.mockReset();
+		mocks.hook.setWebSearchEnabled.mockReset();
+	});
+
+	it("renders default title when topicTitle is not provided", () => {
+		render(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+			/>,
+		);
+		expect(
+			screen.getByRole("heading", { name: "Ask about this concept" }),
+		).toBeInTheDocument();
+	});
+
+	it("renders the specific topic title in the header when topicTitle is provided", () => {
+		render(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				topicTitle="Gradient Descent Fundamentals"
+			/>,
+		);
+		const heading = screen.getByRole("heading", {
+			name: "Chat: Gradient Descent Fundamentals",
+		});
+		expect(heading).toBeInTheDocument();
+		expect(heading).toHaveAttribute(
+			"title",
+			"Chat: Gradient Descent Fundamentals",
+		);
+	});
+
+	it("applies prefillMessage, calls onPrefillConsumed, and supports repeated prefill of the exact same question", () => {
+		const handleConsumed = vi.fn();
+		const { rerender } = render(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage="What is learning rate?"
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		const textarea = screen.getByPlaceholderText(
+			"Ask a question...",
+		) as HTMLTextAreaElement;
+		expect(textarea.value).toBe("What is learning rate?");
+		expect(handleConsumed).toHaveBeenCalledTimes(1);
+
+		// Parent clears prefillMessage after consumption
+		rerender(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage=""
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		// User edits or clears textarea
+		fireEvent.change(textarea, { target: { value: "" } });
+		expect(textarea.value).toBe("");
+
+		// User clicks the SAME question again
+		rerender(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage="What is learning rate?"
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		// Must be prefilled again!
+		expect(textarea.value).toBe("What is learning rate?");
+		expect(handleConsumed).toHaveBeenCalledTimes(2);
+	});
+
+	it("resets prefill state when closed so reopening and clicking the same question prefills", () => {
+		const handleConsumed = vi.fn();
+		const { rerender } = render(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage="Why use momentum?"
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		const textarea = screen.getByPlaceholderText(
+			"Ask a question...",
+		) as HTMLTextAreaElement;
+		expect(textarea.value).toBe("Why use momentum?");
+
+		// Close panel
+		rerender(
+			<ChatPanel
+				isOpen={false}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage=""
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		// Reopen panel and click the same question again
+		rerender(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage="Why use momentum?"
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		const reopenedTextarea = screen.getByPlaceholderText(
+			"Ask a question...",
+		) as HTMLTextAreaElement;
+		expect(reopenedTextarea.value).toBe("Why use momentum?");
+	});
+
+	it("populates composer when prefill arrives while streaming without sending or interrupting stream", () => {
+		mocks.hook.isStreaming = true;
+		mocks.hook.messages = [
+			{ role: "user", content: "Initial query" },
+			{ role: "assistant", content: "Streaming partial response..." },
+		];
+
+		const handleConsumed = vi.fn();
+		render(
+			<ChatPanel
+				isOpen={true}
+				onClose={vi.fn()}
+				sessionId="session-1"
+				nodeId="node-1"
+				prefillMessage="Followup question while streaming"
+				onPrefillConsumed={handleConsumed}
+			/>,
+		);
+
+		const textarea = screen.getByPlaceholderText(
+			"Ask a question...",
+		) as HTMLTextAreaElement;
+		expect(textarea.value).toBe("Followup question while streaming");
+		expect(textarea).toBeDisabled();
+		expect(handleConsumed).toHaveBeenCalledTimes(1);
+		expect(mocks.hook.sendMessage).not.toHaveBeenCalled();
+		expect(
+			screen.getByRole("button", { name: "Stop streaming" }),
+		).toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Send message" }),
+		).not.toBeInTheDocument();
+	});
+});
+
