@@ -50,7 +50,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { MessageCircle, GripVertical } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import type {
 	LearningSessionWithNodes,
 	QuizSubmitResponse,
@@ -63,6 +63,8 @@ import {
 } from "@/lib/learningApi";
 import { ConceptCard } from "./ConceptCard";
 import { ChatPanel } from "./ChatPanel";
+import { ConceptChatLayout } from "./ConceptChatLayout";
+import { useConceptChatPanel } from "./useConceptChatPanel";
 import { LearningErrorBoundary } from "./LearningErrorBoundary";
 import { MasteryCelebration } from "./animations/MasteryCelebration";
 import { ProgressBar } from "./ProgressBar";
@@ -146,99 +148,11 @@ export function LearningPathContainer({
 	const activeSessionKey = activeSessionId ?? "new";
 	const { toasts, showError, dismissToast } = useErrorToast();
 
-	// Chat panel state
-	const [isChatOpen, setIsChatOpen] = useState(false);
 	const [isTOCOpen, setIsTOCOpen] = useState(false);
 	const tocOpen = isTOCOpenProp ?? isTOCOpen;
 	const openTOC = onOpenTOC ?? (() => setIsTOCOpen(true));
 	const closeTOC = onCloseTOC ?? (() => setIsTOCOpen(false));
 	const [userNavigated, setUserNavigated] = useState(false);
-	const [selectedHeadingIds, setSelectedHeadingIds] = useState<string[]>([]);
-	const [prefillMessage, setPrefillMessage] = useState<string>("");
-	// Stable nodeId for chat — only updates when user explicitly opens chat,
-	// NOT on carousel swipe. Prevents storage wipe during navigation.
-	const [chatNodeId, setChatNodeId] = useState<string>("");
-	const chatNodeIdRef = useRef<string>("");
-
-	const handleAskQuestion = useCallback((question: string) => {
-		setPrefillMessage(question);
-		setChatNodeId(chatNodeIdRef.current);
-		setIsChatOpen(true);
-	}, []);
-
-	// Resizable chat panel state
-	const [chatWidthPercent, setChatWidthPercent] = useState(25); // Default = minimum
-	const isResizingRef = useRef(false);
-	const containerRef = useRef<HTMLDivElement>(null);
-
-	// Resize constraints (in percentage)
-	const CHAT_MIN_PERCENT = 25; // Minimum chat width
-	const CHAT_MAX_PERCENT = 38; // Maximum chat width
-
-	// Resize handlers
-	const handleResizeStart = useCallback((e: React.MouseEvent) => {
-		e.preventDefault();
-		isResizingRef.current = true;
-		document.body.style.cursor = "col-resize";
-		document.body.style.userSelect = "none";
-	}, []);
-
-	const handleResizeMove = useCallback(
-		(e: MouseEvent) => {
-			if (!isResizingRef.current || !containerRef.current) return;
-
-			const containerRect = containerRef.current.getBoundingClientRect();
-			const containerWidth = containerRect.width;
-			const mouseX = e.clientX - containerRect.left;
-
-			// Calculate new chat width percentage
-			const newChatPercent =
-				((containerWidth - mouseX) / containerWidth) * 100;
-
-			// Apply constraints
-			const clampedPercent = Math.max(
-				CHAT_MIN_PERCENT,
-				Math.min(CHAT_MAX_PERCENT, newChatPercent),
-			);
-
-			setChatWidthPercent(clampedPercent);
-		},
-		[],
-	);
-
-	const handleResizeEnd = useCallback(() => {
-		isResizingRef.current = false;
-		document.body.style.cursor = "";
-		document.body.style.userSelect = "";
-	}, []);
-
-	// Always listen for mouse move/up (handler checks ref internally)
-	useEffect(() => {
-		const onMouseMove = (e: MouseEvent) => {
-			if (isResizingRef.current) handleResizeMove(e);
-		};
-		const onMouseUp = () => {
-			if (isResizingRef.current) handleResizeEnd();
-		};
-
-		window.addEventListener("mousemove", onMouseMove);
-		window.addEventListener("mouseup", onMouseUp);
-
-		return () => {
-			window.removeEventListener("mousemove", onMouseMove);
-			window.removeEventListener("mouseup", onMouseUp);
-		};
-	}, [handleResizeMove, handleResizeEnd]);
-
-	const handleToggleHeadingChat = useCallback((headingId: string) => {
-		setSelectedHeadingIds((prev) =>
-			prev.includes(headingId)
-				? prev.filter((id) => id !== headingId)
-				: [...prev, headingId],
-		);
-		setChatNodeId(chatNodeIdRef.current);
-		setIsChatOpen(true);
-	}, []);
 
 	// Track quiz results for feedback display
 	const [quizResultsBySession, setQuizResultsBySession] = useState<
@@ -552,6 +466,41 @@ export function LearningPathContainer({
 		};
 	}, [flushLastActive]);
 
+	// Get current slide node
+	const currentSlideNode = session?.nodes[carouselState.currentIndex];
+	const canGoNext = session
+		? carouselState.currentIndex < session.nodes.length - 1
+		: false;
+	const canGoPrev = carouselState.currentIndex > 0;
+
+	const chatPanel = useConceptChatPanel({
+		sessionId: activeSessionId,
+		activeTopicId: currentSlideNode?.id,
+		activeTopicTitle: currentSlideNode?.title,
+	});
+
+	const handleAskQuestion = useCallback(
+		(question: string) => {
+			chatPanel.askQuestion(
+				question,
+				currentSlideNode?.id,
+				currentSlideNode?.title,
+			);
+		},
+		[chatPanel, currentSlideNode?.id, currentSlideNode?.title],
+	);
+
+	const handleToggleHeadingChat = useCallback(
+		(headingId: string) => {
+			chatPanel.toggleHeadingChat(
+				headingId,
+				currentSlideNode?.id,
+				currentSlideNode?.title,
+			);
+		},
+		[chatPanel, currentSlideNode?.id, currentSlideNode?.title],
+	);
+
 	// Carousel navigation functions
 	const goToSlide = useCallback(
 		(index: number, userInitiated = true) => {
@@ -575,10 +524,10 @@ export function LearningPathContainer({
 			// Close chat panel when navigating to a quiz node or feedback node (anti-cheat)
 			const targetStatus = session.nodes[clampedIndex]?.status;
 			if (targetStatus === "IN_QUIZ" || targetStatus === "SHOWING_FEEDBACK") {
-				setIsChatOpen(false);
+				chatPanel.closeChat();
 			}
 		},
-		[session, carouselState.currentIndex, activeSessionKey],
+		[session, carouselState.currentIndex, activeSessionKey, chatPanel],
 	);
 
 	// When GENERATING_PREVIEW begins, reveal topic 0 once unless the learner
@@ -641,31 +590,21 @@ export function LearningPathContainer({
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [goToNext, goToPrev]);
 
-	// Get current slide node
-	const currentSlideNode = session?.nodes[carouselState.currentIndex];
-	const canGoNext = session
-		? carouselState.currentIndex < session.nodes.length - 1
-		: false;
-	const canGoPrev = carouselState.currentIndex > 0;
-
-	// Keep ref in sync so chat-open handlers capture correct node
-	useEffect(() => {
-		chatNodeIdRef.current = currentSlideNode?.id ?? "";
-	}, [currentSlideNode?.id]);
-
 	// Close chat panel automatically when switching to or entering a quiz/feedback node (anti-cheat)
-	const isQuizNode = currentSlideNode?.status === "IN_QUIZ" || currentSlideNode?.status === "SHOWING_FEEDBACK";
+	const isQuizNode =
+		currentSlideNode?.status === "IN_QUIZ" ||
+		currentSlideNode?.status === "SHOWING_FEEDBACK";
 
 	// Derive effective chat state — always closed during quiz/feedback
-	const effectiveIsChatOpen = isChatOpen && !isQuizNode;
+	const effectiveIsChatOpen = chatPanel.isOpen && !isQuizNode;
 
 	// Close chat panel when proceeding to quiz (anti-cheat)
 	const handleProceedToQuiz = useCallback(
 		(nodeId: string) => {
-			setIsChatOpen(false);
+			chatPanel.closeChat();
 			proceedToQuiz(nodeId);
 		},
-		[proceedToQuiz],
+		[chatPanel, proceedToQuiz],
 	);
 
 	// Handle continue to next (manual button click, not auto-scroll)
@@ -835,16 +774,30 @@ export function LearningPathContainer({
 					console.error("Learning component crashed:", boundaryError);
 				}}
 			>
-				<div ref={containerRef} className="flex w-full h-full overflow-hidden">
-				{/* Main content area - shrinks when chat is open */}
-				<motion.div
-					className="flex flex-col gap-6 p-4 overflow-y-auto"
-					animate={{
-						flex: effectiveIsChatOpen
-							? `0 0 ${100 - chatWidthPercent}%`
-							: "1 1 100%",
-					}}
-					transition={{ type: "spring", damping: 30, stiffness: 300 }}
+				<ConceptChatLayout
+					isChatOpen={effectiveIsChatOpen}
+					chatWidthPercent={chatPanel.chatWidthPercent}
+					onChatWidthChange={chatPanel.setChatWidthPercent}
+					onCloseChat={chatPanel.closeChat}
+					chatPanel={
+						<ChatPanel
+							isOpen={effectiveIsChatOpen}
+							onClose={chatPanel.closeChat}
+							sessionId={activeSessionId ?? ""}
+							nodeId={chatPanel.chatNodeId}
+							topicTitle={chatPanel.chatTopicTitle}
+							selectedHeadingIds={chatPanel.selectedHeadingIds}
+							onClearHeadings={chatPanel.clearHeadings}
+							isCourseComplete={
+								session?.nodes &&
+								session.nodes.length > 0 &&
+								session.nodes.every((n) => n.status === "COMPLETED")
+							}
+							widthPercent={chatPanel.chatWidthPercent}
+							prefillMessage={chatPanel.prefillMessage}
+							onPrefillConsumed={chatPanel.consumePrefill}
+						/>
+					}
 				>
 					<div className={cn("mx-auto w-full", effectiveIsChatOpen ? "max-w-5xl" : "max-w-6xl")}>
 							{/* Header */}
@@ -979,7 +932,7 @@ export function LearningPathContainer({
 														}}
 														onPrevious={goToPrev}
 														canPrevious={canGoPrev}
-														selectedHeadingIds={selectedHeadingIds}
+														selectedHeadingIds={chatPanel.selectedHeadingIds}
 														onToggleHeadingChat={handleToggleHeadingChat}
 														onAskQuestion={handleAskQuestion}
 													/>
@@ -1006,69 +959,21 @@ export function LearningPathContainer({
 								</div>
 							)}
 						</div>
-					</motion.div>
-
-				{/* Resize handle */}
-				{effectiveIsChatOpen && (
-					<div
-						className="w-1 bg-border hover:bg-(--cyber-yellow) cursor-col-resize shrink-0 transition-colors relative group"
-						onMouseDown={handleResizeStart}
-						role="separator"
-						aria-orientation="vertical"
-						aria-label="Resize chat panel"
-						tabIndex={0}
-						onKeyDown={(e) => {
-							if (e.key === "ArrowLeft") {
-								setChatWidthPercent((prev) =>
-									Math.min(CHAT_MAX_PERCENT, prev + 2),
-								);
-							} else if (e.key === "ArrowRight") {
-								setChatWidthPercent((prev) =>
-									Math.max(CHAT_MIN_PERCENT, prev - 2),
-								);
-							}
-						}}
-					>
-						<div className="absolute inset-y-0 -left-1 -right-1" />
-						<div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-							<GripVertical className="h-4 w-4 text-muted-foreground" />
-						</div>
-					</div>
-				)}
-
-				{/* Chat Panel - slides in from right */}
-				<ChatPanel
-					isOpen={effectiveIsChatOpen}
-					onClose={() => setIsChatOpen(false)}
-					sessionId={activeSessionId ?? ""}
-					nodeId={chatNodeId}
-					selectedHeadingIds={selectedHeadingIds}
-					onClearHeadings={() => setSelectedHeadingIds([])}
-					isCourseComplete={
-						session?.nodes &&
-						session.nodes.length > 0 &&
-						session.nodes.every((n) => n.status === "COMPLETED")
-					}
-					widthPercent={chatWidthPercent}
-					prefillMessage={prefillMessage}
-					onPrefillConsumed={() => setPrefillMessage("")}
-				/>
-				</div>
+				</ConceptChatLayout>
 			</LearningErrorBoundary>
 
 		{/* Chat FAB - bottom-right fixed (hidden during quizzes/feedback) */}
 		{!effectiveIsChatOpen && !isQuizNode && (
-		<button
+			<button
 				onClick={() => {
-					setChatNodeId(chatNodeIdRef.current);
-					setIsChatOpen(true);
+					chatPanel.openChat(currentSlideNode?.id, currentSlideNode?.title);
 				}}
-				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center"
+				className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center cursor-pointer"
 				aria-label="Open concept chat"
 			>
 				<MessageCircle className="h-6 w-6" />
 			</button>
-			)}
+		)}
 
 			<TableOfContentsModal
 				isOpen={tocOpen}

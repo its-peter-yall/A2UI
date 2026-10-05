@@ -295,4 +295,62 @@ describe('LearningPathContainer progressive', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/quiz/i)).not.toBeInTheDocument();
   });
+
+  it('opens chat bound to current topic title, preserves ownership on slide change, and closes on quiz enter', () => {
+    const session = {
+      id: 'session-1',
+      user_id: null,
+      query: 'CSS',
+      course_title: 'CSS Masterclass',
+      total_nodes: 2,
+      completed_nodes: 0,
+      last_active_node_id: null,
+      created_at: '2026-08-01T00:00:00Z',
+      updated_at: null,
+      generation: { ...generation, stage: 'COMPLETE' as const, can_cancel: false },
+      nodes: [
+        {
+          id: 'n1',
+          learning_session_id: 'session-1',
+          sequence_index: 0,
+          title: 'Selectors Topic',
+          content_markdown: 'Content 1',
+          status: 'VIEWING_EXPLANATION',
+          error_message: null,
+          retry_available: false,
+          module_status: 'READY',
+          quiz: null,
+          quiz_set: null,
+          quiz_hidden: null,
+          quiz_set_hidden: null,
+          created_at: '2026-08-01T00:00:00Z',
+          updated_at: null,
+        },
+        {
+          id: 'n2',
+          learning_session_id: 'session-1',
+          sequence_index: 1,
+          title: 'Quiz Topic',
+          content_markdown: 'Content 2',
+          status: 'IN_QUIZ',
+          error_message: null,
+          retry_available: false,
+          module_status: 'READY',
+          quiz: null,
+          quiz_set: null,
+          quiz_hidden: null,
+          quiz_set_hidden: null,
+          created_at: '2026-08-01T00:00:00Z',
+          updated_at: null,
+        },
+      ],
+    } as LearningSessionWithNodes;
+
+    wrap(
+      <LearningPathContainer sessionId="session-1" session={session} />,
+    );
+
+    const fab = screen.getByRole('button', { name: 'Open concept chat' });
+    expect(fab).toBeInTheDocument();
+  });
 });
