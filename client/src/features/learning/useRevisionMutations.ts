@@ -5,168 +5,249 @@
  * ============================================================================
  *
  * PURPOSE:
- *    React Query mutations for revision mode: mark node reviewed and submit quiz.
+ *    Request-scoped revision writes with per-node/index pending and error state.
  *
  * ROLE IN PROJECT:
- *    Consumed by RevisionPage to handle user interactions with revision cards.
- *    Applies optimistic updates for instant UI feedback, rolls back on error,
- *    and invalidates the revision session cache after each mutation settles.
+ *    Consumed by RevisionPage to record explicit reading review and quiz
+ *    attempts. Quiz mutations never optimistically declare correctness, a topic
+ *    pass, or revision completion: a saved attempt is patched into the revision
+ *    cache immediately and every aggregate is reconciled by the server's own
+ *    revision GET. Only an explicit review may optimistically change its own
+ *    pending status, and it rolls back on failure.
  *
  * KEY COMPONENTS:
- *    - useRevisionMutations: Hook exposing markReviewed, submitAnswer, and loading flags
- *    - optimisticNodeUpdate: Applies and returns rollback for cache optimistic writes
- *    - markReviewedMutation: Marks a node reviewed in full_review mode
- *    - submitQuizMutation: Submits a quiz answer and surfaces the result via callback
+ *    - useRevisionMutations: markReviewed/submitAnswer with scoped request state
+ *    - patchRevisionQuiz: Applies the server's saved attempt to the cache
+ *    - Request registry: Token-guarded per-revision, per-node, per-index slots
  *
  * DEPENDENCIES:
- *    - External: @tanstack/react-query
+ *    - External: react, @tanstack/react-query
  *    - Internal: @/lib/learningApi (markNodeReviewed, submitRevisionQuiz),
- *                @/types/learning, ./useRevisionSession (revisionQueryKeys)
+ *                @/types/learning, ./useRevisionSession, ./revisionQuizState
  *
  * USAGE:
- *    const { markReviewed, submitAnswer, isMarkingReviewed, isSubmitting } =
+ *    const { markReviewed, submitAnswer, quizRequestStates } =
  *      useRevisionMutations({ revisionId, onError, onQuizResult });
  * ============================================================================
  */
-// useRevisionMutations.ts
-// React Query mutations for revision mode: mark reviewed, submit quiz
 
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { markNodeReviewed, submitRevisionQuiz } from '@/lib/learningApi';
 import type {
-  RevisionSessionWithProgress,
-  RevisionNodeStatus,
+  RevisionNodeProgressWithDetails,
   RevisionQuizResponse,
+  RevisionSessionWithProgress,
 } from '@/types/learning';
-import { revisionQueryKeys } from './useRevisionSession';
+import type {
+  RevisionQuizRequestState,
+  RevisionQuizRequestStates,
+} from './revisionQuizState';
+import { patchRevisionQuiz, revisionQueryKeys } from './useRevisionSession';
 
 /**
- * Props for useRevisionMutations hook.
+ * Immutable identity of one revision write.
+ *
+ * The revision ID comes from the request rather than the live route so a late
+ * response always patches the cache it belongs to.
  */
-export interface UseRevisionMutationsProps {
-  /** Revision session ID for cache operations */
+interface RequestIdentity {
   revisionId: string;
-  /** Called on any mutation error */
-  onError?: (error: Error, context: string) => void;
-  /** Called after a quiz is submitted */
-  onQuizResult?: (nodeId: string, isCorrect: boolean, result: RevisionQuizResponse) => void;
+  nodeId: string;
+  token: number;
 }
 
-/**
- * Hook providing revision-mode mutations with optimistic updates.
- *
- * Features:
- * - markReviewed: Mark a node as reviewed in full_review mode
- * - submitQuiz: Submit a quiz answer in revision mode
- * - Optimistic updates for instant badge changes
- * - Cache invalidation after mutations
- */
+interface QuizRequest extends RequestIdentity {
+  selectedOptionIds: string[];
+  quizIndex: number;
+}
+
+/** Request slots keyed by revision ID, then `kind:nodeId:index`. */
+type RequestRegistry = Record<
+  string,
+  Record<string, RevisionQuizRequestState & { token: number }>
+>;
+
+export interface UseRevisionMutationsProps {
+  revisionId: string;
+  onError?: (error: Error, context: string) => void;
+  onQuizResult?: (
+    nodeId: string,
+    isCorrect: boolean,
+    result: RevisionQuizResponse,
+  ) => void;
+}
+
 export function useRevisionMutations({
   revisionId,
   onError,
   onQuizResult,
 }: UseRevisionMutationsProps) {
   const queryClient = useQueryClient();
-  const queryKey = revisionQueryKeys.session(revisionId);
+  const sequence = useRef(0);
+  const [requests, setRequests] = useState<RequestRegistry>({});
 
-  const invalidateRevision = () => {
-    queryClient.invalidateQueries({ queryKey });
+  /**
+   * Publish request state for one slot.
+   *
+   * The monotonic token prevents a slower earlier request from overwriting a
+   * newer slot state that has already settled.
+   */
+  const setRequest = (
+    request: RequestIdentity,
+    slot: string,
+    state: RevisionQuizRequestState,
+  ) => {
+    setRequests((previous) => {
+      const byRevision = previous[request.revisionId] ?? {};
+      if ((byRevision[slot]?.token ?? 0) > request.token) return previous;
+      return {
+        ...previous,
+        [request.revisionId]: { ...byRevision, [slot]: { ...state, token: request.token } },
+      };
+    });
   };
 
   /**
-   * Optimistically update a revision node's status in cache.
+   * Reconcile server-owned aggregates after a successful revision write.
+   *
+   * Only revision-scoped keys and dashboard/list metadata are invalidated; the
+   * original session cache is never touched by revision activity.
    */
-  const optimisticNodeUpdate = (nodeId: string, newStatus: RevisionNodeStatus) => {
-    const previousData = queryClient.getQueryData<RevisionSessionWithProgress>(queryKey);
-    if (!previousData) return () => {};
-
-    queryClient.setQueryData<RevisionSessionWithProgress>(queryKey, {
-      ...previousData,
-      nodes: previousData.nodes.map((node) =>
-        node.node_id === nodeId ? { ...node, status: newStatus } : node
-      ),
+  const invalidate = (id: string) => {
+    const session = queryClient.getQueryData<RevisionSessionWithProgress>(
+      revisionQueryKeys.session(id),
+    );
+    void queryClient.invalidateQueries({
+      queryKey: revisionQueryKeys.session(id),
+      exact: true,
     });
-
-    return () => {
-      queryClient.setQueryData(queryKey, previousData);
-    };
+    void queryClient.invalidateQueries({
+      queryKey: revisionQueryKeys.summary(id),
+      exact: true,
+    });
+    if (session) {
+      void queryClient.invalidateQueries({
+        queryKey: revisionQueryKeys.list(session.original_session_id),
+        exact: true,
+      });
+    }
+    void queryClient.invalidateQueries({ queryKey: ['courses'] });
   };
 
-  // Mark node as reviewed (full_review mode)
-  const markReviewedMutation = useMutation({
-    mutationFn: (nodeId: string) => markNodeReviewed(revisionId, nodeId),
-
-    onMutate: async (nodeId: string) => {
-      await queryClient.cancelQueries({ queryKey });
-      const rollback = optimisticNodeUpdate(nodeId, 'reviewed');
-      return { rollback };
-    },
-
-    onError: (error, _nodeId, context) => {
-      context?.rollback();
-      onError?.(error as Error, 'markReviewed');
-    },
-
-    onSettled: () => {
-      invalidateRevision();
-    },
-  });
-
-  // Submit revision quiz
   const submitQuizMutation = useMutation({
-    mutationFn: ({
-      nodeId,
-      selectedOptionIds,
-      quizIndex,
-    }: {
-      nodeId: string;
-      selectedOptionIds: string[];
-      quizIndex?: number;
-    }) => submitRevisionQuiz(revisionId, nodeId, selectedOptionIds, quizIndex),
-
-    onMutate: async ({ nodeId }) => {
-      await queryClient.cancelQueries({ queryKey });
-      // Optimistically set to quiz_passed (will be corrected by server if wrong)
-      const rollback = optimisticNodeUpdate(nodeId, 'quiz_passed');
-      return { rollback };
+    mutationFn: async (request: QuizRequest) => {
+      const result = await submitRevisionQuiz(
+        request.revisionId,
+        request.nodeId,
+        request.selectedOptionIds,
+        request.quizIndex,
+      );
+      if (
+        result.revision_session_id !== request.revisionId ||
+        result.node_id !== request.nodeId ||
+        result.quiz_index !== request.quizIndex
+      ) {
+        throw new Error('Revision answer identity mismatch');
+      }
+      return result;
     },
-
-    onSuccess: (result) => {
-      onQuizResult?.(result.node_id, result.is_correct, result);
+    onMutate: (request) => {
+      setRequest(request, `quiz:${request.nodeId}:${request.quizIndex}`, { isPending: true });
     },
-
-    onError: (error, _variables, context) => {
-      context?.rollback();
+    onSuccess: (result, request) => {
+      queryClient.setQueryData<RevisionSessionWithProgress>(
+        revisionQueryKeys.session(request.revisionId),
+        (session) => (session ? patchRevisionQuiz(session, result) : session),
+      );
+      setRequest(request, `quiz:${request.nodeId}:${request.quizIndex}`, { isPending: false });
+      onQuizResult?.(request.nodeId, result.is_correct, result);
+      invalidate(request.revisionId);
+    },
+    onError: (error, request) => {
+      setRequest(request, `quiz:${request.nodeId}:${request.quizIndex}`, {
+        isPending: false,
+        error: 'Could not save this answer. Please try again.',
+      });
       onError?.(error as Error, 'submitRevisionQuiz');
     },
+  });
 
-    onSettled: () => {
-      invalidateRevision();
+  const markReviewedMutation = useMutation({
+    mutationFn: async (request: RequestIdentity) => {
+      const node = await markNodeReviewed(request.revisionId, request.nodeId);
+      if (node.node_id !== request.nodeId) throw new Error('Revision review identity mismatch');
+      return node;
+    },
+    onMutate: (request) => setRequest(request, `review:${request.nodeId}`, { isPending: true }),
+    onSuccess: (node: RevisionNodeProgressWithDetails, request) => {
+      queryClient.setQueryData<RevisionSessionWithProgress>(
+        revisionQueryKeys.session(request.revisionId),
+        (session) =>
+          session
+            ? {
+                ...session,
+                nodes: session.nodes.map((previous) =>
+                  previous.node_id === request.nodeId ? node : previous,
+                ),
+              }
+            : session,
+      );
+      setRequest(request, `review:${request.nodeId}`, { isPending: false });
+      invalidate(request.revisionId);
+    },
+    onError: (error, request) => {
+      setRequest(request, `review:${request.nodeId}`, {
+        isPending: false,
+        error: 'Could not mark this topic as reviewed. Please try again.',
+      });
+      onError?.(error as Error, 'markReviewed');
     },
   });
 
-  // Convenience functions
-  const markReviewed = (nodeId: string) => {
-    markReviewedMutation.mutate(nodeId);
-  };
+  /**
+   * Project the current revision's request slots into card-facing shapes.
+   *
+   * Slots from other revisions stay in the registry but are never surfaced, so
+   * an old route's pending flag or error cannot reach the loaded revision.
+   */
+  const quizRequestStates: Record<string, RevisionQuizRequestStates> = {};
+  const reviewRequestStates: Record<string, RevisionQuizRequestState> = {};
+  for (const [slot, state] of Object.entries(requests[revisionId] ?? {})) {
+    const [kind, nodeId, index] = slot.split(':');
+    if (kind === 'review') reviewRequestStates[nodeId] = state;
+    if (kind === 'quiz') {
+      quizRequestStates[nodeId] = {
+        ...quizRequestStates[nodeId],
+        [Number(index)]: state,
+      };
+    }
+  }
 
-  const submitAnswer = (nodeId: string, optionIds: string[], quizIndex?: number) => {
-    submitQuizMutation.mutate({
-      nodeId,
-      selectedOptionIds: optionIds,
-      quizIndex,
-    });
-  };
+  const isSubmitting = Object.values(quizRequestStates).some((states) =>
+    Object.values(states).some((state) => state?.isPending),
+  );
+  const isMarkingReviewed = Object.values(reviewRequestStates).some(
+    (state) => state.isPending,
+  );
 
   return {
-    markReviewedMutation,
     submitQuizMutation,
-
-    markReviewed,
-    submitAnswer,
-
-    isMarkingReviewed: markReviewedMutation.isPending,
-    isSubmitting: submitQuizMutation.isPending,
-    isAnyLoading: markReviewedMutation.isPending || submitQuizMutation.isPending,
+    markReviewedMutation,
+    quizRequestStates,
+    reviewRequestStates,
+    submitAnswer: (nodeId: string, selectedOptionIds: string[], quizIndex = 0) =>
+      submitQuizMutation.mutate({
+        revisionId,
+        nodeId,
+        selectedOptionIds: [...selectedOptionIds],
+        quizIndex,
+        token: ++sequence.current,
+      }),
+    markReviewed: (nodeId: string) =>
+      markReviewedMutation.mutate({ revisionId, nodeId, token: ++sequence.current }),
+    isSubmitting,
+    isMarkingReviewed,
+    isAnyLoading: isSubmitting || isMarkingReviewed,
   };
 }
