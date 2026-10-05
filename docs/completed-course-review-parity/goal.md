@@ -6,6 +6,12 @@ Status: The user approved the proposed behavior and requested this detailed
 specification. This written specification awaits user review. No implementation
 or implementation plan is authorized by this document alone.
 
+Workflow: MAW with technical research and unified code review explicitly skipped
+by the user on 2026-10-05 (`--skip research,review`). Planning, test-first worker
+execution, and final verification remain mandatory. The complete dependency
+graph and handoff rules are in `docs/completed-course-review-parity/state.md`.
+The workflow is paused pending approval; no subagents have been dispatched.
+
 ## 1. Objective
 
 Make revisiting a completed course behave consistently with normal learning:
@@ -410,5 +416,7 @@ Follow these repository specifications when writing the implementation plan:
 - `docs/INTEGRATIONS.md`: existing chat transport, settings, and storage integrations.
 - `docs/CONCERNS.md`: SQLite/Mongo parity, overloaded large modules, and quiz visibility.
 
-Next gate: user review of this written specification. Only after approval should
-an implementation plan be prepared; application code is unchanged at this stage.
+Next gate: user approval of this written specification and the MAW dependency
+graph in `state.md`, with authorization to proceed. After that gate, dispatch
+ready planners and pipeline their workers according to the state. Application
+code is unchanged at this stage.
