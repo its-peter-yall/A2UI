@@ -30,6 +30,9 @@ from server.database.repositories.mongo_learning import (
     MongoLearningRepository,
 )
 from server.database.repositories.sqlite import SqliteLearningRepository
+from server.schemas.learning import (
+    RevisionSessionResponse, RevisionSessionWithProgress, RevisionSummary,
+)
 from server.tests.test_revision_mongo import MemoryMongo
 from server.tests.test_revision_sqlite import (
     FIRST, SECOND, START, THIRD, RevisionSqliteFixture, make_quiz,
@@ -122,3 +125,35 @@ class AcceptanceFixture(RevisionSqliteFixture):
                 "revision_sessions", "revision_node_progress", "quiz_attempts",
             )
         return {name: copy.deepcopy(self.mongo.rows[name]) for name in names}
+
+
+def run_transcript(fixture: AcceptanceFixture, backend: str) -> dict:
+    """Execute the identical revision action sequence against one adapter."""
+    repo = fixture.repositories[backend]
+    rid, node = fixture.revision_id, fixture.node
+    result = {}
+
+    def restore() -> dict:
+        return RevisionSessionWithProgress.model_validate(
+            repo.get_revision_session(rid)
+        ).model_dump(mode="json")
+
+    with frozen_writes(FIRST, 100):
+        repo.submit_revision_quiz(rid, node, ["q0-0"], 0)
+        result["partial"] = restore()
+        if fixture.mode == "full_review":
+            result["first_review"] = repo.mark_revision_node_reviewed(rid, node)
+            result["second_review"] = repo.mark_revision_node_reviewed(rid, node)
+    with frozen_writes(SECOND, 200):
+        repo.submit_revision_quiz(rid, node, ["q1-1"], 1)
+        result["complete"] = restore()
+    with frozen_writes(THIRD, 300):
+        repo.submit_revision_quiz(rid, node, ["q1-0"], 1)
+        result["retry"] = restore()
+    result["summary"] = RevisionSummary.model_validate(
+        repo.get_revision_summary(rid)
+    ).model_dump(mode="json")
+    result["listed"] = RevisionSessionResponse.model_validate(
+        repo.get_revisions_for_session(fixture.session)[0][0]
+    ).model_dump(mode="json")
+    return result
