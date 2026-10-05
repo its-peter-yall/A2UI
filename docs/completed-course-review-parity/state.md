@@ -131,11 +131,11 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 
 | Plan ID | Title & scope | Worker dependencies | Files / subsystems | Planner status | Worker status | Commits |
 | --- | --- | --- | --- | --- | --- | --- |
-| **P1** | Shared revision contracts and pure progress/result projection | G | Pydantic/TS contracts, repository protocol, shared domain helpers/tests | Pending; not dispatched | Pending; not dispatched | None |
+| **P1** | Shared revision contracts and pure progress/result projection | G | Pydantic/TS contracts, repository protocol, shared domain helpers/tests | `[x]` `074ce34` | In progress; worker dispatched | `074ce34` |
 | **P2** | SQLite persistence, compatibility, and serialized revision API | P1 | SQLite LearningManager, revision router handlers, SQL/API tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | Pending; not dispatched | Pending; not dispatched | None |
-| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | Pending; not dispatched | Pending; not dispatched | None |
+| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | In progress; worker dispatched | `211ec27` |
 | **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | Pending; not dispatched | Pending; not dispatched | None |
 
@@ -520,32 +520,33 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | `goal.md` | Written/self-reviewed; approved by the user for dispatch | `3667545` original specification; `4a22ec1` workflow-conversion update |
 | `state.md` | MAW DAG authorized; approval recorded | `4a22ec1` initialization; later bookkeeping commits discoverable with `git log --oneline -- docs/completed-course-review-parity/state.md` |
 | `research.md` | Skipped; do not create | None |
-| `plan1.md` | Pending; not dispatched | None |
+| `plan1.md` | Written | `074ce34` |
 | `plan2.md` | Pending; not dispatched | None |
 | `plan3.md` | Pending; not dispatched | None |
 | `plan4.md` | Pending; not dispatched | None |
-| `plan5.md` | Pending; not dispatched | None |
+| `plan5.md` | Written | `211ec27` |
 | `plan6.md` | Pending; not dispatched | None |
 | `plan7.md` | Pending; not dispatched | None |
 | `review.md` | Skipped; do not create | None |
 | `verification.md` | Pending P7/final gate | None |
 | `final_report.md` | Pending final verification | None |
 
-No planner or worker commits/session IDs exist yet. Update the matrix, this
-record, and milestones on every actual handoff; never pre-check future work.
+Planner commits `074ce34` (P1) and `211ec27` (P5) are recorded and verified as
+single-file, path-scoped commits. No worker commits exist yet. Update the matrix,
+this record, and milestones on every actual handoff; never pre-check future work.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: PLANNING — DISPATCHING READY PLANNERS.**
+**CURRENT GATE: EXECUTION — P1 AND P5 WORKERS IN PROGRESS.**
 
-Approval was recorded and the resume procedure below was executed through its
-step 2. Remaining steps, in order:
+Approval was recorded; the P1 and P5 planners were dispatched concurrently in
+foreground and committed `074ce34` and `211ec27`. Both planners confirmed their
+plans carry no plan-level file banner. Both workers were dispatched immediately
+because their only prerequisite is approval. Remaining steps, in order:
 
-1. Dispatch ready P1/P5 planners concurrently in foreground. Pass goal/state
-   paths and explicit scopes; no research/review agent.
-2. Verify reported plan commits without reading plan contents. Pipeline ready
-   workers immediately; update matrix, sessions, evidence, and commit record.
-3. After P1 completes, unblock P2/P3/P4 planning; unblock P6/P7 according to
+1. Verify P1/P5 worker commits and test evidence without reading plan contents;
+   update the matrix, artifact record, and evidence sections on each handoff.
+2. After P1 completes, unblock P2/P3/P4 planning; unblock P6/P7 according to
    their separate planning and worker prerequisites. Keep stage/commit mutex
    discipline and never modify another plan owner's source paths.
 4. Resolve verification defects with their TDD owners; skip only the standalone
