@@ -28,7 +28,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, test, expect, vi } from "vitest";
 import { ConceptCard } from "./ConceptCard";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ConceptNode } from "@/types/learning";
+import type { ConceptNode, QuizCard, QuizSubmitResponse } from "@/types/learning";
 
 // Mock framer-motion to avoid animation issues in jsdom environment
 vi.mock("framer-motion", () => ({
@@ -214,5 +214,32 @@ describe("ConceptCard Component", () => {
 
 		expect(screen.getByText("This is regenerated content.")).toBeDefined();
 		expect(screen.getByText("Generating quiz...")).toBeDefined();
+	});
+});
+
+describe("ConceptCard normal feedback regression", () => {
+	test("keeps learning mastery actions and explains each multi-correct option", () => {
+		const quiz: QuizCard = {
+			question_text: "Normal learning multi-select", difficulty: "easy",
+			question_type: "multiple_choice", options: [
+				{ option_id: "x", display_label: "D", text: "X", is_correct: true, explanation: "X explanation is unique" },
+				{ option_id: "y", display_label: "A", text: "Y", is_correct: true, explanation: "Y explanation is unique" },
+				{ option_id: "z", display_label: "B", text: "Z", is_correct: false, explanation: "Z distractor explanation" },
+				{ option_id: "w", display_label: "C", text: "W", is_correct: false, explanation: "W distractor explanation" },
+			],
+		};
+		const result: QuizSubmitResponse = {
+			node_id: mockNode.id, attempt_number: 1, is_correct: true,
+			score_percent: 100, selected_option_ids: ["y", "x"], correct_option_ids: ["x", "y"],
+			explanation: "X explanation is unique", is_mastered: true,
+			next_node_unlocked: true, node_status: "SHOWING_FEEDBACK",
+		};
+		const onContinue = vi.fn();
+		renderWithProviders(<ConceptCard node={{ ...mockNode, status: "SHOWING_FEEDBACK", quiz }}
+			quizResult={result} onContinueToNext={onContinue} />);
+		expect(screen.getByText("Y explanation is unique")).toBeInTheDocument();
+		expect(screen.getByText("Mastered!")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Continue to Next Topic →" }));
+		expect(onContinue).toHaveBeenCalledWith(mockNode.id);
 	});
 });
