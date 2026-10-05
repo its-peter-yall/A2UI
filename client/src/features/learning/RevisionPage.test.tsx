@@ -497,3 +497,78 @@ it("handles two visible quiz requests resolving in reverse order without crossed
 	fireEvent.click(screen.getByRole("button", { name: "Previous quiz" }));
 	expect(screen.getByRole("status", { name: "Quiz result" })).toHaveTextContent("Correct!");
 });
+it("keeps final wrong feedback readable and opens summary only by request", async () => {
+	revisionData.mode = "quiz_only";
+	revisionData.nodes = [revisionData.nodes[0]];
+	revisionData.nodes[0].quiz_results = [saved()];
+	api.submitRevisionQuiz.mockImplementation(async () => {
+		const result = saved({ id: "second", quiz_index: 1, attempt_number: 6,
+			is_correct: false, score_percent: 0, selected_option_ids: ["opt-4"],
+			correct_option_ids: [], explanation: "", revision_node_status: "quiz_failed" });
+		revisionData.nodes[0].quiz_results.push(result);
+		revisionData.nodes[0].status = "quiz_failed";
+		revisionData.status = "completed"; revisionData.progress_percent = 100;
+		revisionData.total_quiz_score_percent = 50; revisionData.completed_at = "2026-10-05T00:02:00Z";
+		return result;
+	});
+	mountRevision();
+	await findResultHeader("Correct!");
+	fireEvent.click(screen.getByRole("button", { name: "Quiz 2: unanswered" }));
+	fireEvent.click(screen.getByRole("radio", { name: /A vertex/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await findResultHeader("Incorrect");
+	expect(
+		screen.queryByRole("dialog", { name: "Revision Summary" }),
+	).not.toBeInTheDocument();
+	expect(api.getRevisionSummary).not.toHaveBeenCalled();
+	fireEvent.click(await screen.findByRole("button", { name: "View Summary" }));
+	const modal = await screen.findByRole("dialog", { name: "Revision Summary" });
+	expect(within(modal).getByText("50%")).toBeInTheDocument();
+});
+
+it("invalidates a viewed summary on retry and preserves the first completion timestamp", async () => {
+	revisionData.mode = "quiz_only"; revisionData.nodes = [revisionData.nodes[0]];
+	const wrong = saved({ id: "wrong", quiz_index: 1, is_correct: false, score_percent: 0,
+		selected_option_ids: ["opt-4"], correct_option_ids: [], explanation: "", attempt_number: 6 });
+	revisionData.nodes[0].quiz_results = [saved(), wrong];
+	revisionData.nodes[0].status = "quiz_failed";
+	revisionData.status = "completed"; revisionData.progress_percent = 100;
+	revisionData.total_quiz_score_percent = 50; revisionData.completed_at = "2026-10-05T00:02:00Z";
+	const { client } = mountRevision();
+	await findResultHeader("Correct!");
+	expect(screen.queryByRole("dialog", { name: "Revision Summary" })).not.toBeInTheDocument();
+	fireEvent.click(screen.getByRole("button", { name: "View Summary" }));
+	await screen.findByRole("dialog", { name: "Revision Summary" });
+	fireEvent.click(screen.getByRole("button", { name: "Close summary" }));
+	fireEvent.click(screen.getByRole("button", { name: "Quiz 2: incorrect" }));
+	fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+	api.getRevisionSummary.mockResolvedValue(summary({ total_quiz_score_percent: 66, quizzes_passed: 2, quizzes_failed: 1, quizzes_total: 3 }));
+	api.submitRevisionQuiz.mockImplementation(async () => {
+		const result = saved({ id: "retry", quiz_index: 1, attempt_number: 7, quiz_attempt_count: 2,
+			selected_option_ids: ["opt-3"], correct_option_ids: ["opt-3"], revision_node_status: "quiz_passed" });
+		revisionData.nodes[0].quiz_results = [saved(), result];
+		revisionData.nodes[0].status = "quiz_passed";
+		revisionData.total_quiz_score_percent = 66;
+		return result;
+	});
+	fireEvent.click(screen.getByRole("radio", { name: /An edge/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await screen.findByText("Attempt #2 • Score: 100%");
+	await waitFor(() =>
+		expect(
+			client.getQueryData<RevisionSessionWithProgress>(
+				revisionQueryKeys.session("rev-1"),
+			)?.total_quiz_score_percent,
+		).toBe(66),
+	);
+	expect(
+		client.getQueryData<RevisionSessionWithProgress>(
+			revisionQueryKeys.session("rev-1"),
+		)?.completed_at,
+	).toBe("2026-10-05T00:02:00Z");
+	fireEvent.click(screen.getByRole("button", { name: "View Summary" }));
+	const modal = await screen.findByRole("dialog", { name: "Revision Summary" });
+	expect(within(modal).getByText("66%")).toBeInTheDocument();
+	expect(within(modal).getByText("3 total attempts")).toBeInTheDocument();
+	expect(api.getRevisionSummary).toHaveBeenCalledTimes(2);
+});

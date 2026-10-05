@@ -112,20 +112,26 @@ export function useRevisionMutations({
    * Reconcile server-owned aggregates after a successful revision write.
    *
    * Only revision-scoped keys and dashboard/list metadata are invalidated; the
-   * original session cache is never touched by revision activity.
+   * original session cache is never touched by revision activity. `cancelFirst`
+   * drops an obsolete in-flight read of the keys being invalidated.
    */
-  const invalidate = (id: string) => {
+  const invalidate = (id: string, cancelFirst = false) => {
     const session = queryClient.getQueryData<RevisionSessionWithProgress>(
       revisionQueryKeys.session(id),
     );
+    const summaryKey = revisionQueryKeys.summary(id);
+    if (cancelFirst) {
+      void queryClient.cancelQueries({ queryKey: summaryKey, exact: true });
+      void queryClient.cancelQueries({
+        queryKey: revisionQueryKeys.session(id),
+        exact: true,
+      });
+    }
     void queryClient.invalidateQueries({
       queryKey: revisionQueryKeys.session(id),
       exact: true,
     });
-    void queryClient.invalidateQueries({
-      queryKey: revisionQueryKeys.summary(id),
-      exact: true,
-    });
+    void queryClient.invalidateQueries({ queryKey: summaryKey, exact: true });
     if (session) {
       void queryClient.invalidateQueries({
         queryKey: revisionQueryKeys.list(session.original_session_id),
@@ -173,7 +179,7 @@ export function useRevisionMutations({
       );
       setRequest(request, `quiz:${request.nodeId}:${request.quizIndex}`, { isPending: false });
       onQuizResult?.(request.nodeId, result.is_correct, result);
-      invalidate(request.revisionId);
+      invalidate(request.revisionId, true);
     },
     onError: (error, request) => {
       setRequest(request, `quiz:${request.nodeId}:${request.quizIndex}`, {
@@ -246,7 +252,7 @@ export function useRevisionMutations({
             : session,
       );
       setRequest(request, `review:${request.nodeId}`, { isPending: false });
-      invalidate(request.revisionId);
+      invalidate(request.revisionId, true);
     },
     onError: (error, request, context) => {
       /**

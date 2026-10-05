@@ -44,7 +44,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import { List, MessageCircle } from "lucide-react";
@@ -53,7 +53,11 @@ import {
 	getLearningSession,
 	getRevisionSummary,
 } from "@/lib/learningApi";
-import { useRevisionSession } from "./useRevisionSession";
+import {
+	getRevisionCompletion,
+	revisionQueryKeys,
+	useRevisionSession,
+} from "./useRevisionSession";
 import { useRevisionMutations } from "./useRevisionMutations";
 import { RevisionConceptCard } from "./RevisionConceptCard";
 import { RevisionSummaryModal } from "./RevisionSummaryModal";
@@ -119,6 +123,7 @@ function RevisionPageBody({
 	revisionId: string;
 }) {
 	const navigate = useNavigate();
+	const queryClient = useQueryClient();
 
 	// Focus management
 	const carouselRef = useRef<HTMLDivElement>(null);
@@ -174,43 +179,71 @@ function RevisionPageBody({
 			},
 		});
 
-	// Completion summary modal state
-	const [summaryDismissed, setSummaryDismissed] = useState(false);
+	/**
+	 * Summary visibility is route-local and starts false.
+	 *
+	 * Server completion alone never opens the summary, so submitting a final
+	 * quiz does not cover the feedback the user just asked for, and re-entering
+	 * a completed revision leaves its content readable.
+	 */
+	const [isSummaryOpen, setIsSummaryOpen] = useState(false);
 
-	// Fetch revision summary when revision is completed (via React Query)
-	const isCompleted = revisionSession?.status === "completed";
-	const { data: summaryData } = useQuery({
-		queryKey: ["revision-summary", revisionId],
-		queryFn: () => getRevisionSummary(revisionId),
-		enabled: !!revisionId && isCompleted && !summaryDismissed,
-		staleTime: Infinity,
+	const summaryQuery = useQuery({
+		queryKey: revisionQueryKeys.summary(revisionId),
+		queryFn: ({ signal }) => getRevisionSummary(revisionId, signal),
+		enabled: isSummaryOpen && revisionSession?.status === "completed",
+		staleTime: 30_000,
 	});
 
-	// Derive whether to show modal from query result + dismissal flag
-	const showSummary = !!summaryData && !summaryDismissed;
+	// Guard late navigation and state updates from an unmounted route.
+	const mounted = useRef(true);
+	const [createRevisionError, setCreateRevisionError] = useState<string>();
+	const [isCreatingRevision, setIsCreatingRevision] = useState(false);
+	useEffect(() => {
+		mounted.current = true;
+		return () => {
+			mounted.current = false;
+		};
+	}, []);
 
-	// Summary modal actions
-	const handleBackToDashboard = useCallback(() => {
-		setSummaryDismissed(true);
-		navigate("/learn");
-	}, [navigate]);
-
+	/**
+	 * Start another revision in the same mode.
+	 *
+	 * Explicit only, never automatic on completion, and a failure surfaces a
+	 * recoverable message rather than leaving the action silently inert.
+	 */
 	const handleReviseAgain = useCallback(async () => {
-		if (!revisionSession) return;
+		if (!revisionSession || isCreatingRevision) return;
+		setCreateRevisionError(undefined);
+		setIsCreatingRevision(true);
 		try {
-			const newRevision = await createRevisionSession(sessionId, {
+			const next = await createRevisionSession(sessionId, {
 				mode: revisionSession.mode,
 			});
-			setSummaryDismissed(true);
-			navigate(`/learn/${sessionId}/revise/${newRevision.id}`);
-		} catch (err) {
-			console.error("Failed to create new revision:", err);
+			void queryClient.invalidateQueries({
+				queryKey: revisionQueryKeys.list(sessionId),
+				exact: true,
+			});
+			void queryClient.invalidateQueries({ queryKey: ["courses"] });
+			if (mounted.current) navigate(`/learn/${sessionId}/revise/${next.id}`);
+		} catch (error: unknown) {
+			console.error("Could not create another revision:", error);
+			if (mounted.current) {
+				setCreateRevisionError("Could not create another revision. Please try again.");
+			}
+		} finally {
+			if (mounted.current) setIsCreatingRevision(false);
 		}
-	}, [sessionId, revisionSession, navigate]);
+	}, [revisionSession, sessionId, isCreatingRevision, queryClient, navigate]);
 
 	const handleCloseSummary = useCallback(() => {
-		setSummaryDismissed(true);
+		setIsSummaryOpen(false);
 	}, []);
+
+	const handleBackToDashboard = useCallback(() => {
+		setIsSummaryOpen(false);
+		navigate("/learn");
+	}, [navigate]);
 
 	/**
 	 * Topics this revision actually covers, in original course order.
@@ -310,13 +343,16 @@ function RevisionPageBody({
 			: "bg-green-500/20 text-green-600 dark:text-green-400";
 
 	// Calculate revision-specific progress
-	const totalNodes = revisionSession.nodes.length;
-	const completedNodes = revisionSession.nodes.filter(
-		(n) =>
-			n.status === "reviewed" ||
-			n.status === "quiz_passed" ||
-			n.status === "quiz_failed",
-	).length;
+	const { total: totalNodes, completed: completedNodes } =
+		getRevisionCompletion(revisionSession);
+
+	/**
+	 * The summary is offered only when the server reports authoritative
+	 * completion over a nonzero participating topic count, so a zero-denominator
+	 * revision never offers a successful-completion summary.
+	 */
+	const canViewSummary =
+		revisionSession.status === "completed" && totalNodes > 0;
 
 	return (
 		<div className="min-h-screen bg-background">
@@ -368,15 +404,26 @@ function RevisionPageBody({
 
 					{/* Table of Contents button (replaces progress bar) */}
 					<div className="flex items-center justify-between pt-1">
-						<button
-							onClick={() => setIsTOCOpen(true)}
-							className="inline-flex items-center gap-2 text-sm font-medium border border-input bg-background hover:bg-muted text-foreground rounded-lg px-3.5 py-1.5 transition-colors cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-primary"
-							aria-label="Open Table of Contents"
-							data-testid="toc-button"
-						>
-							<List className="h-4 w-4 text-primary" />
-							<span>Table of Contents</span>
-						</button>
+						<div className="flex items-center gap-2">
+							<button
+								onClick={() => setIsTOCOpen(true)}
+								className="inline-flex items-center gap-2 text-sm font-medium border border-input bg-background hover:bg-muted text-foreground rounded-lg px-3.5 py-1.5 transition-colors cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-primary"
+								aria-label="Open Table of Contents"
+								data-testid="toc-button"
+							>
+								<List className="h-4 w-4 text-primary" />
+								<span>Table of Contents</span>
+							</button>
+							{canViewSummary && (
+								<button
+									type="button"
+									onClick={() => setIsSummaryOpen(true)}
+									className="rounded-md border border-input px-3 py-1.5 text-sm font-medium hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
+								>
+									View Summary
+								</button>
+							)}
+						</div>
 						<div
 							className="text-xs font-medium text-muted-foreground"
 							aria-live="polite"
@@ -557,15 +604,44 @@ function RevisionPageBody({
 				<p>Revision mode &mdash; your original progress is preserved</p>
 			</footer>
 
-			{/* Revision summary modal */}
-			{showSummary && summaryData && (
-				<RevisionSummaryModal
-					revisionSummary={summaryData}
-					onClose={handleCloseSummary}
-					onReviseAgain={handleReviseAgain}
-					onBackToDashboard={handleBackToDashboard}
-				/>
+			{/* Revise-again recovery */}
+			{createRevisionError && <p role="alert">{createRevisionError}</p>}
+
+			{/*
+			 * Explicit summary. While refreshing, the stale modal is hidden
+			 * rather than shown with outdated accuracy, and a fetch failure
+			 * offers recovery instead of silently displaying old metrics.
+			 */}
+			{isSummaryOpen && summaryQuery.isFetching && (
+				<p role="status">Loading summary...</p>
 			)}
+			{isSummaryOpen && summaryQuery.isError && (
+				<div role="alert">
+					Could not load the summary.{" "}
+					<button
+						type="button"
+						onClick={() => {
+							void summaryQuery.refetch();
+						}}
+					>
+						Try loading summary again
+					</button>
+					<button type="button" onClick={handleCloseSummary}>
+						Close summary
+					</button>
+				</div>
+			)}
+			{isSummaryOpen &&
+				!summaryQuery.isFetching &&
+				!summaryQuery.isError &&
+				summaryQuery.data?.revision_id === revisionId && (
+					<RevisionSummaryModal
+						revisionSummary={summaryQuery.data}
+						onClose={handleCloseSummary}
+						onReviseAgain={handleReviseAgain}
+						onBackToDashboard={handleBackToDashboard}
+					/>
+				)}
 		</div>
 	);
 }
