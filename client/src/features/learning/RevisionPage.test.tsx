@@ -706,3 +706,181 @@ it("uses the mobile overlay without a desktop separator", async () => {
 		screen.getByRole("main").contains(screen.getByRole("dialog", { name: /Chat:/ })),
 	).toBe(true);
 });
+
+it.each<RevisionMode>(["full_review", "quiz_only"])(
+	"preserves %s inputs and previous feedback through a failed retry",
+	async (mode) => {
+		revisionData.mode = mode;
+		revisionData.nodes[0].quiz_results = [saved({ id: "wrong", is_correct: false,
+			score_percent: 0, selected_option_ids: ["opt-2"], correct_option_ids: [], explanation: "" })];
+		mountRevision();
+		await findResultHeader("Incorrect");
+		fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+		fireEvent.click(screen.getByRole("radio", { name: /A node/ }));
+		api.submitRevisionQuiz.mockRejectedValueOnce(new Error("offline"));
+		fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+		await screen.findByText("Could not save this answer. Please try again.");
+		expect(screen.getByRole("radio", { name: /A node/ })).toBeChecked();
+		expect(screen.getByText("Previous saved feedback")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Quiz 1: incorrect" })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Submit Answer" })).toBeEnabled();
+		api.submitRevisionQuiz.mockResolvedValueOnce(saved({ id: "retry", attempt_number: 6, quiz_attempt_count: 2 }));
+		fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+		await findResultHeader("Correct!");
+	},
+);
+
+it("requires explicit Full Review reading and does not undo it after a wrong quiz", async () => {
+	revisionData.mode = "full_review"; revisionData.nodes = [revisionData.nodes[0]];
+	api.markNodeReviewed.mockRejectedValueOnce(new Error("offline"));
+	const { client } = mountRevision();
+	await screen.findByText("What is an entity?");
+	fireEvent.click(screen.getByRole("button", { name: "Mark as Reviewed" }));
+	await screen.findByText("Could not mark this topic as reviewed. Please try again.");
+	expect(screen.getByText("0 / 1 topics reviewed")).toBeInTheDocument();
+	api.markNodeReviewed.mockImplementationOnce(async () => {
+		revisionData.nodes[0].content_reviewed_at = "2026-10-05T00:01:00Z";
+		revisionData.nodes[0].status = "reviewed";
+		revisionData.status = "completed"; revisionData.progress_percent = 100;
+		revisionData.completed_at = "2026-10-05T00:01:00Z";
+		return structuredClone(revisionData.nodes[0]);
+	});
+	fireEvent.click(screen.getByRole("button", { name: "Mark as Reviewed" }));
+	await screen.findByText("1 / 1 topics reviewed");
+	api.submitRevisionQuiz.mockImplementationOnce(async () => {
+		const wrong = saved({ id: "wrong", attempt_number: 6, is_correct: false, score_percent: 0,
+			selected_option_ids: ["opt-2"], correct_option_ids: [], explanation: "", revision_node_status: "reviewed" });
+		revisionData.nodes[0].quiz_results = [wrong];
+		return wrong;
+	});
+	fireEvent.click(screen.getByRole("radio", { name: /A line/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await findResultHeader("Incorrect");
+	expect(screen.getByText("1 / 1 topics reviewed")).toBeInTheDocument();
+	expect(
+		client.getQueryData<RevisionSessionWithProgress>(
+			revisionQueryKeys.session("rev-1"),
+		)?.nodes[0].content_reviewed_at,
+	).toBe("2026-10-05T00:01:00Z");
+	expect(screen.queryByRole("dialog", { name: "Revision Summary" })).not.toBeInTheDocument();
+});
+
+it("keeps a new saved result visible while a slow aggregate query is pending", async () => {
+	revisionData.mode = "quiz_only"; revisionData.nodes = [revisionData.nodes[0]];
+	revisionData.nodes[0].quiz_count = 1;
+	originalData.nodes[0].quiz = originalData.nodes[0].quiz_set?.quizzes[0] ?? null;
+	originalData.nodes[0].quiz_set = null;
+	const slow = deferred<RevisionSessionWithProgress>();
+	const { client } = mountRevision();
+	await screen.findByText("What is an entity?");
+	// The aggregate refetch triggered by this write is the slow one, so it lands
+	// after the saved result has already been patched into the cache.
+	api.getRevisionSession.mockReturnValueOnce(slow.promise);
+	api.submitRevisionQuiz.mockResolvedValueOnce(saved());
+	fireEvent.click(screen.getByRole("radio", { name: /A node/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await findResultHeader("Correct!");
+	expect(screen.getByTestId("revision-status-badge")).toHaveTextContent("Practice finished");
+	// Apply the stale aggregate, marked so it is observable when it lands.
+	await act(async () =>
+		slow.resolve({ ...structuredClone(revisionData), progress_percent: 50 }),
+	);
+	await waitFor(() =>
+		expect(
+			client.getQueryData<RevisionSessionWithProgress>(
+				revisionQueryKeys.session("rev-1"),
+			)?.progress_percent,
+		).toBe(50),
+	);
+	expect(screen.getByText("Correct!")).toBeInTheDocument();
+	// The stale read carried no attempts, so the merged node status must still be
+	// derived from the newer saved rows rather than resetting to pending.
+	expect(screen.getByTestId("revision-status-badge")).toHaveTextContent("Practice finished");
+});
+
+it("surfaces summary fetch failure without hiding readable feedback", async () => {
+	revisionData.status = "completed";
+	revisionData.nodes.forEach((node) => { node.content_reviewed_at = "2026-10-05T00:01:00Z"; });
+	revisionData.nodes[0].quiz_results = [saved()];
+	api.getRevisionSummary.mockRejectedValueOnce(new Error("offline"));
+	mountRevision();
+	await findResultHeader("Correct!");
+	fireEvent.click(screen.getByRole("button", { name: "View Summary" }));
+	await screen.findByText(/Could not load the summary/);
+	expect(screen.getByText("Correct!")).toBeInTheDocument();
+	api.getRevisionSummary.mockResolvedValueOnce(summary({ mode: "full_review" }));
+	fireEvent.click(screen.getByRole("button", { name: "Try loading summary again" }));
+	await screen.findByRole("dialog", { name: "Revision Summary" });
+});
+
+it("patches only the old revision cache when a successful answer arrives after navigation", async () => {
+	const pending = deferred<RevisionQuizResponse>();
+	api.submitRevisionQuiz.mockReturnValueOnce(pending.promise);
+	const { router, client } = mountRevision();
+	await screen.findByText("What is an entity?");
+	fireEvent.click(screen.getByRole("radio", { name: /A node/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await waitFor(() => expect(api.submitRevisionQuiz).toHaveBeenCalledTimes(1));
+	await act(async () => {
+		await router.navigate("/learn/session-1/revise/rev-2");
+	});
+	await screen.findByText("What is an entity?");
+	await act(async () => pending.resolve(saved()));
+	await waitFor(() =>
+		expect(
+			client.getQueryData<RevisionSessionWithProgress>(
+				revisionQueryKeys.session("rev-1"),
+			)?.nodes[0].quiz_results[0]?.id,
+		).toBe("attempt-1"),
+	);
+	expect(
+		client.getQueryData<RevisionSessionWithProgress>(
+			revisionQueryKeys.session("rev-2"),
+		)?.nodes[0].quiz_results,
+	).toEqual([]);
+	expect(screen.getByRole("radio", { name: /A node/ })).not.toBeChecked();
+	expect(screen.queryByText("Updating...")).not.toBeInTheDocument();
+	expect(screen.queryByRole("dialog", { name: "Revision Summary" })).not.toBeInTheDocument();
+});
+
+it("does not open an old requested summary on the destination revision", async () => {
+	revisionData.status = "completed";
+	revisionData.nodes.forEach((node) => { node.content_reviewed_at = "2026-10-05T00:01:00Z"; });
+	const pending = deferred<RevisionSummary>();
+	api.getRevisionSummary.mockReturnValueOnce(pending.promise);
+	const { router } = mountRevision();
+	await screen.findByRole("button", { name: "View Summary" });
+	fireEvent.click(screen.getByRole("button", { name: "View Summary" }));
+	await waitFor(() => expect(api.getRevisionSummary).toHaveBeenCalledTimes(1));
+	await act(async () => {
+		await router.navigate("/learn/session-1/revise/rev-2");
+	});
+	await screen.findByRole("button", { name: "View Summary" });
+	await act(async () => pending.resolve(summary()));
+	expect(screen.queryByRole("dialog", { name: "Revision Summary" })).not.toBeInTheDocument();
+	expect(screen.queryByText("Loading summary...")).not.toBeInTheDocument();
+});
+
+it("scopes heading context to the explicit chat target rather than carousel topic", async () => {
+	originalData.nodes[0].content_markdown = "## Entities\nBody.";
+	originalData.nodes[1].content_markdown = "## Relations\nBody.";
+	mountRevision();
+	await screen.findByText("Entities");
+	fireEvent.click(screen.getByRole("button", { name: 'Chat about "Entities"' }));
+	expect(screen.getByText("1 heading selected")).toBeInTheDocument();
+	topicNext();
+	await screen.findByText("Relations");
+	expect(screen.getByRole("heading", { name: "Chat: Knowledge Graphs 101" })).toBeInTheDocument();
+	fireEvent.click(screen.getByRole("button", { name: 'Chat about "Relations"' }));
+	expect(screen.getByRole("heading", { name: "Chat: Second topic" })).toBeInTheDocument();
+	expect(screen.getByText("1 heading selected")).toBeInTheDocument();
+	fireEvent.change(screen.getByRole("textbox"), { target: { value: "Explain this section." } });
+	fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+	await waitFor(() =>
+		expect(chatApi.streamConceptChat).toHaveBeenCalledWith(
+			expect.objectContaining({
+				sessionId: "session-1", nodeId: "node-2", selectedHeadingIds: ["h-2-relations"],
+			}),
+		),
+	);
+});
