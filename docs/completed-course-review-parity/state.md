@@ -48,10 +48,10 @@ updated: 2026-10-05
 - [x] Step 1: Brainstorming & Goal Alignment (`goal.md` approved by the user on
   2026-10-05; written specification and 7-plan DAG authorized for dispatch).
 - [x] Step 2: Technical Research (Skipped via `--skip research`).
-- [ ] Step 3: Planning Completed (`plan1.md` and `plan5.md` written and committed;
-  `plan2.md`, `plan3.md`, `plan4.md`, `plan6.md`, `plan7.md` pending).
-- [ ] Step 4: Execution Completed (P1 and P5 complete and independently verified;
-  P2, P3, P4, P6, P7 outstanding).
+- [ ] Step 3: Planning Completed (`plan1.md`-`plan5.md` written and committed;
+  `plan6.md` and `plan7.md` pending).
+- [ ] Step 4: Execution Completed (P1-P5 complete and independently verified;
+  P6 and P7 outstanding).
 - [x] Step 5: Unified Code Review (Skipped via `--skip review`).
 - [ ] Step 6: Final Verification & Report (`verification.md`, `final_report.md`).
 
@@ -134,9 +134,9 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 | Plan ID | Title & scope | Worker dependencies | Files / subsystems | Planner status | Worker status | Commits |
 | --- | --- | --- | --- | --- | --- | --- |
 | **P1** | Shared revision contracts and pure progress/result projection | G | Pydantic/TS contracts, repository protocol, shared domain helpers/tests | `[x]` `074ce34` | `[x]` Complete | `34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce` |
-| **P2** | SQLite persistence, compatibility, and serialized revision API | P1 | SQLite LearningManager, revision router handlers, SQL/API tests | `[x]` `a96bb8a` | In progress; worker dispatched | `a96bb8a` |
-| **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | In progress; worker dispatched | `5bcb4de` |
-| **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | In progress; worker dispatched | `4817d61` |
+| **P2** | SQLite persistence, compatibility, and serialized revision API | P1 | SQLite LearningManager, revision router handlers, SQL/API tests | `[x]` `a96bb8a` | `[x]` Complete | `9d9645e` `b57758e` `1b73d6c` `44c697f` `15728ff` `0453158` `36d8c59` |
+| **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | `[x]` Complete | `9761bb6` `b061f75` `51ae7ca` `eed5232` `a41660d` `288c7e2` `8f38386` `62dafeb` `63eb1e1` |
+| **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | `[x]` Complete | `8ecc748` `10f3133` `59e0128` `baa1821` `61a0143` |
 | **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
 | **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | Pending; not dispatched | Pending; not dispatched | None |
 | **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | Pending; not dispatched | Pending; not dispatched | None |
@@ -490,12 +490,13 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | Working directory | Command / check | Purpose | Current evidence |
 | --- | --- | --- | --- |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_contracts server.tests.test_revision_progress server.tests.test_repository_contracts` | P1 schemas/domain projection | PASS — 27 tests, OK, 0.006s |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_mongo_learning` | Baseline check of pre-existing Mongo suite state | FAIL (PRE-EXISTING) — 16 tests, 7 errors, all `KeyError: 'custom_topic_count'`. Reproduced identically at pre-workflow commit `3c8681c` in a detached worktree; both files untouched by P1-P5. Not a workflow regression. P3 owns the narrow fix. |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_mongo server.tests.test_migrate_to_mongo` | P3 Mongo/migration (excluding the pre-existing `test_mongo_learning` failures) | Not run |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_sqlite server.tests.test_revision_api` | P2 SQL and serialized routes | PASS — 21 tests, OK, 4.315s |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_mongo_learning` (run BEFORE P3, at baseline) | Baseline check of pre-existing Mongo suite state | FAIL (PRE-EXISTING) — 16 tests, 7 errors, all `KeyError: 'custom_topic_count'`. Reproduced identically at pre-workflow commit `3c8681c` in a detached worktree; both files untouched by P1/P5. Not a workflow regression. P3 was made to fix it; see the post-P3 PASS row below. |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_mongo server.tests.test_migrate_to_mongo server.tests.test_mongo_learning` | P3 Mongo/migration, including the previously failing suite | PASS — 45 tests, OK, 0.154s. The 7 pre-existing `custom_topic_count` errors are RESOLVED by P3 (`a41660d`, `288c7e2`, `51ae7ca`). |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_repository_parity server.tests.test_revision_acceptance` | P7 cross-store acceptance | Not run |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | Not run |
-| `client/` | `npm run test -- --run` | Full client regression suite | PARTIAL — focused P1/P5 suites PASS, 57 tests across 8 files in 12.15s (ConceptChatLayout, useConceptChatPanel, curiosityParser, CuriositySpark, ChatPanel, useConceptChat, LearningPathContainer, RevisionPage). Full suite deferred to the final gate. |
-| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — built in 13.86s, no type errors |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 614 tests, OK, 80.120s |
+| `client/` | `npm run test -- --run` | Full client regression suite | PASS (learning feature) — `npx vitest run src/features/learning`: 32 test files, 262 tests passed, 21.83s, 0 failures. Full-repo client suite deferred to the final gate. |
+| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — built in 12.80s, no type errors (re-verified after P2/P3/P4) |
 | `client/` | `npm run lint` | ESLint/hook checks | PASS — 0 errors; 3 warnings, all unused eslint-disable directives in generated `client/coverage/` assets, pre-existing and unrelated to P1/P5 |
 | `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | Not run |
 | `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | Not run |
@@ -613,7 +614,7 @@ change pauses affected downstream work and must be coordinated here first.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: EXECUTION WAVE 2 — P2, P3, AND P4 WORKERS IN PROGRESS.**
+**CURRENT GATE: PLANNING WAVE 3 — P6 AND P7 READY TO DISPATCH.**
 
 P1 and P5 are complete. Planner commits `074ce34` and `211ec27`; P1 worker
 `34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce`; P5 worker `9933d74`
@@ -626,15 +627,14 @@ above for downstream planners.
 Because P1 is complete, the P2, P3, and P4 planning gates are now open. Remaining
 steps, in order:
 
-1. P2/P3/P4 planners were dispatched concurrently in foreground and committed
-   `a96bb8a`, `5bcb4de`, and `4817d61` (all verified single-file, path-scoped).
-   Their workers were dispatched immediately since P1 is complete. They own
-   disjoint files and may run concurrently under the commit mutex.
-2. P3 must resolve or explicitly isolate the pre-existing 7
-   `custom_topic_count` errors in `test_mongo_learning`, which the orchestrator
-   proved predate this workflow.
-3. Dispatch the P6 planner once P4 and P5 expose the component/controller
-   interfaces, and the P7 planner once P2/P3/P6 plans exist.
+1. DONE — P2/P3/P4 planners committed `a96bb8a`, `5bcb4de`, `4817d61`; their
+   workers completed and were independently re-verified by the orchestrator.
+2. DONE — P3 RESOLVED the 7 pre-existing `custom_topic_count` errors; the full
+   614-test server suite and the 45-test Mongo/migration suite now pass.
+3. Dispatch the P6 and P7 planners concurrently in foreground. P6's planning
+   gate is open because P1, P4, and P5 are complete and their component and
+   controller interfaces exist; P7's planning gate is open because P2, P3, and
+   P6 planning prerequisites are met.
 4. Resolve verification defects with their TDD owners; skip only the standalone
    unified review. Complete P7 coverage/acceptance and all final gates.
 5. Write/commit `final_report.md`, mark actual milestones complete, set
