@@ -309,6 +309,18 @@ const topicNext = () =>
 const topicPrevious = () =>
 	fireEvent.click(screen.getByRole("button", { name: "Previous topic" }));
 
+/**
+ * Scope a feedback assertion to the result header.
+ *
+ * A wrong answer also discloses the selected option's explanation, and fixtures
+ * use the same word there, so an unscoped text match is ambiguous.
+ */
+const findResultHeader = (outcome: "Correct!" | "Incorrect") =>
+	screen.findByRole("status", { name: "Quiz result" }).then((header) => {
+		expect(header).toHaveTextContent(outcome);
+		return header;
+	});
+
 describe("RevisionConceptCard Multi-Quiz Navigation", () => {
 	test("renders multi-quiz pagination and allows stepping between Quiz 1 and Quiz 2", () => {
 		const handleQuizSubmit = vi.fn();
@@ -383,4 +395,105 @@ it("resets topic, selection, and summary visibility on a revision route switch",
 	expect(
 		screen.queryByRole("dialog", { name: "Revision Summary" }),
 	).not.toBeInTheDocument();
+});
+
+it.each<RevisionMode>(["full_review", "quiz_only"])(
+	"restores independent saved feedback after a fresh %s mount",
+	async (mode) => {
+		revisionData.mode = mode;
+		revisionData.nodes[0].quiz_results = [
+			saved(),
+			saved({
+				id: "wrong",
+				quiz_index: 1,
+				attempt_number: 6,
+				quiz_attempt_count: 2,
+				is_correct: false,
+				score_percent: 0,
+				selected_option_ids: ["opt-4"],
+				correct_option_ids: [],
+				explanation: "",
+			}),
+		];
+		const first = mountRevision();
+		await findResultHeader("Correct!");
+		expect(screen.getByRole("button", { name: "Quiz 1: correct" })).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Quiz 2: incorrect" }));
+		await findResultHeader("Incorrect");
+		expect(screen.getByText("Attempt #2 • Score: 0%")).toBeInTheDocument();
+		first.unmount();
+		mountRevision();
+		await findResultHeader("Correct!");
+		fireEvent.click(screen.getByRole("button", { name: "Quiz 2: incorrect" }));
+		expect(screen.getByRole("status", { name: "Quiz result" })).toHaveTextContent("Incorrect");
+		expect(api.getRevisionSession).toHaveBeenCalledTimes(2);
+	},
+);
+
+it("does not leak late failures or pending into a destination revision route", async () => {
+	const pending = deferred<RevisionQuizResponse>();
+	api.submitRevisionQuiz.mockReturnValue(pending.promise);
+	const { router, client } = mountRevision();
+	await screen.findByText("What is an entity?");
+	fireEvent.click(screen.getByRole("radio", { name: /A node/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await waitFor(() => expect(api.submitRevisionQuiz).toHaveBeenCalledTimes(1));
+	await act(async () => {
+		await router.navigate("/learn/session-1/revise/rev-2");
+	});
+	await screen.findByText("What is an entity?");
+	await act(async () => pending.reject(new Error("late old error")));
+	expect(screen.queryByText(/Could not save/)).not.toBeInTheDocument();
+	expect(screen.queryByText("Updating...")).not.toBeInTheDocument();
+	expect(
+		client.getQueryData<RevisionSessionWithProgress>(
+			revisionQueryKeys.session("rev-2"),
+		)?.nodes[0].quiz_results,
+	).toEqual([]);
+});
+
+it("handles two visible quiz requests resolving in reverse order without crossed feedback", async () => {
+	revisionData.mode = "quiz_only";
+	const first = deferred<RevisionQuizResponse>();
+	const second = deferred<RevisionQuizResponse>();
+	api.submitRevisionQuiz.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+	mountRevision();
+	await screen.findByText("What is an entity?");
+	fireEvent.click(screen.getByRole("radio", { name: /A node/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await waitFor(() => expect(api.submitRevisionQuiz).toHaveBeenCalledTimes(1));
+	fireEvent.click(screen.getByRole("button", { name: "Next quiz" }));
+	expect(screen.getByRole("button", { name: "Submit Answer" })).not.toHaveTextContent("Submitting...");
+	fireEvent.click(screen.getByRole("radio", { name: /A vertex/ }));
+	fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+	await waitFor(() => expect(api.submitRevisionQuiz).toHaveBeenCalledTimes(2));
+	await act(async () =>
+		second.resolve(
+			saved({
+				id: "second",
+				quiz_index: 1,
+				attempt_number: 6,
+				is_correct: false,
+				score_percent: 0,
+				selected_option_ids: ["opt-4"],
+				correct_option_ids: [],
+				explanation: "",
+			}),
+		),
+	);
+	await findResultHeader("Incorrect");
+	expect(screen.getByRole("button", { name: "Quiz 1: unanswered" })).toBeInTheDocument();
+	await act(async () => first.resolve(saved()));
+	await waitFor(() =>
+		expect(screen.getByRole("button", { name: "Quiz 1: correct" })).toBeInTheDocument(),
+	);
+	expect(screen.getByRole("button", { name: "Quiz 2: incorrect" })).toBeInTheDocument();
+	expect(screen.getByRole("status", { name: "Quiz result" })).toHaveTextContent("Incorrect");
+	expect(screen.getByTestId("revision-concept-card")).toHaveClass("border-border");
+	expect(screen.getByTestId("revision-concept-card")).not.toHaveClass(
+		"border-green-500",
+		"border-red-500",
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Previous quiz" }));
+	expect(screen.getByRole("status", { name: "Quiz result" })).toHaveTextContent("Correct!");
 });

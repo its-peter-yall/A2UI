@@ -118,3 +118,36 @@ it('rolls back only review status while retaining a concurrently saved quiz', as
   expect(final?.nodes[0].quiz_results[0].id).toBe('a');
   expect(final?.nodes[0].content_reviewed_at).toBeNull();
 });
+
+it('routes out-of-order results to request revision and independent quiz slots', async () => {
+  const first = deferred<RevisionQuizResponse>(); const second = deferred<RevisionQuizResponse>();
+  api.submitRevisionQuiz.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const { client, result, rerender } = harness();
+  client.setQueryData(revisionQueryKeys.session('r2'), revision('r2'));
+  act(() => result.current.submitAnswer('n', ['b'], 0));
+  act(() => result.current.submitAnswer('n', ['b'], 1));
+  rerender({ revisionId: 'r2' });
+  expect(result.current.isAnyLoading).toBe(false);
+  await act(async () => second.resolve(attempt({ id: 'q2', quiz_index: 1, attempt_number: 10 })));
+  await act(async () => first.resolve(attempt()));
+  await waitFor(() => expect(client.getQueryData<RevisionSessionWithProgress>(revisionQueryKeys.session('r'))?.nodes[0].quiz_results).toHaveLength(2));
+  expect(client.getQueryData(revisionQueryKeys.session('r2'))).toEqual(revision('r2'));
+  expect(result.current.quizRequestStates).toEqual({});
+});
+
+it('cancels a stale active revision read before publishing a saved quiz', async () => {
+  const { client, result } = harness();
+  const cancel = vi.spyOn(client, 'cancelQueries');
+  api.submitRevisionQuiz.mockResolvedValue(attempt());
+  act(() => result.current.submitAnswer('n', ['b'], 0));
+  await waitFor(() => expect(client.getQueryData<RevisionSessionWithProgress>(revisionQueryKeys.session('r'))?.nodes[0].quiz_results).toHaveLength(1));
+  expect(cancel).toHaveBeenCalledWith({ queryKey: ['revision', 'r'], exact: true });
+});
+
+it('rejects mismatched serialized result identity without applying feedback', async () => {
+  const { client, result } = harness();
+  api.submitRevisionQuiz.mockResolvedValue(attempt({ quiz_index: 1, revision_session_id: 'foreign' }));
+  act(() => result.current.submitAnswer('n', ['b'], 0));
+  await waitFor(() => expect(result.current.quizRequestStates.n?.[0]?.error).toBeDefined());
+  expect(client.getQueryData(revisionQueryKeys.session('r'))).toEqual(revision());
+});

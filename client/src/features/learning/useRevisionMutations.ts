@@ -43,7 +43,7 @@ import type {
   RevisionQuizRequestState,
   RevisionQuizRequestStates,
 } from './revisionQuizState';
-import { patchRevisionQuiz, revisionQueryKeys } from './useRevisionSession';
+import { mergeRevisionNodeResults, patchRevisionQuiz, revisionQueryKeys } from './useRevisionSession';
 
 /**
  * Immutable identity of one revision write.
@@ -155,7 +155,18 @@ export function useRevisionMutations({
     onMutate: (request) => {
       setRequest(request, `quiz:${request.nodeId}:${request.quizIndex}`, { isPending: true });
     },
-    onSuccess: (result, request) => {
+    /**
+     * Publish the saved attempt, then reconcile aggregates.
+     *
+     * An in-flight revision read is cancelled first so it cannot land after the
+     * patch and erase this result. Feedback is patched immediately and never
+     * waits on the aggregate refetch.
+     */
+    onSuccess: async (result, request) => {
+      await queryClient.cancelQueries({
+        queryKey: revisionQueryKeys.session(request.revisionId),
+        exact: true,
+      });
       queryClient.setQueryData<RevisionSessionWithProgress>(
         revisionQueryKeys.session(request.revisionId),
         (session) => (session ? patchRevisionQuiz(session, result) : session),
@@ -204,7 +215,17 @@ export function useRevisionMutations({
       });
       return { previousStatus: before?.status };
     },
-    onSuccess: (node: RevisionNodeProgressWithDetails, request) => {
+    /**
+     * Publish the reviewed node, then reconcile aggregates.
+     *
+     * Node results are merged rather than replaced so a quiz attempt that raced
+     * this response is not erased by the slower review reply.
+     */
+    onSuccess: async (node: RevisionNodeProgressWithDetails, request) => {
+      await queryClient.cancelQueries({
+        queryKey: revisionQueryKeys.session(request.revisionId),
+        exact: true,
+      });
       queryClient.setQueryData<RevisionSessionWithProgress>(
         revisionQueryKeys.session(request.revisionId),
         (session) =>
@@ -212,7 +233,14 @@ export function useRevisionMutations({
             ? {
                 ...session,
                 nodes: session.nodes.map((previous) =>
-                  previous.node_id === request.nodeId ? node : previous,
+                  previous.node_id === request.nodeId
+                    ? mergeRevisionNodeResults(
+                        node,
+                        previous,
+                        request.revisionId,
+                        session.mode,
+                      )
+                    : previous,
                 ),
               }
             : session,

@@ -28,9 +28,11 @@
  */
 // React Query hook for fetching revision session data with progress details
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getRevisionSession } from '@/lib/learningApi';
 import type {
+  RevisionMode,
+  RevisionNodeProgressWithDetails,
   RevisionNodeStatus,
   RevisionQuizAttemptResult,
   RevisionQuizResponse,
@@ -53,9 +55,27 @@ export const revisionQueryKeys = {
  * @returns React Query result containing RevisionSessionWithProgress
  */
 export function useRevisionSession(revisionId: string) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: revisionQueryKeys.session(revisionId),
-    queryFn: ({ signal }) => getRevisionSession(revisionId, signal),
+    queryFn: async ({ signal }) => {
+      const incoming = await getRevisionSession(revisionId, signal);
+      if (incoming.id !== revisionId) throw new Error('Revision identity mismatch');
+      const cached = queryClient.getQueryData<RevisionSessionWithProgress>(
+        revisionQueryKeys.session(revisionId),
+      );
+      return {
+        ...incoming,
+        nodes: incoming.nodes.map((node) =>
+          mergeRevisionNodeResults(
+            node,
+            cached?.nodes.find((previous) => previous.node_id === node.node_id),
+            revisionId,
+            incoming.mode,
+          ),
+        ),
+      };
+    },
     enabled: !!revisionId,
     staleTime: 30_000,
   });
@@ -156,6 +176,53 @@ export function patchRevisionQuiz(
       return { ...node, quiz_results, status: deriveNodeStatus(session, node, quiz_results) };
     }),
   };
+}
+
+/**
+ * Merge an incoming node projection with a newer already-cached one.
+ *
+ * A revision GET refetch triggered by a write can be assembled before that
+ * write's attempt is committed, so its rows are merged with the cache rather
+ * than replacing them. Rows are restricted to this revision, this node, and
+ * available quiz indices, so incompatible historical attempts are retained on
+ * the server but never projected into feedback, coverage, or accuracy.
+ *
+ * The node's own status is recomputed from the merged rows so Practice coverage
+ * survives a stale read, while the revision's aggregate score, progress, and
+ * timestamps stay authoritative.
+ */
+export function mergeRevisionNodeResults(
+  incoming: RevisionNodeProgressWithDetails,
+  cached: RevisionNodeProgressWithDetails | undefined,
+  id: string,
+  mode?: RevisionMode,
+): RevisionNodeProgressWithDetails {
+  const rows = new Map<number, RevisionQuizAttemptResult>();
+  for (const row of [...incoming.quiz_results, ...(cached?.quiz_results ?? [])]) {
+    if (
+      row.revision_session_id !== id ||
+      row.node_id !== incoming.node_id ||
+      row.quiz_index >= incoming.quiz_count
+    ) {
+      continue;
+    }
+    const existing = rows.get(row.quiz_index);
+    if (!existing || isNewerRevisionAttempt(row, existing)) rows.set(row.quiz_index, row);
+  }
+  const quiz_results = [...rows.values()].sort((a, b) => a.quiz_index - b.quiz_index);
+  const status: RevisionNodeStatus =
+    mode === 'quiz_only' && incoming.quiz_count > 0
+      ? quiz_results.length < incoming.quiz_count
+        ? 'pending'
+        : quiz_results.every((row) => row.is_correct)
+          ? 'quiz_passed'
+          : 'quiz_failed'
+      : mode === 'full_review'
+        ? incoming.content_reviewed_at !== null
+          ? 'reviewed'
+          : 'pending'
+        : incoming.status;
+  return { ...incoming, quiz_results, status };
 }
 
 /**
