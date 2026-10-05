@@ -516,8 +516,8 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | Artifact | State | Commit |
 | --- | --- | --- |
 | User screenshots and verbal issue report | Source requirements in conversation | Not a repository artifact |
-| `goal.md` | Written/self-reviewed; behavior approved; written-spec approval pending | `3667545` original specification; current workflow-conversion update recorded by its path commit |
-| `state.md` | Full paused MAW DAG and dispatch rules | Initialization commit discoverable with `git log -1 --format=%h -- docs/completed-course-review-parity/state.md` |
+| `goal.md` | Written/self-reviewed; behavior approved; written-spec approval pending | `3667545` original specification; `4a22ec1` workflow-conversion update |
+| `state.md` | Full paused MAW DAG and dispatch rules | `4a22ec1` initialization; later bookkeeping commits discoverable with `git log --oneline -- docs/completed-course-review-parity/state.md` |
 | `research.md` | Skipped; do not create | None |
 | `plan1.md` | Pending; not dispatched | None |
 | `plan2.md` | Pending; not dispatched | None |
