@@ -437,6 +437,80 @@ class RevisionSqliteTests(RevisionSqliteFixture, unittest.TestCase):
                 )
         self.assertEqual(self.snapshot(), before)
 
+    def test_full_review_is_explicit_idempotent_and_independent(self) -> None:
+        revision_id = self.revision("full_review")
+        original = self.snapshot(original_only=True)
+        correct = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["q0-0"], 0
+        )
+        self.assertEqual(correct["revision_node_status"], "pending")
+        self.assertEqual(self.manager.get_revision_session(revision_id)[
+            "progress_percent"
+        ], 0)
+        first = self.manager.mark_revision_node_reviewed(revision_id, self.node)
+        self.assertEqual(first["status"], "reviewed")
+        self.assertIsNotNone(first["content_reviewed_at"])
+        self.assertEqual(first["quiz_count"], 2)
+        self.assertEqual(first, self.manager.get_revision_session(revision_id)[
+            "nodes"
+        ][0])
+        completed = self.manager.get_revision_session(revision_id)[
+            "completed_at"
+        ]
+        second = self.manager.mark_revision_node_reviewed(
+            revision_id, self.node
+        )
+        self.assertEqual(second, first)
+        wrong = self.manager.submit_revision_quiz(
+            revision_id, self.node, ["q1-1"], 1
+        )
+        self.assertEqual(wrong["revision_node_status"], "reviewed")
+        after = self.manager.get_revision_session(revision_id)
+        self.assertEqual(after["nodes"][0]["content_reviewed_at"],
+                         first["content_reviewed_at"])
+        self.assertEqual(after["completed_at"], completed)
+        self.assertEqual(after["progress_percent"], 100)
+        self.assertEqual(self.snapshot(original_only=True), original)
+
+    def test_review_failure_and_practice_rejection_write_nothing(self) -> None:
+        practice = self.revision()
+        review = self.revision("full_review")
+        for revision_id, node, error in (
+            (practice, self.node, ValueError),
+            ("missing", self.node, LookupError),
+            (review, "missing", LookupError),
+        ):
+            before = self.snapshot()
+            with self.assertRaises(error):
+                self.manager.mark_revision_node_reviewed(revision_id, node)
+            self.assertEqual(self.snapshot(), before)
+        before = self.snapshot()
+        with patch.object(
+            self.manager, "_update_revision_progress",
+            side_effect=sqlite3.OperationalError("injected review failure"),
+        ):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.manager.mark_revision_node_reviewed(review, self.node)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_quizless_full_review_can_complete_but_practice_cannot(
+        self,
+    ) -> None:
+        self.execute("DELETE FROM quiz_data WHERE node_id = ?", (self.node,))
+        review = self.revision("full_review")
+        node = self.manager.mark_revision_node_reviewed(review, self.node)
+        self.assertEqual(node["quiz_count"], 0)
+        self.assertEqual(node["quiz_results"], [])
+        self.assertEqual(self.manager.get_revision_session(review)["status"],
+                         "completed")
+        practice = self.revision()
+        before = self.snapshot()
+        with self.assertRaises(ValueError):
+            self.manager.submit_revision_quiz(practice, self.node, ["q0-0"], 0)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.manager.get_revision_session(practice)["status"],
+                         "in_progress")
+
 
 def main() -> None:
     unittest.main()

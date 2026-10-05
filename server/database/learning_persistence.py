@@ -1053,69 +1053,46 @@ class LearningManager:
             conn.close()
 
     def mark_revision_node_reviewed(
-        self,
-        revision_id: str,
-        node_id: str,
+        self, revision_id: str, node_id: str,
     ) -> Dict[str, Any]:
-        """Mark a revision node as reviewed for full-review sessions."""
+        """Mark explicit reading once and return the complete restored node.
+
+        Args:
+            revision_id: Owning Full Review revision.
+            node_id: Participating concept node identifier.
+        Returns:
+            The same node-details shape as revision GET.
+        Raises:
+            LookupError: Revision or course-owned membership is missing.
+            ValueError: Practice mode does not allow explicit review.
+            sqlite3.Error: The write fails without committing partial data.
+        """
         conn = self._get_connection()
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT id, mode
-                FROM revision_sessions
-                WHERE id = ?
-                """,
-                (revision_id,),
-            )
-            revision_row = cursor.fetchone()
-            if revision_row is None:
-                raise LookupError(f"Revision session not found: {revision_id}")
-            if revision_row["mode"] != "full_review":
+            row = self._require_revision_row(conn, revision_id)
+            before, nodes = self._project_revision_row(conn, row)
+            node = self._require_revision_member(nodes, node_id)
+            if row["mode"] != "full_review":
                 raise ValueError(
                     "mark-reviewed is only allowed for full_review revisions"
                 )
-
+            self._prepare_revision_write(conn, revision_id, before)
             now = datetime.now(timezone.utc).isoformat()
-            cursor.execute(
-                """
-                UPDATE revision_node_progress
-                SET status = 'reviewed', reviewed_at = ?
-                WHERE revision_session_id = ? AND node_id = ?
-                """,
-                (now, revision_id, node_id),
+            conn.execute(
+                "UPDATE revision_node_progress "
+                "SET content_reviewed_at = COALESCE(content_reviewed_at, ?), "
+                "reviewed_at = COALESCE(content_reviewed_at, ?) "
+                "WHERE id = ? AND revision_session_id = ?",
+                (now, now, node.id, revision_id),
             )
-            if cursor.rowcount == 0:
-                raise LookupError(
-                    f"Revision node not found for revision {revision_id}: {node_id}"
-                )
-
-            self._update_revision_progress(revision_id, conn)
-            cursor.execute(
-                """
-                SELECT id, revision_session_id, node_id, status, reviewed_at
-                FROM revision_node_progress
-                WHERE revision_session_id = ? AND node_id = ?
-                """,
-                (revision_id, node_id),
-            )
-            row = cursor.fetchone()
+            projection = self._update_revision_progress(revision_id, conn)
+            result = next(
+                n for n in projection.nodes if n.node_id == node_id
+            ).model_dump(mode="json")
             conn.commit()
-            if row is None:
-                raise LookupError(
-                    f"Revision node not found for revision {revision_id}: {node_id}"
-                )
-
-            return {
-                "id": row["id"],
-                "revision_session_id": row["revision_session_id"],
-                "node_id": row["node_id"],
-                "status": row["status"],
-                "reviewed_at": row["reviewed_at"],
-            }
-        except sqlite3.Error as e:
-            logger.error(f"Error marking revision node reviewed: {e}")
+            return result
+        except Exception:
+            conn.rollback()
             raise
         finally:
             conn.close()
