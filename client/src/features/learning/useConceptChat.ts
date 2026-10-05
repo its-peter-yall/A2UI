@@ -227,6 +227,10 @@ export function useConceptChat(
 
 	// Sync state when topic, session, or completion state changes
 	useEffect(() => {
+		if (abortRef.current) {
+			abortRef.current.abort();
+			abortRef.current = null;
+		}
 		const loaded = loadStoredChat();
 		setMessages(loaded.messages);
 		setWebSearchEnabledState(loaded.webSearchEnabled);
@@ -237,18 +241,18 @@ export function useConceptChat(
 		setError(null);
 		setIsStreaming(false);
 		stopStreamingCtx();
-		if (abortRef.current) {
-			abortRef.current.abort();
-			abortRef.current = null;
-		}
 	}, [sessionId, nodeId, isCourseComplete, loadStoredChat, stopStreamingCtx]);
 
-	/** Save messages to per-node storage key using current ref values. */
+	/** Save messages to per-node storage key using current or explicit target nodeId. */
 	const saveToStorage = useCallback(
-		(msgs: ConceptChatMessage[], timestamp: number) => {
+		(
+			msgs: ConceptChatMessage[],
+			timestamp: number,
+			targetNodeId?: string,
+		) => {
 			try {
 				const sid = sessionIdRef.current;
-				const nid = nodeIdRef.current;
+				const nid = targetNodeId ?? nodeIdRef.current;
 				if (!sid || !nid) return;
 				const data: StoredChat = {
 					messages: msgs,
@@ -364,7 +368,7 @@ export function useConceptChat(
 			const updatedWithUser = [...messagesRef.current, userMessage];
 			historyForRequest = updatedWithUser.slice(-MAX_HISTORY_MESSAGES);
 			messagesRef.current = updatedWithUser;
-			saveToStorage(updatedWithUser, timestamp);
+			saveToStorage(updatedWithUser, timestamp, currentNodeId);
 			setMessages(updatedWithUser);
 
 			setIsStreaming(true);
@@ -397,9 +401,11 @@ export function useConceptChat(
 					selectedHeadingIds,
 					webSearchEnabled: webSearchEnabledRef.current,
 					onStatus: (status) => {
+						if (controller.signal.aborted) return;
 						setStreamingStatus(status);
 					},
 					onSearch: (search) => {
+						if (controller.signal.aborted) return;
 						setStreamingSearch(search);
 						setMessages((prev) => {
 							const updated = [...prev];
@@ -410,14 +416,16 @@ export function useConceptChat(
 									search,
 								};
 							}
-							saveToStorage(updated, timestamp);
+							saveToStorage(updated, timestamp, currentNodeId);
 							return updated;
 						});
 					},
 					onWarning: (warning) => {
+						if (controller.signal.aborted) return;
 						setStreamingWarning(warning);
 					},
 					onDelta: (delta) => {
+						if (controller.signal.aborted) return;
 						setMessages((prev) => {
 							const updated = [...prev];
 							const last = updated[updated.length - 1];
@@ -427,7 +435,7 @@ export function useConceptChat(
 									content: last.content + delta,
 								};
 							}
-							saveToStorage(updated, timestamp);
+							saveToStorage(updated, timestamp, currentNodeId);
 							return updated;
 						});
 					},
@@ -445,7 +453,7 @@ export function useConceptChat(
 						last?.role === "assistant" && !last.content
 							? prev.slice(0, -1)
 							: prev;
-					saveToStorage(updated, timestamp);
+					saveToStorage(updated, timestamp, currentNodeId);
 					return updated;
 				});
 			} finally {

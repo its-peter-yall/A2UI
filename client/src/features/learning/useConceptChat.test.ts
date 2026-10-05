@@ -369,4 +369,122 @@ describe('useConceptChat', () => {
       ),
     ).toBe(false);
   });
+
+  it('aborts active stream, resets streaming state, and loads destination conversation when nodeId changes', async () => {
+    let abortSignalCaptured: AbortSignal | undefined;
+    streamConceptChatMock.mockImplementation(async (params: { signal?: AbortSignal }) => {
+      abortSignalCaptured = params.signal;
+      // Keep stream pending indefinitely
+      await new Promise(() => {});
+    });
+
+    localStorage.setItem(
+      storageKey('sess-1', 'node-2'),
+      JSON.stringify({
+        messages: [{ role: 'assistant', content: 'Node 2 preserved history' }],
+        lastPromptTimestamp: Date.now(),
+        webSearchEnabled: false,
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ nodeId }: { nodeId: string }) => useConceptChat('sess-1', nodeId),
+      { initialProps: { nodeId: 'node-1' } },
+    );
+
+    let sendPromise: Promise<void> = Promise.resolve();
+    act(() => {
+      sendPromise = result.current.sendMessage('Stream question on node 1', []);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(true);
+    });
+
+    expect(abortSignalCaptured?.aborted).toBe(false);
+
+    // Retarget to node-2
+    act(() => {
+      rerender({ nodeId: 'node-2' });
+    });
+
+    expect(abortSignalCaptured?.aborted).toBe(true);
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.messages).toEqual([
+      { role: 'assistant', content: 'Node 2 preserved history' },
+    ]);
+  });
+
+  it('never saves aborted stream output from previous node into new node storage', async () => {
+    let triggerDelta!: (text: string) => void;
+    streamConceptChatMock.mockImplementation(async (params: { onDelta: (t: string) => void; signal?: AbortSignal }) => {
+      triggerDelta = params.onDelta;
+      await new Promise(() => {});
+    });
+
+    localStorage.setItem(
+      storageKey('sess-1', 'node-2'),
+      JSON.stringify({
+        messages: [{ role: 'assistant', content: 'Node 2 original history' }],
+        lastPromptTimestamp: Date.now(),
+        webSearchEnabled: false,
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ nodeId }: { nodeId: string }) => useConceptChat('sess-1', nodeId),
+      { initialProps: { nodeId: 'node-1' } },
+    );
+
+    act(() => {
+      result.current.sendMessage('Q1', []);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isStreaming).toBe(true);
+    });
+
+    // Retarget to node-2
+    act(() => {
+      rerender({ nodeId: 'node-2' });
+    });
+
+    // Late delta from aborted stream should not corrupt node-2 storage
+    if (triggerDelta) {
+      act(() => {
+        try {
+          triggerDelta('Late delta');
+        } catch {
+          // ignore
+        }
+      });
+    }
+
+    const node2Raw = localStorage.getItem(storageKey('sess-1', 'node-2'));
+    expect(node2Raw).not.toBeNull();
+    const parsed = JSON.parse(node2Raw!);
+    expect(parsed.messages).toEqual([
+      { role: 'assistant', content: 'Node 2 original history' },
+    ]);
+  });
+
+  it('retains stored chat history when isCourseComplete is false or omitted', () => {
+    localStorage.setItem(
+      storageKey('sess-1', 'node-1'),
+      JSON.stringify({
+        messages: [{ role: 'user', content: 'Saved question' }],
+        lastPromptTimestamp: Date.now(),
+        webSearchEnabled: false,
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useConceptChat('sess-1', 'node-1', false),
+    );
+
+    expect(result.current.messages).toEqual([
+      { role: 'user', content: 'Saved question' },
+    ]);
+    expect(localStorage.getItem(storageKey('sess-1', 'node-1'))).not.toBeNull();
+  });
 });
