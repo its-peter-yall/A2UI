@@ -572,3 +572,60 @@ it("invalidates a viewed summary on retry and preserves the first completion tim
 	expect(within(modal).getByText("3 total attempts")).toBeInTheDocument();
 	expect(api.getRevisionSummary).toHaveBeenCalledTimes(2);
 });
+
+it("uses finished Practice coverage, including wrong attempts, in header and TOC", async () => {
+	revisionData.mode = "quiz_only";
+	revisionData.nodes[0].quiz_results = [
+		saved(),
+		saved({ id: "wrong", quiz_index: 1, is_correct: false,
+			score_percent: 0, selected_option_ids: ["opt-4"], correct_option_ids: [], explanation: "" }),
+	];
+	revisionData.nodes[0].status = "quiz_failed"; revisionData.progress_percent = 50;
+	mountRevision();
+	await findResultHeader("Correct!");
+	expect(screen.getByText("1 / 2 topics finished")).toBeInTheDocument();
+	fireEvent.click(screen.getByRole("button", { name: "Open Table of Contents" }));
+	const toc = screen.getByRole("dialog", { name: "Table of Contents" });
+	expect(within(toc).getByText("Practice finished")).toBeInTheDocument();
+	expect(within(toc).queryByText(/Mastered|Locked/)).not.toBeInTheDocument();
+	fireEvent.click(within(toc).getByRole("button", { name: "Second topic" }));
+	expect(screen.getByRole("heading", { name: "Second topic" })).toBeInTheDocument();
+});
+
+it("displays compatibility notices once per page and leaves compatible quizzes usable", async () => {
+	revisionData.notices = [
+		{ code: "legacy_review_required", node_id: "node-1", attempt_count: 0 },
+		{ code: "legacy_review_required", node_id: "node-2", attempt_count: 0 },
+		{ code: "incompatible_attempts", node_id: "node-1", attempt_count: 2 },
+		{ code: "completion_recalculated", node_id: null, attempt_count: 0 },
+		{ code: "legacy_review_inferred", node_id: "node-2", attempt_count: 0 },
+	];
+	mountRevision();
+	await screen.findByText("What is an entity?");
+	expect(screen.getAllByText(/Earlier quiz activity did not record explicit reading review/)).toHaveLength(1);
+	expect(screen.getByText(/2 historical attempts were retained/)).toBeInTheDocument();
+	expect(screen.getByText(/Completion was recalculated/)).toBeInTheDocument();
+	expect(screen.getByText(/Earlier explicit review was restored/)).toBeInTheDocument();
+	expect(screen.getByRole("button", { name: "Mark as Reviewed" })).toBeEnabled();
+});
+
+it("keeps quizless topics navigable and never auto-opens an empty Practice summary", async () => {
+	revisionData.mode = "quiz_only";
+	revisionData.nodes.forEach((node) => { node.quiz_count = 0; });
+	originalData.nodes.forEach((node) => { node.quiz = null; node.quiz_set = null; });
+	mountRevision();
+	await screen.findByText("No practice quizzes available.");
+	expect(screen.getByText("0 / 0 topics finished")).toBeInTheDocument();
+	expect(screen.queryByRole("button", { name: "View Summary" })).not.toBeInTheDocument();
+	topicNext();
+	await screen.findByRole("heading", { name: "Second topic" });
+	expect(screen.getByText("No quiz available for this topic.")).toBeInTheDocument();
+});
+
+it("handles an empty revision without a nonexistent Topic 1 of 0", async () => {
+	revisionData.nodes = []; originalData.nodes = [];
+	mountRevision();
+	await screen.findByText("No topics available in this revision.");
+	expect(screen.queryByText("Topic 1 of 0")).not.toBeInTheDocument();
+	expect(api.getRevisionSummary).not.toHaveBeenCalled();
+});

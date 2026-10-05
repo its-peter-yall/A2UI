@@ -16,7 +16,13 @@ import type { ReactNode } from 'react';
 import { renderHook, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
-import { revisionQueryKeys, useRevisionSession, mergeRevisionNodeResults, patchRevisionQuiz } from './useRevisionSession';
+import {
+  getRevisionCompletion,
+  mergeRevisionNodeResults,
+  patchRevisionQuiz,
+  revisionQueryKeys,
+  useRevisionSession,
+} from './useRevisionSession';
 import type { RevisionQuizResponse, RevisionSessionWithProgress } from '@/types/learning';
 
 const api = vi.hoisted(() => ({ getRevisionSession: vi.fn() }));
@@ -72,4 +78,15 @@ it('merges latest sequence/ID deterministically without losing saved feedback', 
   expect(mergeRevisionNodeResults(incoming, cached.nodes[0], 'r').quiz_results[0].id).toBe('z');
   expect(patchRevisionQuiz(cached, { ...result, id: 'a' }).nodes[0].quiz_results[0].id).toBe('z');
   expect(patchRevisionQuiz(cached, { ...result, revision_session_id: 'other' })).toBe(cached);
+});
+it('excludes quizless Practice topics and never completes an empty denominator', () => {
+  const base: RevisionSessionWithProgress = {
+    id: 'r', original_session_id: 's', revision_number: 1, mode: 'quiz_only', status: 'in_progress',
+    progress_percent: 0, total_quiz_score_percent: null, started_at: '2026-10-05T00:00:00Z',
+    completed_at: null, notices: [],
+    nodes: [{ id: 'p', node_id: 'n', node_title: 'N', sequence_index: 0,
+      status: 'quiz_passed', reviewed_at: null, content_reviewed_at: null, quiz_count: 0, quiz_results: [] }],
+  };
+  expect(getRevisionCompletion(base)).toEqual({ total: 0, completed: 0 });
+  expect(getRevisionCompletion({ ...base, mode: 'full_review' })).toEqual({ total: 1, completed: 0 });
 });

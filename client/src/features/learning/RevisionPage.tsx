@@ -61,7 +61,6 @@ import {
 import { useRevisionMutations } from "./useRevisionMutations";
 import { RevisionConceptCard } from "./RevisionConceptCard";
 import { RevisionSummaryModal } from "./RevisionSummaryModal";
-import { TableOfContentsModal } from "./TableOfContentsModal";
 import { ChatPanel } from "./ChatPanel";
 import { SettingsButton } from "@/components/SettingsButton";
 import { cn } from "@/lib/utils";
@@ -73,7 +72,12 @@ import {
 import { LoadingState, ErrorState } from "./ErrorStates";
 import { createRevisionQuizState } from "./revisionQuizState";
 import type { RevisionQuizUiState } from "./revisionQuizState";
-import type { RevisionNodeProgressWithDetails } from "@/types/learning";
+import type {
+	ConceptNode,
+	RevisionNodeProgressWithDetails,
+	RevisionNoticeCode,
+	RevisionSessionWithProgress,
+} from "@/types/learning";
 
 /**
  * Route wrapper for the revision session.
@@ -336,7 +340,7 @@ function RevisionPageBody({
 
 	// Determine header text based on mode
 	const modeLabel =
-		revisionSession.mode === "full_review" ? "Full Review" : "Quiz Only";
+		revisionSession.mode === "full_review" ? "Full Review" : "Practice Quizzes";
 	const modeBadgeColor =
 		revisionSession.mode === "full_review"
 			? "bg-blue-500/20 text-blue-600 dark:text-blue-400"
@@ -353,6 +357,37 @@ function RevisionPageBody({
 	 */
 	const canViewSummary =
 		revisionSession.status === "completed" && totalNodes > 0;
+
+	/**
+	 * Compatibility guidance, one stable message per notice code.
+	 *
+	 * Incompatible attempt counts are summed so a page load never repeats the
+	 * same explanation for every affected topic, and a refetch that resolves a
+	 * notice simply drops its line.
+	 */
+	const noticeCodes = [
+		...new Set(revisionSession.notices.map((notice) => notice.code)),
+	];
+	const noticeCopy: Record<RevisionNoticeCode, string> = {
+		legacy_review_inferred:
+			"Earlier explicit review was restored from the saved review date.",
+		legacy_review_required:
+			"Earlier quiz activity did not record explicit reading review. Use Mark as Reviewed to finish reading.",
+		incompatible_attempts: `${revisionSession.notices
+			.filter((notice) => notice.code === "incompatible_attempts")
+			.reduce((sum, notice) => sum + notice.attempt_count, 0)} historical attempts were retained but cannot match the available quizzes. They are excluded from feedback, completion, and accuracy.`,
+		completion_recalculated:
+			"Completion was recalculated from reading review or submitted quizzes. Earlier completion totals may be lower; saved compatible feedback remains available.",
+	};
+
+	/**
+	 * A revision topic whose original content is gone stays navigable; it is a
+	 * recoverable data notice, never authority to invent membership.
+	 */
+	const hasUnavailableTopic = revisionSession.nodes.some(
+		(node) =>
+			!originalSession.nodes.some((topic) => topic.id === node.node_id),
+	);
 
 	return (
 		<div className="min-h-screen bg-background">
@@ -428,7 +463,8 @@ function RevisionPageBody({
 							className="text-xs font-medium text-muted-foreground"
 							aria-live="polite"
 						>
-							{completedNodes} / {totalNodes} completed
+							{completedNodes} / {totalNodes} topics{" "}
+							{revisionSession.mode === "full_review" ? "reviewed" : "finished"}
 						</div>
 					</div>
 				</div>
@@ -443,6 +479,41 @@ function RevisionPageBody({
 							{originalSession.course_title}
 						</h1>
 					</header>
+
+					{/* Compatibility guidance, one message per code */}
+					{noticeCodes.length > 0 && (
+						<aside
+							aria-label="Revision compatibility notices"
+							className="rounded-lg border bg-muted/30 p-3"
+						>
+							{noticeCodes.map((code) => (
+								<p key={code} className="text-sm text-muted-foreground">
+									{noticeCopy[code]}
+								</p>
+							))}
+						</aside>
+					)}
+
+					{/* Zero-denominator and empty-revision guidance */}
+					{revisionSession.mode === "quiz_only" && totalNodes === 0 && (
+						<p role="status">No practice quizzes available.</p>
+					)}
+					{topics.length === 0 && (
+						<p role="status">No topics available in this revision.</p>
+					)}
+					{hasUnavailableTopic && (
+						<p role="status">
+							Some saved revision topics are unavailable in this course. Available
+							topics remain usable.
+						</p>
+					)}
+
+					{/* Attempt accuracy, never derived from topic statuses */}
+					<span className="text-xs text-muted-foreground">
+						{revisionSession.total_quiz_score_percent === null
+							? "Attempt accuracy: N/A"
+							: `${revisionSession.total_quiz_score_percent}% attempt accuracy`}
+					</span>
 
 					{/* Slide counter */}
 					{topics.length > 0 && (
@@ -575,29 +646,15 @@ function RevisionPageBody({
 			/>
 
 			{/* Table of Contents Modal */}
-			<TableOfContentsModal
-				isOpen={isTOCOpen}
-				onClose={() => setIsTOCOpen(false)}
-				nodes={topics.map((node) => {
-					const progress = revisionSession.nodes.find(
-						(progress) => progress.node_id === node.id,
-					);
-					const isDone =
-						progress?.status === "reviewed" ||
-						progress?.status === "quiz_passed";
-					return {
-						...node,
-						status: isDone
-							? ("COMPLETED" as const)
-							: ("VIEWING_EXPLANATION" as const),
-					};
-				})}
-				currentNodeId={currentNode?.id}
-				onSelectTopic={(index) => {
-					goToSlide(index);
-					setIsTOCOpen(false);
-				}}
-			/>
+			{isTOCOpen && (
+				<RevisionContentsDialog
+					topics={topics}
+					session={revisionSession}
+					currentNodeId={currentNode?.id}
+					onSelect={goToSlide}
+					onClose={() => setIsTOCOpen(false)}
+				/>
+			)}
 
 			{/* Footer */}
 			<footer className="border-t py-4 text-center text-sm text-muted-foreground">
@@ -642,6 +699,135 @@ function RevisionPageBody({
 						onBackToDashboard={handleBackToDashboard}
 					/>
 				)}
+		</div>
+	);
+}
+/**
+ * Revision-scoped table of contents.
+ *
+ * This is intentionally a separate dialog from the shared normal-learning
+ * `TableOfContentsModal`, whose mastery, lock, and unlock vocabulary does not
+ * apply to a revision. Every revision topic stays navigable and its status is
+ * described with mode-specific wording: reading review for Full Review, and
+ * submission coverage for Practice.
+ */
+function RevisionContentsDialog({
+	topics,
+	session,
+	currentNodeId,
+	onSelect,
+	onClose,
+}: {
+	topics: ConceptNode[];
+	session: RevisionSessionWithProgress;
+	currentNodeId?: string;
+	onSelect: (index: number) => void;
+	onClose: () => void;
+}) {
+	const ref = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const previous =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		ref.current?.focus();
+		return () => {
+			previous?.focus();
+		};
+	}, []);
+
+	return (
+		<div
+			className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+			onClick={(event) => {
+				if (event.target === event.currentTarget) onClose();
+			}}
+		>
+			<div
+				ref={ref}
+				role="dialog"
+				aria-modal="true"
+				aria-label="Table of Contents"
+				tabIndex={-1}
+				className="max-h-[80dvh] w-full max-w-4xl overflow-y-auto rounded-xl border bg-card p-6"
+				onKeyDown={(event) => {
+					if (event.key === "Escape") {
+						event.stopPropagation();
+						onClose();
+					}
+					if (event.key !== "Tab") return;
+					const controls = ref.current?.querySelectorAll<HTMLButtonElement>("button");
+					const first = controls?.[0];
+					const last = controls?.[controls.length - 1];
+					if (
+						event.shiftKey &&
+						(document.activeElement === first || document.activeElement === ref.current)
+					) {
+						event.preventDefault();
+						last?.focus();
+					}
+					if (!event.shiftKey && document.activeElement === last) {
+						event.preventDefault();
+						first?.focus();
+					}
+				}}
+			>
+				<button
+					type="button"
+					aria-label="Close Table of Contents"
+					onClick={onClose}
+					className="rounded-md px-2 py-1 focus-visible:ring-2 focus-visible:ring-primary"
+				>
+					Close
+				</button>
+				<h2 className="text-xl font-bold">Table of Contents</h2>
+				<table className="w-full text-left text-sm">
+					<thead>
+						<tr>
+							<th>Topic</th>
+							<th>Quizzes</th>
+							<th>Difficulty</th>
+							<th>Status</th>
+						</tr>
+					</thead>
+					<tbody>
+						{topics.map((node, index) => {
+							const progress = session.nodes.find(
+								(row) => row.node_id === node.id,
+							);
+							const label =
+								session.mode === "full_review"
+									? progress?.content_reviewed_at
+										? "Reviewed"
+										: "Reading pending"
+									: progress?.quiz_count === 0
+										? "No quiz available"
+										: progress && progress.quiz_results.length === progress.quiz_count
+											? "Practice finished"
+											: "Practice pending";
+							return (
+								<tr key={node.id} className="border-t">
+									<td className="p-3">
+										<button
+											type="button"
+											aria-current={currentNodeId === node.id ? "step" : undefined}
+											onClick={() => {
+												onSelect(index);
+												onClose();
+											}}
+											className="rounded text-primary hover:underline focus-visible:ring-2 focus-visible:ring-primary"
+										>
+											{node.title}
+										</button>
+									</td>
+									<td>{progress?.quiz_count ?? 0}</td>
+									<td>{node.complexity}</td>
+									<td>{label}</td>
+								</tr>
+							);
+						})}
+					</tbody>
+				</table>
+			</div>
 		</div>
 	);
 }
