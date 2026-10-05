@@ -5,29 +5,32 @@
  * ============================================================================
  *
  * PURPOSE:
- *    Main page for revision sessions, rendering concept cards in a carousel.
+ *    Route-keyed page body for revision sessions, rendering membership-filtered
+ *    concept cards in a carousel with page-owned quiz UI state.
  *
  * ROLE IN PROJECT:
- *    Mounted at /learn/:sessionId/revise/:revisionId. Fetches both the
- *    original learning session (for node content/quizzes) and the revision
- *    session (for per-node progress). Tracks revision-specific progress
- *    independently of the original session and shows a summary modal on
- *    completion.
+ *    Mounted at /learn/:sessionId/revise/:revisionId. The exported route wrapper
+ *    keys the body by session and revision so navigation, quiz selections,
+ *    summary visibility, chat targeting, and request state can never survive a
+ *    revision route change. Reads the original session for topic content and
+ *    the revision session for authoritative progress; revision activity never
+ *    mutates original-course state.
  *
  * KEY COMPONENTS:
- *    - RevisionPage: Page root with header, progress bar, carousel, and footer
- *    - Carousel: AnimatePresence-driven slide navigation with keyboard support
- *    - getRevisionStepColor: Maps node status to step indicator color
+ *    - RevisionPage: Route wrapper with parameter validation
+ *    - RevisionPageBody: Keyed body owning carousel, selections, and notices
+ *    - goToSlide: Membership-bounded topic navigation
  *
  * DEPENDENCIES:
  *    - External: react, react-router-dom, @tanstack/react-query, axios, framer-motion
  *    - Internal: @/lib/learningApi, ./useRevisionSession, ./useRevisionMutations,
- *                ./RevisionConceptCard, ./RevisionSummaryModal, @/components/ThemeToggle,
+ *                ./RevisionConceptCard, ./RevisionSummaryModal,
+ *                ./TableOfContentsModal, ./ChatPanel, ./revisionQuizState,
+ *                @/components/SettingsButton, @/components/ThemeToggle,
  *                ./animations, ./ErrorStates, @/types/learning
  *
  * USAGE:
- *    // Rendered automatically via react-router-dom route:
- *    // <Route path="/learn/:sessionId/revise/:revisionId" element={<RevisionPage />} />
+ *    <Route path="/learn/:sessionId/revise/:revisionId" element={<RevisionPage />} />
  * ============================================================================
  */
 // RevisionPage.tsx
@@ -41,14 +44,14 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import { List, MessageCircle } from "lucide-react";
 import {
+	createRevisionSession,
 	getLearningSession,
 	getRevisionSummary,
-	createRevisionSession,
 } from "@/lib/learningApi";
 import { useRevisionSession } from "./useRevisionSession";
 import { useRevisionMutations } from "./useRevisionMutations";
@@ -64,16 +67,57 @@ import {
 	prefersReducedMotion,
 } from "./animations";
 import { LoadingState, ErrorState } from "./ErrorStates";
-import type {
-	RevisionNodeProgressWithDetails,
-	RevisionQuizResponse,
-} from "@/types/learning";
+import { createRevisionQuizState } from "./revisionQuizState";
+import type { RevisionQuizUiState } from "./revisionQuizState";
+import type { RevisionNodeProgressWithDetails } from "@/types/learning";
 
+/**
+ * Route wrapper for the revision session.
+ *
+ * The body is keyed by session and revision so every revision-local state -
+ * carousel position, quiz selections, summary visibility, chat ownership, and
+ * in-flight request flags - is discarded on a route change. Hook-level success
+ * callbacks still update their own (old) cache after unmount.
+ */
 export function RevisionPage() {
 	const { sessionId, revisionId } = useParams<{
 		sessionId: string;
 		revisionId: string;
 	}>();
+
+	if (!sessionId || !revisionId) {
+		return (
+			<ErrorState
+				title="Missing revision"
+				message="Missing session or revision ID."
+				showHomeLink
+			/>
+		);
+	}
+
+	return (
+		<RevisionPageBody
+			key={`${sessionId}:${revisionId}`}
+			sessionId={sessionId}
+			revisionId={revisionId}
+		/>
+	);
+}
+
+/**
+ * Body for one loaded revision route.
+ *
+ * All topics shown, every carousel count, and all navigation come from the
+ * revision's own node membership, so a topic absent from the revision is never
+ * fabricated into the list and never counted.
+ */
+function RevisionPageBody({
+	sessionId,
+	revisionId,
+}: {
+	sessionId: string;
+	revisionId: string;
+}) {
 	const navigate = useNavigate();
 
 	// Focus management
@@ -87,9 +131,10 @@ export function RevisionPage() {
 	const [isTOCOpen, setIsTOCOpen] = useState(false);
 	const [isChatOpen, setIsChatOpen] = useState(false);
 
-	// Store quiz results per node for feedback display
-	const [quizResults, setQuizResults] = useState<
-		Record<string, RevisionQuizResponse>
+	// Page-owned ephemeral quiz UI state, keyed by node so unmounting a topic
+	// card cannot discard unsubmitted selections.
+	const [quizStateByNode, setQuizStateByNode] = useState<
+		Record<string, RevisionQuizUiState>
 	>({});
 
 	// Fetch original session for node content/quizzes
@@ -100,7 +145,7 @@ export function RevisionPage() {
 		error: originalError,
 	} = useQuery({
 		queryKey: ["learningSession", sessionId],
-		queryFn: () => getLearningSession(sessionId!),
+		queryFn: () => getLearningSession(sessionId),
 		enabled: !!sessionId,
 		staleTime: 60_000,
 	});
@@ -111,7 +156,7 @@ export function RevisionPage() {
 		isLoading: isLoadingRevision,
 		isError: isRevisionError,
 		error: revisionError,
-	} = useRevisionSession(revisionId ?? "");
+	} = useRevisionSession(revisionId);
 
 	useEffect(() => {
 		// Focus the carousel container for keyboard navigation
@@ -121,45 +166,28 @@ export function RevisionPage() {
 	}, [isLoadingOriginal, isLoadingRevision]);
 
 	// Revision mutations
-	const {
-		markReviewed,
-		submitAnswer,
-		isMarkingReviewed,
-		isSubmitting,
-		isAnyLoading,
-	} = useRevisionMutations({
-		revisionId: revisionId ?? "",
-		onError: (error, context) => {
-			console.error(`Revision mutation error (${context}):`, error);
-		},
-		onQuizResult: (nodeId, _isCorrect, result) => {
-			// Store quiz result for feedback display
-			setQuizResults((prev) => ({ ...prev, [nodeId]: result }));
-		},
-	});
+	const { markReviewed, submitAnswer, quizRequestStates, reviewRequestStates, isAnyLoading } =
+		useRevisionMutations({
+			revisionId,
+			onError: (error, context) => {
+				console.error(`Revision mutation error (${context}):`, error);
+			},
+		});
 
 	// Completion summary modal state
-	const queryClient = useQueryClient();
 	const [summaryDismissed, setSummaryDismissed] = useState(false);
 
 	// Fetch revision summary when revision is completed (via React Query)
 	const isCompleted = revisionSession?.status === "completed";
 	const { data: summaryData } = useQuery({
 		queryKey: ["revision-summary", revisionId],
-		queryFn: () => getRevisionSummary(revisionId!),
+		queryFn: () => getRevisionSummary(revisionId),
 		enabled: !!revisionId && isCompleted && !summaryDismissed,
 		staleTime: Infinity,
 	});
 
 	// Derive whether to show modal from query result + dismissal flag
 	const showSummary = !!summaryData && !summaryDismissed;
-
-	// Invalidate course list when summary data first becomes available
-	useEffect(() => {
-		if (summaryData) {
-			queryClient.invalidateQueries({ queryKey: ["courses"] });
-		}
-	}, [summaryData, queryClient]);
 
 	// Summary modal actions
 	const handleBackToDashboard = useCallback(() => {
@@ -168,7 +196,7 @@ export function RevisionPage() {
 	}, [navigate]);
 
 	const handleReviseAgain = useCallback(async () => {
-		if (!sessionId || !revisionSession) return;
+		if (!revisionSession) return;
 		try {
 			const newRevision = await createRevisionSession(sessionId, {
 				mode: revisionSession.mode,
@@ -184,41 +212,35 @@ export function RevisionPage() {
 		setSummaryDismissed(true);
 	}, []);
 
+	/**
+	 * Topics this revision actually covers, in original course order.
+	 */
+	const topics =
+		originalSession?.nodes.filter((node) =>
+			revisionSession?.nodes.some((progress) => progress.node_id === node.id),
+		) ?? [];
+	const currentNode = topics[currentIndex];
+	const currentRevisionProgress: RevisionNodeProgressWithDetails | undefined =
+		currentNode
+			? revisionSession?.nodes.find((progress) => progress.node_id === currentNode.id)
+			: undefined;
+
 	// Carousel navigation
 	const goToSlide = useCallback(
 		(index: number) => {
-			if (!originalSession) return;
-			const clamped = Math.max(
-				0,
-				Math.min(index, originalSession.nodes.length - 1),
-			);
+			if (topics.length === 0) return;
+			const clamped = Math.max(0, Math.min(index, topics.length - 1));
 			const dir = clamped > currentIndex ? 1 : clamped < currentIndex ? -1 : 0;
 			setDirection(dir);
 			setCurrentIndex(clamped);
 		},
-		[originalSession, currentIndex],
+		[topics.length, currentIndex],
 	);
 
-	const canGoNext = originalSession
-		? currentIndex < originalSession.nodes.length - 1
-		: false;
+	const canGoNext = currentIndex < topics.length - 1;
 	const canGoPrev = currentIndex > 0;
 
 	// Loading state
-	if (!sessionId || !revisionId) {
-		return (
-			<div className="flex flex-col items-center justify-center min-h-screen gap-4">
-				<p className="text-muted-foreground">Missing session or revision ID</p>
-				<Link
-					to="/learn"
-					className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-				>
-					Back to Dashboard
-				</Link>
-			</div>
-		);
-	}
-
 	if (isLoadingOriginal || isLoadingRevision) {
 		return <LoadingState message="Loading revision session..." />;
 	}
@@ -267,13 +289,16 @@ export function RevisionPage() {
 		);
 	}
 
-	// Build a map of node_id -> revision progress
-	const revisionProgressMap = new Map<
-		string,
-		RevisionNodeProgressWithDetails
-	>();
-	for (const nodeProgress of revisionSession.nodes) {
-		revisionProgressMap.set(nodeProgress.node_id, nodeProgress);
+	// Reject a revision that does not belong to this course before rendering
+	// any topic, so foreign progress is never displayed.
+	if (revisionSession.original_session_id !== sessionId) {
+		return (
+			<ErrorState
+				title="Invalid revision ownership"
+				message="This revision does not belong to the requested course."
+				showHomeLink
+			/>
+		);
 	}
 
 	// Determine header text based on mode
@@ -292,26 +317,6 @@ export function RevisionPage() {
 			n.status === "quiz_passed" ||
 			n.status === "quiz_failed",
 	).length;
-
-	const currentNode = originalSession.nodes[currentIndex];
-	const currentRevisionProgress: RevisionNodeProgressWithDetails | undefined =
-		currentNode
-			? (revisionProgressMap.get(currentNode.id) ?? {
-					id: `fallback-${currentNode.id}`,
-					node_id: currentNode.id,
-					node_title: currentNode.title,
-					sequence_index: currentNode.sequence_index,
-					status: "pending",
-					reviewed_at: null,
-					content_reviewed_at: null,
-					quiz_count: currentNode.quiz_set
-						? currentNode.quiz_set.quizzes.length
-						: currentNode.quiz
-							? 1
-							: 0,
-					quiz_results: [],
-				})
-			: undefined;
 
 	return (
 		<div className="min-h-screen bg-background">
@@ -372,7 +377,10 @@ export function RevisionPage() {
 							<List className="h-4 w-4 text-primary" />
 							<span>Table of Contents</span>
 						</button>
-						<div className="text-xs font-medium text-muted-foreground" aria-live="polite">
+						<div
+							className="text-xs font-medium text-muted-foreground"
+							aria-live="polite"
+						>
 							{completedNodes} / {totalNodes} completed
 						</div>
 					</div>
@@ -390,11 +398,13 @@ export function RevisionPage() {
 					</header>
 
 					{/* Slide counter */}
-					<div className="flex justify-center text-sm text-muted-foreground">
-						<span>
-							Topic {currentIndex + 1} of {originalSession.nodes.length}
-						</span>
-					</div>
+					{topics.length > 0 && (
+						<div className="flex justify-center text-sm text-muted-foreground">
+							<span>
+								Topic {currentIndex + 1} of {topics.length}
+							</span>
+						</div>
+					)}
 
 					{/* Carousel */}
 					<div
@@ -425,11 +435,25 @@ export function RevisionPage() {
 										node={currentNode}
 										revisionMode={revisionSession.mode}
 										revisionProgress={currentRevisionProgress}
-										onMarkReviewed={markReviewed}
+										revisionId={revisionId}
+										quizState={
+											quizStateByNode[currentNode.id] ??
+											createRevisionQuizState()
+										}
+										onQuizStateChange={(next) =>
+											setQuizStateByNode((previous) => ({
+												...previous,
+												[currentNode.id]: next,
+											}))
+										}
+										quizResults={currentRevisionProgress.quiz_results}
+										quizRequestStates={quizRequestStates[currentNode.id]}
 										onQuizSubmit={submitAnswer}
-										isMarkingReviewed={isMarkingReviewed}
-										isSubmitting={isSubmitting}
-										quizResult={quizResults[currentNode.id]}
+										onMarkReviewed={markReviewed}
+										isMarkingReviewed={
+											reviewRequestStates[currentNode.id]?.isPending
+										}
+										markReviewedError={reviewRequestStates[currentNode.id]?.error}
 									/>
 								</motion.div>
 							)}
@@ -437,32 +461,36 @@ export function RevisionPage() {
 					</div>
 
 					{/* Navigation buttons */}
-					<div className="flex justify-between items-center">
-						<button
-							onClick={() => goToSlide(currentIndex - 1)}
-							disabled={!canGoPrev}
-							className={cn(
-								"px-4 py-2 rounded-md text-sm font-medium transition-colors",
-								canGoPrev
-									? "text-muted-foreground hover:bg-muted cursor-pointer"
-									: "opacity-0 pointer-events-none",
-							)}
-						>
-							&larr; Previous
-						</button>
-						<button
-							onClick={() => goToSlide(currentIndex + 1)}
-							disabled={!canGoNext}
-							className={cn(
-								"px-4 py-2 rounded-md text-sm font-medium transition-colors",
-								canGoNext
-									? "text-muted-foreground hover:bg-muted cursor-pointer"
-									: "opacity-0 pointer-events-none",
-							)}
-						>
-							Next &rarr;
-						</button>
-					</div>
+					{topics.length > 0 && (
+						<div className="flex justify-between items-center">
+							<button
+								aria-label="Previous topic"
+								onClick={() => goToSlide(currentIndex - 1)}
+								disabled={!canGoPrev}
+								className={cn(
+									"px-4 py-2 rounded-md text-sm font-medium transition-colors",
+									canGoPrev
+										? "text-muted-foreground hover:bg-muted cursor-pointer"
+										: "opacity-0 pointer-events-none",
+								)}
+							>
+								&larr; Previous
+							</button>
+							<button
+								aria-label="Next topic"
+								onClick={() => goToSlide(currentIndex + 1)}
+								disabled={!canGoNext}
+								className={cn(
+									"px-4 py-2 rounded-md text-sm font-medium transition-colors",
+									canGoNext
+										? "text-muted-foreground hover:bg-muted cursor-pointer"
+										: "opacity-0 pointer-events-none",
+								)}
+							>
+								Next &rarr;
+							</button>
+						</div>
+					)}
 				</div>
 			</main>
 
@@ -497,20 +525,24 @@ export function RevisionPage() {
 				onClose={() => setIsChatOpen(false)}
 				sessionId={sessionId}
 				nodeId={currentNode?.id ?? ""}
-				isCourseComplete={revisionSession.status === "completed"}
 			/>
 
 			{/* Table of Contents Modal */}
 			<TableOfContentsModal
 				isOpen={isTOCOpen}
 				onClose={() => setIsTOCOpen(false)}
-				nodes={originalSession.nodes.map((node) => {
-					const progress = revisionProgressMap.get(node.id);
+				nodes={topics.map((node) => {
+					const progress = revisionSession.nodes.find(
+						(progress) => progress.node_id === node.id,
+					);
 					const isDone =
-						progress?.status === "reviewed" || progress?.status === "quiz_passed";
+						progress?.status === "reviewed" ||
+						progress?.status === "quiz_passed";
 					return {
 						...node,
-						status: isDone ? ("COMPLETED" as const) : ("VIEWING_EXPLANATION" as const),
+						status: isDone
+							? ("COMPLETED" as const)
+							: ("VIEWING_EXPLANATION" as const),
 					};
 				})}
 				currentNodeId={currentNode?.id}
