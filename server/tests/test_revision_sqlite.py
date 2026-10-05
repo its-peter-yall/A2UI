@@ -190,6 +190,107 @@ class RevisionSqliteTests(RevisionSqliteFixture, unittest.TestCase):
         self.assertEqual(self.rows("quiz_attempts"), before_attempts)
         self.assertEqual(self.snapshot(original_only=True), before_original)
 
+    def test_restore_latest_results_and_list_use_own_attempts(self) -> None:
+        revision_id = self.revision()
+        other = self.revision()
+        self.seed_attempt(revision_id, 4, 1, "q1-1", False, SECOND)
+        self.seed_attempt(revision_id, 2, 0, "q0-0", True)
+        self.seed_attempt(revision_id, 5, 1, "q1-0", True, THIRD, "tie-a")
+        self.seed_attempt(revision_id, 5, 1, "q1-1", False, THIRD, "tie-z")
+        self.seed_attempt(other, 20, 0, "q0-1", False)
+        self.seed_attempt(revision_id, 100, 7, "q0-0", True)
+        self.seed_attempt(revision_id, 101, 0, "deleted-id", False)
+        self.seed_attempt(revision_id, 102, None, "q0-0", True)
+        before = self.snapshot()
+        restored = self.manager.get_revision_session(revision_id)
+        node = restored["nodes"][0]
+        self.assertEqual(node["quiz_count"], 2)
+        self.assertIsNone(node["content_reviewed_at"])
+        results = node["quiz_results"]
+        self.assertEqual([r["quiz_index"] for r in results], [0, 1])
+        self.assertEqual([r["is_correct"] for r in results], [True, False])
+        self.assertEqual([r["quiz_attempt_count"] for r in results], [1, 3])
+        self.assertEqual(results[1]["id"], "tie-z")
+        self.assertEqual(results[1]["selected_option_ids"], ["q1-1"])
+        self.assertEqual(results[1]["correct_option_ids"], [])
+        self.assertEqual(results[1]["explanation"], "")
+        self.assertEqual(results[1]["selected_explanation"], "Explanation q1-1")
+        self.assertEqual(node["status"], "quiz_failed")
+        self.assertEqual(restored["progress_percent"], 100)
+        self.assertEqual(restored["total_quiz_score_percent"], 50)
+        excluded = [n for n in restored["notices"]
+                    if n["code"] == "incompatible_attempts"]
+        self.assertEqual(excluded[0]["attempt_count"], 3)
+        listings, count = self.manager.get_revisions_for_session(self.session)
+        listed = next(r for r in listings if r["id"] == revision_id)
+        self.assertEqual(count, 2)
+        for key in ("status", "progress_percent", "total_quiz_score_percent",
+                    "completed_at", "notices"):
+            self.assertEqual(listed[key], restored[key])
+        fresh = self.manager.get_revision_session(self.revision())
+        self.assertEqual(fresh["nodes"][0]["quiz_results"], [])
+        # Check the previous reads before accounting for the new revision.
+        self.assertEqual(self.rows("quiz_attempts"), before["quiz_attempts"])
+        self.assertEqual(self.snapshot(original_only=True), {
+            key: before[key]
+            for key in ("learning_sessions", "concept_nodes", "quiz_data")
+        })
+
+    def test_legacy_single_quiz_null_index_and_quizless_nodes(self) -> None:
+        revision_id = self.revision("full_review")
+        self.execute(
+            "UPDATE quiz_data SET payload = ?, format_version = 0 "
+            "WHERE node_id = ?",
+            (make_quiz("legacy").model_dump_json(), self.node),
+        )
+        self.seed_attempt(revision_id, 1, None, "legacy-0", True)
+        restored = self.manager.get_revision_session(revision_id)
+        self.assertEqual(restored["nodes"][0]["quiz_count"], 1)
+        self.assertEqual(
+            restored["nodes"][0]["quiz_results"][0]["quiz_index"], 0
+        )
+        self.assertEqual(restored["nodes"][0]["status"], "pending")
+        self.execute("DELETE FROM quiz_data WHERE node_id = ?", (self.node,))
+        practice = self.manager.get_revision_session(self.revision())
+        self.assertEqual(practice["progress_percent"], 0)
+        self.assertEqual(practice["status"], "in_progress")
+        self.assertIsNone(practice["total_quiz_score_percent"])
+        self.assertEqual(practice["nodes"][0]["quiz_count"], 0)
+        self.assertEqual(practice["nodes"][0]["quiz_results"], [])
+
+    def test_reads_are_read_only_and_batched_for_large_revision_lists(
+        self,
+    ) -> None:
+        for sequence in range(1, 13):
+            self.manager.create_concept_node(
+                self.session, sequence, f"Topic {sequence}", "# Original",
+                NodeStatus.COMPLETED,
+                quiz_set=QuizSet(quizzes=[make_quiz(f"extra-{sequence}")]),
+            )
+        revision_id = self.revision()
+        for _ in range(7):
+            self.revision()
+        before = self.snapshot()
+        statements = []
+        real_connect = self.manager._get_connection
+
+        def traced_connect() -> sqlite3.Connection:
+            connection = real_connect()
+            connection.set_trace_callback(statements.append)
+            return connection
+
+        with patch.object(self.manager, "_get_connection", traced_connect):
+            self.manager.get_revision_session(revision_id)
+            gets = [s for s in statements
+                    if s.lstrip().upper().startswith("SELECT")]
+            self.assertLessEqual(len(gets), 4)
+            statements.clear()
+            self.manager.get_revisions_for_session(self.session)
+            lists = [s for s in statements
+                     if s.lstrip().upper().startswith("SELECT")]
+            self.assertLessEqual(len(lists), 5)
+        self.assertEqual(self.snapshot(), before)
+
 
 def main() -> None:
     unittest.main()

@@ -56,7 +56,20 @@ from server.schemas.learning import (
     NodeStatus,
     QuizCard,
     QuizSet,
+    RevisionSessionResponse,
+    RevisionSessionWithProgress,
+    RevisionSummary,
     convert_legacy_to_quiz_set,
+)
+from server.services.revision_progress import (
+    RevisionAttemptInput,
+    RevisionNodeInput,
+    RevisionProjection,
+    RevisionProjectionInput,
+    evaluate_revision_selection,
+    normalize_revision_timestamp,
+    normalize_selected_option_ids,
+    project_revision,
 )
 
 logger = logging.getLogger(__name__)
@@ -704,7 +717,7 @@ class LearningManager:
                 (original_session_id,),
             )
 
-            progress_rows: List[Dict[str, Any]] = []
+            progress_ids: List[str] = []
             for node_row in cursor.fetchall():
                 progress_id = str(uuid.uuid4())
                 cursor.execute(
@@ -722,172 +735,192 @@ class LearningManager:
                         None,
                     ),
                 )
-                progress_rows.append(
-                    {
-                        "id": progress_id,
-                        "revision_session_id": revision_id,
-                        "node_id": node_row["id"],
-                        "node_title": node_row["title"],
-                        "sequence_index": int(node_row["sequence_index"]),
-                        "status": "pending",
-                        "reviewed_at": None,
-                    }
-                )
+                progress_ids.append(progress_id)
 
+            row = conn.execute(
+                "SELECT * FROM revision_sessions WHERE id = ?",
+                (revision_id,),
+            ).fetchone()
+            projection, _ = self._project_revision_row(conn, row)
+            payload = self._revision_payload(row, projection)
             conn.commit()
-            return {
-                "id": revision_id,
-                "original_session_id": original_session_id,
-                "revision_number": revision_number,
-                "mode": mode,
-                "status": "in_progress",
-                "progress_percent": 0,
-                "total_quiz_score_percent": None,
-                "started_at": now,
-                "completed_at": None,
-                "nodes": progress_rows,
-            }
+            return payload
         except sqlite3.Error as e:
             logger.error(f"Error creating revision session: {e}")
             raise
         finally:
             conn.close()
 
+    def _revision_quizzes(self, raw: Optional[str]) -> tuple[QuizCard, ...]:
+        """Decode available quizzes without changing persisted quiz data."""
+        if raw is None:
+            return ()
+        try:
+            payload = json.loads(raw)
+            if isinstance(payload, dict) and "quizzes" in payload:
+                return tuple(QuizSet.model_validate(payload).quizzes)
+            try:
+                return (QuizCard.model_validate(payload),)
+            except ValidationError:
+                # Existing deterministic legacy-ID conversion; no label-based
+                # remapping of stored selections is ever performed.
+                return tuple(convert_legacy_to_quiz_set(payload).quizzes)
+        except (ValueError, TypeError, AttributeError):
+            logger.warning("Ignoring incompatible revision quiz payload")
+            return ()
+
+    def _load_revision_batch(
+        self, conn: sqlite3.Connection, revisions: list[sqlite3.Row],
+    ) -> dict[str, tuple[RevisionProjectionInput,
+                        list[RevisionNodeInput], list[RevisionAttemptInput]]]:
+        """Load a page's progress, quiz data, and attempts in two queries."""
+        if not revisions:
+            return {}
+        by_id = {row["id"]: row for row in revisions}
+        placeholders = ",".join("?" for _ in revisions)
+        ids = tuple(by_id)
+        progress = conn.execute(
+            f"""
+            SELECT p.*, n.title AS node_title, n.sequence_index,
+                   n.learning_session_id, q.payload
+            FROM revision_node_progress p
+            JOIN concept_nodes n ON n.id = p.node_id
+            LEFT JOIN quiz_data q ON q.node_id = n.id
+            WHERE p.revision_session_id IN ({placeholders})
+            ORDER BY n.sequence_index, n.id
+            """, ids,
+        ).fetchall()
+        nodes: dict[str, list[RevisionNodeInput]] = {i: [] for i in ids}
+        for row in progress:
+            revision_id = row["revision_session_id"]
+            if row["learning_session_id"] != by_id[revision_id][
+                "original_session_id"
+            ]:
+                raise LookupError("Revision node does not belong to its course")
+            nodes[revision_id].append(RevisionNodeInput(
+                id=row["id"], revision_session_id=revision_id,
+                node_id=row["node_id"], node_title=row["node_title"],
+                sequence_index=int(row["sequence_index"]),
+                quizzes=self._revision_quizzes(row["payload"]),
+                stored_status=row["status"],
+                reviewed_at=(normalize_revision_timestamp(row["reviewed_at"])
+                             if row["reviewed_at"] is not None else None),
+                explicit_review_present=True,
+                content_reviewed_at=(normalize_revision_timestamp(
+                    row["content_reviewed_at"]
+                ) if row["content_reviewed_at"] is not None else None),
+            ))
+        attempt_rows = conn.execute(
+            "SELECT * FROM quiz_attempts "
+            f"WHERE revision_session_id IN ({placeholders})", ids,
+        ).fetchall()
+        attempts: dict[str, list[RevisionAttemptInput]] = {i: [] for i in ids}
+        for row in attempt_rows:
+            attempts[row["revision_session_id"]].append(RevisionAttemptInput(
+                id=row["id"], revision_session_id=row["revision_session_id"],
+                node_id=row["node_id"], attempt_number=row["attempt_number"],
+                quiz_index=row["quiz_index"],
+                selected_option_ids=normalize_selected_option_ids(
+                    row["selected_option_id"]
+                ),
+                is_correct=bool(row["is_correct"]),
+                score_percent=row["score_percent"],
+                created_at=normalize_revision_timestamp(row["created_at"]),
+            ))
+        return {
+            row["id"]: (
+                RevisionProjectionInput(
+                    id=row["id"], mode=row["mode"],
+                    started_at=normalize_revision_timestamp(row["started_at"]),
+                    stored_status=row["status"],
+                    stored_completed_at=(normalize_revision_timestamp(
+                        row["completed_at"]
+                    ) if row["completed_at"] is not None else None),
+                ), nodes[row["id"]], attempts[row["id"]],
+            )
+            for row in revisions
+        }
+
+    def _project_revision_row(
+        self, conn: sqlite3.Connection, row: sqlite3.Row,
+    ) -> tuple[RevisionProjection, list[RevisionNodeInput]]:
+        """Project one revision from connection-local batched inputs."""
+        revision, nodes, attempts = self._load_revision_batch(conn, [row])[
+            row["id"]
+        ]
+        return project_revision(
+            revision=revision, nodes=nodes, attempts=attempts
+        ), nodes
+
+    def _revision_payload(
+        self, row: sqlite3.Row, projection: RevisionProjection,
+        with_nodes: bool = True,
+    ) -> Dict[str, Any]:
+        """Serialize P1 fields identically for create, GET, and list."""
+        payload = {
+            "id": row["id"],
+            "original_session_id": row["original_session_id"],
+            "revision_number": row["revision_number"],
+            "mode": row["mode"], "status": projection.status,
+            "progress_percent": projection.progress_percent,
+            "total_quiz_score_percent": projection.total_quiz_score_percent,
+            "started_at": normalize_revision_timestamp(row["started_at"]),
+            "completed_at": projection.completed_at,
+            "notices": [n.model_dump(mode="json") for n in projection.notices],
+        }
+        if with_nodes:
+            payload["nodes"] = [
+                n.model_dump(mode="json") for n in projection.nodes
+            ]
+            return RevisionSessionWithProgress.model_validate(
+                payload
+            ).model_dump(mode="json")
+        return RevisionSessionResponse.model_validate(
+            payload
+        ).model_dump(mode="json")
+
     def get_revisions_for_session(
-        self,
-        session_id: str,
-        limit: int = 20,
-        offset: int = 0,
+        self, session_id: str, limit: int = 20, offset: int = 0,
     ) -> tuple[List[Dict[str, Any]], int]:
-        """List revision sessions for an original learning session."""
+        """Batch-project a paginated revision history without writes."""
         conn = self._get_connection()
         try:
-            safe_limit = max(limit, 0)
-            safe_offset = max(offset, 0)
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT COUNT(*) AS total_count
-                FROM revision_sessions
-                WHERE original_session_id = ?
-                """,
-                (session_id,),
-            )
-            count_row = cursor.fetchone()
-            total_count = int(count_row["total_count"]) if count_row else 0
-
-            cursor.execute(
-                """
-                SELECT
-                    id,
-                    original_session_id,
-                    revision_number,
-                    mode,
-                    status,
-                    progress_percent,
-                    total_quiz_score_percent,
-                    started_at,
-                    completed_at
-                FROM revision_sessions
-                WHERE original_session_id = ?
-                ORDER BY started_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                (session_id, safe_limit, safe_offset),
-            )
-            revisions = [
-                {
-                    "id": row["id"],
-                    "original_session_id": row["original_session_id"],
-                    "revision_number": int(row["revision_number"]),
-                    "mode": row["mode"],
-                    "status": row["status"],
-                    "progress_percent": int(row["progress_percent"] or 0),
-                    "total_quiz_score_percent": row["total_quiz_score_percent"],
-                    "started_at": row["started_at"],
-                    "completed_at": row["completed_at"],
-                }
-                for row in cursor.fetchall()
-            ]
-            return revisions, total_count
-        except sqlite3.Error as e:
-            logger.error(f"Error listing revision sessions: {e}")
-            raise
+            total = conn.execute(
+                "SELECT COUNT(*) FROM revision_sessions "
+                "WHERE original_session_id = ?", (session_id,),
+            ).fetchone()[0]
+            rows = conn.execute(
+                "SELECT * FROM revision_sessions WHERE original_session_id = ? "
+                "ORDER BY started_at DESC, revision_number DESC, id DESC "
+                "LIMIT ? OFFSET ?",
+                (session_id, max(limit, 0), max(offset, 0)),
+            ).fetchall()
+            batch = self._load_revision_batch(conn, rows)
+            payloads = []
+            for row in rows:
+                revision, nodes, attempts = batch[row["id"]]
+                projection = project_revision(
+                    revision=revision, nodes=nodes, attempts=attempts
+                )
+                payloads.append(self._revision_payload(
+                    row, projection, with_nodes=False
+                ))
+            return payloads, total
         finally:
             conn.close()
 
     def get_revision_session(self, revision_id: str) -> Optional[Dict[str, Any]]:
-        """Get a revision session with node-level progress details."""
+        """Read authoritative revision details without writing caches."""
         conn = self._get_connection()
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT
-                    id,
-                    original_session_id,
-                    revision_number,
-                    mode,
-                    status,
-                    progress_percent,
-                    total_quiz_score_percent,
-                    started_at,
-                    completed_at
-                FROM revision_sessions
-                WHERE id = ?
-                """,
+            row = conn.execute(
+                "SELECT * FROM revision_sessions WHERE id = ?",
                 (revision_id,),
-            )
-            revision_row = cursor.fetchone()
-            if revision_row is None:
+            ).fetchone()
+            if row is None:
                 return None
-
-            cursor.execute(
-                """
-                SELECT
-                    rnp.id,
-                    rnp.revision_session_id,
-                    rnp.node_id,
-                    rnp.status,
-                    rnp.reviewed_at,
-                    cn.title AS node_title,
-                    cn.sequence_index AS sequence_index
-                FROM revision_node_progress rnp
-                INNER JOIN concept_nodes cn
-                    ON cn.id = rnp.node_id
-                WHERE rnp.revision_session_id = ?
-                ORDER BY cn.sequence_index ASC
-                """,
-                (revision_id,),
-            )
-            progress_rows = [
-                {
-                    "id": row["id"],
-                    "revision_session_id": row["revision_session_id"],
-                    "node_id": row["node_id"],
-                    "node_title": row["node_title"],
-                    "sequence_index": int(row["sequence_index"]),
-                    "status": row["status"],
-                    "reviewed_at": row["reviewed_at"],
-                }
-                for row in cursor.fetchall()
-            ]
-
-            return {
-                "id": revision_row["id"],
-                "original_session_id": revision_row["original_session_id"],
-                "revision_number": int(revision_row["revision_number"]),
-                "mode": revision_row["mode"],
-                "status": revision_row["status"],
-                "progress_percent": int(revision_row["progress_percent"] or 0),
-                "total_quiz_score_percent": revision_row["total_quiz_score_percent"],
-                "started_at": revision_row["started_at"],
-                "completed_at": revision_row["completed_at"],
-                "nodes": progress_rows,
-            }
-        except sqlite3.Error as e:
-            logger.error(f"Error getting revision session: {e}")
-            raise
+            projection, _ = self._project_revision_row(conn, row)
+            return self._revision_payload(row, projection)
         finally:
             conn.close()
 
