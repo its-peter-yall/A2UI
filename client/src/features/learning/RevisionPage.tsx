@@ -62,6 +62,8 @@ import { useRevisionMutations } from "./useRevisionMutations";
 import { RevisionConceptCard } from "./RevisionConceptCard";
 import { RevisionSummaryModal } from "./RevisionSummaryModal";
 import { ChatPanel } from "./ChatPanel";
+import { ConceptChatLayout } from "./ConceptChatLayout";
+import { useConceptChatPanel } from "./useConceptChatPanel";
 import { SettingsButton } from "@/components/SettingsButton";
 import { cn } from "@/lib/utils";
 import {
@@ -136,9 +138,8 @@ function RevisionPageBody({
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const [direction, setDirection] = useState(0);
 
-	// TOC and Chat modal states
+	// TOC state
 	const [isTOCOpen, setIsTOCOpen] = useState(false);
-	const [isChatOpen, setIsChatOpen] = useState(false);
 
 	// Page-owned ephemeral quiz UI state, keyed by node so unmounting a topic
 	// card cannot discard unsubmitted selections.
@@ -261,6 +262,20 @@ function RevisionPageBody({
 		currentNode
 			? revisionSession?.nodes.find((progress) => progress.node_id === currentNode.id)
 			: undefined;
+
+	/**
+	 * Explicit conversation ownership.
+	 *
+	 * Opening captures a topic ID, so carousel navigation alone never rebinds or
+	 * cancels an open conversation. Only an explicit question or heading action
+	 * retargets chat. Defined before every early return so the controller is
+	 * never conditionally created.
+	 */
+	const chat = useConceptChatPanel({
+		sessionId,
+		activeTopicId: currentNode?.id,
+		activeTopicTitle: currentNode?.title,
+	});
 
 	// Carousel navigation
 	const goToSlide = useCallback(
@@ -390,7 +405,7 @@ function RevisionPageBody({
 	);
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div className="h-dvh min-h-0 flex flex-col overflow-hidden bg-background">
 			{/* Skip to main content link for keyboard users */}
 			<a
 				href="#main-content"
@@ -399,7 +414,7 @@ function RevisionPageBody({
 				Skip to main content
 			</a>
 			{/* Header */}
-			<header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+			<header className="shrink-0 z-10 bg-background/95 backdrop-blur border-b">
 				<div className="max-w-4xl mx-auto px-4 py-3">
 					<div className="flex items-center justify-between mb-3">
 						<button
@@ -470,8 +485,33 @@ function RevisionPageBody({
 				</div>
 			</header>
 
-			{/* Main content */}
-			<main id="main-content" className="py-8">
+			{/*
+			 * Bounded, viewport-height shell. Header and footer stay fixed while
+			 * content and chat scroll independently inside it, so chat can never
+			 * render beneath the final quiz or at the bottom-left.
+			 */}
+			<main id="main-content" className="min-h-0 flex-1 overflow-hidden">
+				<ConceptChatLayout
+					isChatOpen={chat.isOpen}
+					chatWidthPercent={chat.chatWidthPercent}
+					onChatWidthChange={chat.setChatWidthPercent}
+					onCloseChat={chat.closeChat}
+					className="[&_[role=dialog]]:max-md:!w-full"
+					chatPanel={
+						<ChatPanel
+							isOpen={chat.isOpen}
+							onClose={chat.closeChat}
+							sessionId={sessionId}
+							nodeId={chat.chatNodeId}
+							topicTitle={chat.chatTopicTitle}
+							selectedHeadingIds={chat.selectedHeadingIds}
+							onClearHeadings={chat.clearHeadings}
+							widthPercent={chat.chatWidthPercent}
+							prefillMessage={chat.prefillMessage}
+							onPrefillConsumed={chat.consumePrefill}
+						/>
+					}
+				>
 				<div className="flex flex-col gap-6 p-4 max-w-4xl mx-auto">
 					{/* Course title */}
 					<header className="text-center">
@@ -572,6 +612,21 @@ function RevisionPageBody({
 											reviewRequestStates[currentNode.id]?.isPending
 										}
 										markReviewedError={reviewRequestStates[currentNode.id]?.error}
+										selectedHeadingIds={
+											chat.chatNodeId === currentNode.id
+												? chat.selectedHeadingIds
+												: []
+										}
+										onToggleHeadingChat={(headingId) =>
+											chat.toggleHeadingChat(
+												headingId,
+												currentNode.id,
+												currentNode.title,
+											)
+										}
+										onAskQuestion={(question) =>
+											chat.askQuestion(question, currentNode.id, currentNode.title)
+										}
 									/>
 								</motion.div>
 							)}
@@ -610,6 +665,7 @@ function RevisionPageBody({
 						</div>
 					)}
 				</div>
+				</ConceptChatLayout>
 			</main>
 
 			{/* Loading overlay for mutations */}
@@ -626,9 +682,9 @@ function RevisionPageBody({
 			)}
 
 			{/* Chat FAB - bottom-right fixed */}
-			{!isChatOpen && (
+			{!chat.isOpen && currentNode && (
 				<button
-					onClick={() => setIsChatOpen(true)}
+					onClick={() => chat.openChat(currentNode.id, currentNode.title)}
 					className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center cursor-pointer"
 					aria-label="Open concept chat"
 					data-testid="revision-chat-fab"
@@ -636,14 +692,6 @@ function RevisionPageBody({
 					<MessageCircle className="h-6 w-6" />
 				</button>
 			)}
-
-			{/* Chat Panel - slides in from right */}
-			<ChatPanel
-				isOpen={isChatOpen}
-				onClose={() => setIsChatOpen(false)}
-				sessionId={sessionId}
-				nodeId={currentNode?.id ?? ""}
-			/>
 
 			{/* Table of Contents Modal */}
 			{isTOCOpen && (
@@ -657,7 +705,7 @@ function RevisionPageBody({
 			)}
 
 			{/* Footer */}
-			<footer className="border-t py-4 text-center text-sm text-muted-foreground">
+			<footer className="shrink-0 border-t py-4 text-center text-sm text-muted-foreground">
 				<p>Revision mode &mdash; your original progress is preserved</p>
 			</footer>
 

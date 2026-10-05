@@ -156,6 +156,10 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/learningApi", () => api);
+const chatApi = vi.hoisted(() => ({ streamConceptChat: vi.fn() }));
+
+vi.mock("@/lib/chatApi", () => chatApi);
+
 
 /**
  * React Router builds a `Request` for every client-side navigation and passes
@@ -265,6 +269,7 @@ beforeEach(() => {
 		id,
 	}));
 	api.getRevisionSummary.mockResolvedValue(summary());
+	chatApi.streamConceptChat.mockResolvedValue(undefined);
 	HTMLElement.prototype.scrollIntoView = vi.fn();
 	window.matchMedia = vi.fn().mockImplementation((media: string) => ({
 		media,
@@ -628,4 +633,76 @@ it("handles an empty revision without a nonexistent Topic 1 of 0", async () => {
 	await screen.findByText("No topics available in this revision.");
 	expect(screen.queryByText("Topic 1 of 0")).not.toBeInTheDocument();
 	expect(api.getRevisionSummary).not.toHaveBeenCalled();
+});
+
+it("prefills repeated curiosity clicks without sending and retains explicit chat ownership", async () => {
+	originalData.nodes[0].content_markdown =
+		"## Entities\nBody.\n\n## Curious to explore more?\n- Why use graphs?";
+	originalData.nodes[1].content_markdown =
+		"## Relations\nBody.\n\n## Curious to explore more?\n- Why use edges?";
+	mountRevision();
+	const question = await screen.findByRole("button", { name: /Why use graphs/ });
+	fireEvent.click(question);
+	const composer = await screen.findByRole("textbox", {
+		name: "Ask a question about this concept",
+	});
+	await waitFor(() => expect(composer).toHaveValue("Why use graphs?"));
+	await waitFor(() => expect(composer).toHaveFocus());
+	expect(chatApi.streamConceptChat).not.toHaveBeenCalled();
+	fireEvent.change(composer, { target: { value: "edited draft" } });
+	fireEvent.click(question);
+	await waitFor(() => expect(composer).toHaveValue("Why use graphs?"));
+	topicNext();
+	await screen.findByRole("heading", { name: "Second topic" });
+	expect(screen.getByRole("heading", { name: "Chat: Knowledge Graphs 101" })).toBeInTheDocument();
+	fireEvent.click(screen.getByRole("button", { name: /Why use edges/ }));
+	expect(screen.getByRole("heading", { name: "Chat: Second topic" })).toBeInTheDocument();
+	fireEvent.click(screen.getByRole("button", { name: "Close concept chat" }));
+	fireEvent.click(screen.getByRole("button", { name: /Why use edges/ }));
+	await waitFor(() => expect(screen.getByRole("textbox")).toHaveValue("Why use edges?"));
+});
+
+it("places desktop chat within the bounded main shell and preserves it on revision completion", async () => {
+	revisionData.status = "completed"; revisionData.mode = "full_review";
+	revisionData.nodes.forEach((node) => {
+		node.content_reviewed_at = "2026-10-05T00:01:00Z"; node.status = "reviewed";
+	});
+	localStorage.setItem("concept_chat_session-1_node-1", JSON.stringify({
+		messages: [{ role: "user", content: "Preserved conversation" }],
+		lastPromptTimestamp: Date.now(),
+		webSearchEnabled: false,
+	}));
+	mountRevision();
+	fireEvent.click(await screen.findByRole("button", { name: "Open concept chat" }));
+	const chat = screen.getByRole("dialog", { name: "Chat: Knowledge Graphs 101" });
+	expect(screen.getByRole("main").contains(chat)).toBe(true);
+	expect(screen.getByRole("separator", { name: "Resize chat panel" })).toHaveAttribute(
+		"aria-valuenow",
+		"25",
+	);
+	fireEvent.keyDown(screen.getByRole("separator"), { key: "End" });
+	expect(screen.getByRole("separator")).toHaveAttribute("aria-valuenow", "38");
+	expect(await screen.findByText("Preserved conversation")).toBeInTheDocument();
+	fireEvent.keyDown(document, { key: "Escape" });
+	await waitFor(() =>
+		expect(screen.queryByRole("dialog", { name: /Chat:/ })).not.toBeInTheDocument(),
+	);
+	expect(localStorage.getItem("concept_chat_session-1_node-1")).toContain(
+		"Preserved conversation",
+	);
+});
+
+it("uses the mobile overlay without a desktop separator", async () => {
+	window.matchMedia = vi.fn().mockImplementation((media: string) => ({
+		media, matches: false, onchange: null,
+		addListener: vi.fn(), removeListener: vi.fn(),
+		addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+	}));
+	mountRevision();
+	fireEvent.click(await screen.findByRole("button", { name: "Open concept chat" }));
+	expect(screen.getByTestId("concept-chat-overlay")).toBeInTheDocument();
+	expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+	expect(
+		screen.getByRole("main").contains(screen.getByRole("dialog", { name: /Chat:/ })),
+	).toBe(true);
 });
