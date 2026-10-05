@@ -235,6 +235,53 @@ class RevisionApiTests(RevisionSqliteFixture, unittest.TestCase):
                     self.assertNotIn("private-value", response.text)
                     self.assertEqual(self.snapshot(), before)
 
+    def test_revision_reads_and_create_map_backend_failures_to_generic_500(
+        self,
+    ) -> None:
+        revision_id = self.revision()
+        create_url = f"/learning/sessions/{self.session}/revisions"
+        list_url = f"/learning/sessions/{self.session}/revisions"
+
+        def malformed_create(*args: object, **kwargs: object) -> dict:
+            return {"id": "not-a-contract", "mode": "full_review"}
+
+        def broken_list(*args: object, **kwargs: object):
+            raise RuntimeError("private-value")
+
+        cases = (
+            (create_url, "post", malformed_create),
+            (create_url, "post", broken_list),
+            (list_url, "get", broken_list),
+            (f"/learning/revisions/{revision_id}", "get", broken_list),
+            (f"/learning/revisions/{revision_id}", "delete", broken_list),
+            (f"/learning/revisions/{revision_id}/summary", "get", broken_list),
+        )
+        for url, method, backend in cases:
+            self.holder.current = SimpleNamespace(
+                create_revision_session=backend,
+                delete_revision_session=backend,
+                get_revisions_for_session=backend,
+                get_revision_session=backend,
+                get_revision_summary=backend,
+            )
+            with self.subTest(url=url, method=method, backend=backend.__name__):
+                before = self.snapshot()
+                if method == "post":
+                    response = self.client.post(
+                        url, json={"mode": "full_review"}
+                    )
+                elif method == "delete":
+                    response = self.client.delete(url)
+                else:
+                    response = self.client.get(url)
+                self.assertEqual(response.status_code, 500, response.text)
+                self.assertEqual(response.json(), {
+                    "detail": "Internal server error"
+                })
+                self.assertNotIn("private-value", response.text)
+                self.assertNotIn("not-a-contract", response.text)
+                self.assertEqual(self.snapshot(), before)
+
 
 def main() -> None:
     unittest.main()
