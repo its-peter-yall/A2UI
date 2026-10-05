@@ -29,9 +29,12 @@ import unittest
 from pydantic import ValidationError
 
 from server.schemas.learning import (
+    RevisionNodeProgress,
     RevisionNodeProgressWithDetails,
     RevisionQuizSubmissionResult,
     RevisionSessionResponse,
+    RevisionSessionWithProgress,
+    RevisionSummary,
 )
 
 
@@ -140,6 +143,102 @@ class RevisionContractTests(unittest.TestCase):
         del payload['notices']
         with self.assertRaises(ValidationError):
             RevisionSessionResponse.model_validate(payload)
+
+    def test_correct_multi_result_requires_exact_selected_correct_ids(
+        self,
+    ) -> None:
+        payload = attempt_payload()
+        payload.update({
+            'is_correct': True,
+            'score_percent': 100,
+            'selected_option_ids': ['second', 'first'],
+            'correct_option_ids': ['first', 'second'],
+            'explanation': 'First correct explanation',
+            'selected_explanation': None,
+        })
+        result = RevisionQuizSubmissionResult.model_validate(payload)
+        self.assertEqual(result.selected_option_ids, ['second', 'first'])
+        payload['correct_option_ids'] = ['first']
+        with self.assertRaises(ValidationError):
+            RevisionQuizSubmissionResult.model_validate(payload)
+
+    def test_node_restoration_rejects_crossed_or_duplicate_results(
+        self,
+    ) -> None:
+        attempt = attempt_payload()
+        del attempt['revision_node_status']
+        node = {
+            'id': 'progress-1',
+            'node_id': 'node-1',
+            'node_title': 'Topic',
+            'sequence_index': 0,
+            'status': 'pending',
+            'reviewed_at': None,
+            'content_reviewed_at': None,
+            'quiz_count': 2,
+            'quiz_results': [attempt],
+        }
+        for results in (
+            [dict(attempt, node_id='foreign-node')],
+            [attempt, attempt],
+            [dict(attempt, quiz_index=2)],
+        ):
+            with self.subTest(results=results):
+                with self.assertRaises(ValidationError):
+                    RevisionNodeProgressWithDetails.model_validate(
+                        dict(node, quiz_results=results)
+                    )
+        with self.assertRaises(ValidationError):
+            RevisionNodeProgress.model_validate({
+                'id': 'progress-1',
+                'revision_session_id': 'revision-2',
+                'node_id': 'node-1',
+                'status': 'pending',
+                'reviewed_at': None,
+                'content_reviewed_at': None,
+                'quiz_count': 2,
+                'quiz_results': [attempt],
+            })
+        session = {
+            'id': 'revision-2',
+            'original_session_id': 'original-1',
+            'revision_number': 2,
+            'mode': 'quiz_only',
+            'status': 'in_progress',
+            'progress_percent': 0,
+            'total_quiz_score_percent': None,
+            'started_at': '2026-10-05T09:00:00Z',
+            'completed_at': None,
+            'notices': [],
+            'nodes': [node],
+        }
+        with self.assertRaises(ValidationError):
+            RevisionSessionWithProgress.model_validate(session)
+
+    def test_summary_attempt_counts_serialize_without_zero_accuracy(
+        self,
+    ) -> None:
+        payload = {
+            'revision_id': 'revision-1',
+            'mode': 'quiz_only',
+            'progress_percent': 0,
+            'total_quiz_score_percent': None,
+            'nodes_reviewed': 0,
+            'nodes_total': 0,
+            'quizzes_passed': 0,
+            'quizzes_failed': 0,
+            'quizzes_total': 0,
+            'time_spent_seconds': None,
+            'comparison': None,
+            'notices': [],
+        }
+        dumped = RevisionSummary.model_validate(
+            payload
+        ).model_dump(mode='json')
+        self.assertEqual(dumped, payload)
+        del payload['notices']
+        with self.assertRaises(ValidationError):
+            RevisionSummary.model_validate(payload)
 
 
 def main() -> None:

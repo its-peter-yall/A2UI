@@ -991,6 +991,23 @@ class RevisionNodeProgress(BaseModel):
         ..., description="Latest compatible attempt per quiz, index ordered"
     )
 
+    @model_validator(mode='after')
+    def validate_quiz_results(self) -> 'RevisionNodeProgress':
+        """Require ordered, unique feedback belonging to available quizzes."""
+        indices = [result.quiz_index for result in self.quiz_results]
+        if indices != sorted(set(indices)):
+            raise ValueError("quiz results must be unique and index ordered")
+        if any(result.node_id != self.node_id for result in self.quiz_results):
+            raise ValueError("quiz result belongs to a different node")
+        if any(index >= self.quiz_count for index in indices):
+            raise ValueError("quiz result index is outside available quizzes")
+        if any(
+            result.revision_session_id != self.revision_session_id
+            for result in self.quiz_results
+        ):
+            raise ValueError("quiz result belongs to a different revision")
+        return self
+
 
 class RevisionNodeProgressWithDetails(BaseModel):
     """Revision node progress enriched with concept node metadata."""
@@ -1013,6 +1030,18 @@ class RevisionNodeProgressWithDetails(BaseModel):
         ..., description="Latest compatible attempt per quiz, index ordered"
     )
 
+    @model_validator(mode='after')
+    def validate_quiz_results(self) -> 'RevisionNodeProgressWithDetails':
+        """Require ordered, unique feedback belonging to available quizzes."""
+        indices = [result.quiz_index for result in self.quiz_results]
+        if indices != sorted(set(indices)):
+            raise ValueError("quiz results must be unique and index ordered")
+        if any(result.node_id != self.node_id for result in self.quiz_results):
+            raise ValueError("quiz result belongs to a different node")
+        if any(index >= self.quiz_count for index in indices):
+            raise ValueError("quiz result index is outside available quizzes")
+        return self
+
 
 class RevisionSessionWithProgress(RevisionSessionResponse):
     """Revision session response with node-level progress details."""
@@ -1021,6 +1050,16 @@ class RevisionSessionWithProgress(RevisionSessionResponse):
         default_factory=list,
         description="Node-level revision progress list",
     )
+
+    @model_validator(mode='after')
+    def validate_result_revision(self) -> 'RevisionSessionWithProgress':
+        """Reject restored feedback from another revision."""
+        if any(
+            result.revision_session_id != self.id
+            for node in self.nodes for result in node.quiz_results
+        ):
+            raise ValueError("quiz result belongs to a different revision")
+        return self
 
 
 class RevisionSessionListResponse(BaseModel):
@@ -1159,6 +1198,12 @@ class RevisionQuizAttemptResult(BaseModel):
             self.selected_option_ids
         ):
             raise ValueError('selected option IDs must be unique')
+        if self.is_correct and set(self.correct_option_ids) != set(
+            self.selected_option_ids
+        ):
+            raise ValueError('correct selection must match correct option IDs')
+        if len(set(self.correct_option_ids)) != len(self.correct_option_ids):
+            raise ValueError('correct option IDs must be unique')
         return self
 
 
