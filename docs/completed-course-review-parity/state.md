@@ -1,16 +1,17 @@
 ---
 objective: completed-course-review-parity
 workflow: maw
-status: paused
+status: in-progress
 skipped_phases: [research, review]
 source: docs/completed-course-review-parity/goal.md
-goal_status: pending
+goal_status: approved
 design_status: approved
 dag_status: complete
-dag_execution: pending
-resume_gate: none
-current_phase: approval
-pause_reason: user requested full MAW state and a stop before dispatch
+dag_execution: in-progress
+resume_gate: authorized
+current_phase: planning
+pause_reason: cleared 2026-10-05 by explicit user approval of goal.md and the DAG
+planner_dispatch: foreground parallel only; plans carry no doc headers
 created: 2026-10-05
 updated: 2026-10-05
 ---
@@ -26,10 +27,10 @@ updated: 2026-10-05
   Do not create `research.md`/`review.md` or dispatch researcher/reviewer agents.
 - Brainstorming, planning, test-first worker execution, defect resolution when
   verification finds defects, and final verification/reporting remain required.
-- Current authorization covers workflow conversion, documentation, and pausing.
-  The proposed behavior was approved earlier, but the written specification and
-  this DAG still await approval. Do not interpret this conversion as a proceed
-  instruction, and do not dispatch any subagent before that approval.
+- Current authorization is full dispatch of this DAG. The user approved the
+  written specification and this dependency graph on 2026-10-05 and authorized
+  planners and workers to run. Approval covers this objective only; it grants no
+  authority over other workflow directories.
 - Main orchestrator manages approvals, documentation, DAG, dispatch, and final
   verification only. It never implements application code directly.
 - Orchestrator must not read `research.md` or `plan*.md`. Verify future plans via
@@ -44,8 +45,8 @@ updated: 2026-10-05
 
 ## Workflow milestones
 
-- [ ] Step 1: Brainstorming & Goal Alignment (behavior approved; goal written
-  and self-reviewed at `3667545`; written-goal/DAG approval pending).
+- [x] Step 1: Brainstorming & Goal Alignment (`goal.md` approved by the user on
+  2026-10-05; written specification and 7-plan DAG authorized for dispatch).
 - [x] Step 2: Technical Research (Skipped via `--skip research`).
 - [ ] Step 3: Planning Completed (`plan1.md` through `plan7.md`; none written).
 - [ ] Step 4: Execution Completed (P1-P7; no workers dispatched).
@@ -67,8 +68,8 @@ research, review, code execution, or verification.
 - [x] Construct complete DAG, file ownership, prerequisites, acceptance mapping,
   evidence requirements, and resume procedure in this state.
 - [x] Record research/review skips and explicit pause on 2026-10-05.
-- [ ] Obtain user approval of the written specification and DAG, and permission
-  to begin the pipelined workflow.
+- [x] Obtain user approval of the written specification and DAG, and permission
+  to begin the pipelined workflow (granted 2026-10-05).
 
 ## Initial findings
 
@@ -516,8 +517,8 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | Artifact | State | Commit |
 | --- | --- | --- |
 | User screenshots and verbal issue report | Source requirements in conversation | Not a repository artifact |
-| `goal.md` | Written/self-reviewed; behavior approved; written-spec approval pending | `3667545` original specification; `4a22ec1` workflow-conversion update |
-| `state.md` | Full paused MAW DAG and dispatch rules | `4a22ec1` initialization; later bookkeeping commits discoverable with `git log --oneline -- docs/completed-course-review-parity/state.md` |
+| `goal.md` | Written/self-reviewed; approved by the user for dispatch | `3667545` original specification; `4a22ec1` workflow-conversion update |
+| `state.md` | MAW DAG authorized; approval recorded | `4a22ec1` initialization; later bookkeeping commits discoverable with `git log --oneline -- docs/completed-course-review-parity/state.md` |
 | `research.md` | Skipped; do not create | None |
 | `plan1.md` | Pending; not dispatched | None |
 | `plan2.md` | Pending; not dispatched | None |
@@ -535,35 +536,24 @@ record, and milestones on every actual handoff; never pre-check future work.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: PAUSED — AWAITING WRITTEN GOAL/DAG APPROVAL AND PROCEED.**
+**CURRENT GATE: PLANNING — DISPATCHING READY PLANNERS.**
 
-Current next action belongs to the user. This documentation-only conversion is
-complete; do not launch planners, workers, test fixture changes, or application
-verification merely because the initial state is comprehensive.
+Approval was recorded and the resume procedure below was executed through its
+step 2. Remaining steps, in order:
 
-On explicit approval/authorization:
-
-1. Read this state, `goal.md`, and current git status. Preserve intervening work
-   and confirm the same checkout; do not infer an old workspace path.
-2. Record user approval, mark Step 1 complete, set `goal_status: approved`,
-   `resume_gate: authorized`, `status: in-progress`, and `current_phase: planning`.
-   Commit the approval/state update before dispatch. Keep both skip flags.
-3. Reconfirm actual file ownership and P1-to-P6 sequential handoff. Record any
-   externally active edits that affect the same paths and coordinate first.
-4. Dispatch ready P1/P5 planners concurrently in foreground. Pass goal/state
+1. Dispatch ready P1/P5 planners concurrently in foreground. Pass goal/state
    paths and explicit scopes; no research/review agent.
-5. Verify reported plan commits without reading plan contents. Pipeline ready
+2. Verify reported plan commits without reading plan contents. Pipeline ready
    workers immediately; update matrix, sessions, evidence, and commit record.
-6. After P1 completes, unblock P2/P3/P4 planning; unblock P6/P7 according to
+3. After P1 completes, unblock P2/P3/P4 planning; unblock P6/P7 according to
    their separate planning and worker prerequisites. Keep stage/commit mutex
    discipline and never modify another plan owner's source paths.
-7. Resolve verification defects with their TDD owners; skip only the standalone
+4. Resolve verification defects with their TDD owners; skip only the standalone
    unified review. Complete P7 coverage/acceptance and all final gates.
-8. Write/commit `final_report.md`, mark actual milestones complete, set
+5. Write/commit `final_report.md`, mark actual milestones complete, set
    `status: complete` and `current_phase: complete`, add a non-destructive git
    note, and report verified outcomes and remaining caveats to the user.
 
 If interrupted, load the `resume` skill and resume from this state plus reported
-commits/status, without rereading plans/research in the orchestrator. Existing
-approval persists once explicitly recorded; the current unapproved state does
-not authorize restart.
+commits/status, without rereading plans/research in the orchestrator. Recorded
+approval persists; re-confirm only if the user asks to halt or redirect.
