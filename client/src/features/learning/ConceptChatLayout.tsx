@@ -81,7 +81,6 @@ export function ConceptChatLayout({
 	isChatOpen,
 	chatWidthPercent,
 	onChatWidthChange,
-	onCloseChat: _onCloseChat,
 	className,
 	contentClassName,
 }: ConceptChatLayoutProps) {

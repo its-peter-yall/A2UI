@@ -392,9 +392,8 @@ describe('useConceptChat', () => {
       { initialProps: { nodeId: 'node-1' } },
     );
 
-    let sendPromise: Promise<void> = Promise.resolve();
     act(() => {
-      sendPromise = result.current.sendMessage('Stream question on node 1', []);
+      void result.current.sendMessage('Stream question on node 1', []);
     });
 
     await waitFor(() => {
