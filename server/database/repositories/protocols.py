@@ -22,7 +22,7 @@ USAGE:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Literal, Optional, Protocol, TypedDict, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -44,6 +44,10 @@ from server.schemas.learning import (
     NodeStatus,
     QuizCard,
     QuizSet,
+    RevisionMode,
+    RevisionNodeStatus,
+    RevisionNoticeCode,
+    RevisionSessionStatus,
     TopicNode,
 )
 from server.schemas.progress import ProgressEvent, ProgressEventType
@@ -54,6 +58,81 @@ from server.schemas.research import (
     ResearchSource,
     ResearchStatus,
 )
+
+
+class RevisionNoticePayload(TypedDict):
+    code: RevisionNoticeCode
+    node_id: Optional[str]
+    attempt_count: int
+
+
+class RevisionAttemptPayload(TypedDict):
+    id: str
+    revision_session_id: str
+    node_id: str
+    quiz_index: int
+    attempt_number: int
+    quiz_attempt_count: int
+    selected_option_ids: list[str]
+    is_correct: bool
+    score_percent: Literal[0, 100]
+    correct_option_ids: list[str]
+    explanation: str
+    selected_explanation: Optional[str]
+    created_at: str
+
+
+class RevisionSubmissionPayload(RevisionAttemptPayload):
+    revision_node_status: RevisionNodeStatus
+
+
+class RevisionNodePayload(TypedDict):
+    id: str
+    node_id: str
+    node_title: str
+    sequence_index: int
+    status: RevisionNodeStatus
+    reviewed_at: Optional[str]
+    content_reviewed_at: Optional[str]
+    quiz_count: int
+    quiz_results: list[RevisionAttemptPayload]
+
+
+class RevisionSessionPayload(TypedDict):
+    id: str
+    original_session_id: str
+    revision_number: int
+    mode: RevisionMode
+    status: RevisionSessionStatus
+    progress_percent: int
+    total_quiz_score_percent: Optional[int]
+    started_at: str
+    completed_at: Optional[str]
+    notices: list[RevisionNoticePayload]
+
+
+class RevisionWithProgressPayload(RevisionSessionPayload):
+    nodes: list[RevisionNodePayload]
+
+
+class RevisionComparisonPayload(TypedDict):
+    original_quiz_score_percent: int
+    improvement_percent: int
+
+
+class RevisionSummaryPayload(TypedDict):
+    revision_id: str
+    mode: RevisionMode
+    progress_percent: int
+    total_quiz_score_percent: Optional[int]
+    nodes_reviewed: int
+    nodes_total: int
+    quizzes_passed: int
+    quizzes_failed: int
+    quizzes_total: int
+    time_spent_seconds: Optional[int]
+    comparison: Optional[RevisionComparisonPayload]
+    notices: list[RevisionNoticePayload]
 
 
 @runtime_checkable
@@ -170,31 +249,37 @@ class LearningRepository(Protocol):
         self,
         original_session_id: str,
         mode: str,
-    ) -> dict: ...
+    ) -> RevisionWithProgressPayload: ...
+
     def get_revisions_for_session(
         self,
         session_id: str,
         limit: int = 20,
         offset: int = 0,
-    ) -> tuple[list[dict], int]: ...
+    ) -> tuple[list[RevisionSessionPayload], int]: ...
+
     def get_revision_session(
         self,
         revision_id: str,
-    ) -> Optional[dict]: ...
+    ) -> Optional[RevisionWithProgressPayload]: ...
+
     def delete_revision_session(self, revision_id: str) -> bool: ...
+
     def mark_revision_node_reviewed(
         self,
         revision_id: str,
         node_id: str,
-    ) -> dict: ...
+    ) -> RevisionNodePayload: ...
+
     def submit_revision_quiz(
         self,
         revision_id: str,
         node_id: str,
         selected_option_ids: list[str],
         quiz_index: int = 0,
-    ) -> dict: ...
-    def get_revision_summary(self, revision_id: str) -> dict: ...
+    ) -> RevisionSubmissionPayload: ...
+
+    def get_revision_summary(self, revision_id: str) -> RevisionSummaryPayload: ...
 
 
 @runtime_checkable

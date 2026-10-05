@@ -20,8 +20,10 @@ USAGE:
 
 from __future__ import annotations
 
+import inspect
 import unittest
 from pathlib import Path
+from typing import get_type_hints
 from unittest.mock import MagicMock
 
 from server.database.repositories.protocols import (
@@ -108,6 +110,73 @@ class RepositoryContractTests(unittest.TestCase):
                 self.assertIsNone(
                     parameters["custom_topic_count"].default
                 )
+
+    def test_revision_ports_declare_required_wire_payloads(self) -> None:
+        expected = {
+            'submit_revision_quiz': {
+                'id',
+                'revision_session_id',
+                'node_id',
+                'quiz_index',
+                'attempt_number',
+                'quiz_attempt_count',
+                'selected_option_ids',
+                'is_correct',
+                'score_percent',
+                'correct_option_ids',
+                'explanation',
+                'selected_explanation',
+                'created_at',
+                'revision_node_status',
+            },
+            'mark_revision_node_reviewed': {
+                'id',
+                'node_id',
+                'node_title',
+                'sequence_index',
+                'status',
+                'reviewed_at',
+                'content_reviewed_at',
+                'quiz_count',
+                'quiz_results',
+            },
+            'get_revision_summary': {
+                'revision_id',
+                'mode',
+                'progress_percent',
+                'total_quiz_score_percent',
+                'nodes_reviewed',
+                'nodes_total',
+                'quizzes_passed',
+                'quizzes_failed',
+                'quizzes_total',
+                'time_spent_seconds',
+                'comparison',
+                'notices',
+            },
+        }
+        for name, keys in expected.items():
+            with self.subTest(method=name):
+                method = getattr(LearningRepository, name)
+                payload_type = get_type_hints(method)['return']
+                self.assertEqual(
+                    getattr(payload_type, '__required_keys__', frozenset()),
+                    keys,
+                )
+        parameters = inspect.signature(
+            LearningRepository.submit_revision_quiz
+        ).parameters
+        self.assertEqual(parameters['quiz_index'].default, 0)
+        self.assertEqual(
+            list(parameters),
+            [
+                'self',
+                'revision_id',
+                'node_id',
+                'selected_option_ids',
+                'quiz_index',
+            ],
+        )
 
 
 if __name__ == "__main__":
