@@ -118,6 +118,53 @@ describe("ConceptChatLayout", () => {
 		// ArrowRight decreases width by 2%
 		fireEvent.keyDown(separator, { key: "ArrowRight" });
 		expect(handleChange).toHaveBeenCalledWith(25); // Clamped by handler to min 25
+
+		// Home sets min width (25)
+		fireEvent.keyDown(separator, { key: "Home" });
+		expect(handleChange).toHaveBeenCalledWith(25);
+
+		// End sets max width (38)
+		fireEvent.keyDown(separator, { key: "End" });
+		expect(handleChange).toHaveBeenCalledWith(38);
+	});
+
+	it("supports mouse drag resizing on desktop separator", () => {
+		mockMatchMedia(true);
+		const handleChange = vi.fn();
+		const { container } = render(
+			<ConceptChatLayout
+				isChatOpen={true}
+				chatWidthPercent={25}
+				onChatWidthChange={handleChange}
+				onCloseChat={vi.fn()}
+				chatPanel={<div data-testid="chat-panel">Chat Panel</div>}
+			>
+				<div>Course Content</div>
+			</ConceptChatLayout>,
+		);
+
+		const layoutContainer = container.firstChild as HTMLElement;
+		vi.spyOn(layoutContainer, "getBoundingClientRect").mockReturnValue({
+			width: 1000,
+			height: 800,
+			top: 0,
+			left: 0,
+			bottom: 800,
+			right: 1000,
+			x: 0,
+			y: 0,
+			toJSON: () => {},
+		});
+
+		const separator = screen.getByRole("separator", {
+			name: "Resize chat panel",
+		});
+
+		fireEvent.mouseDown(separator);
+		fireEvent.mouseMove(window, { clientX: 700 });
+		expect(handleChange).toHaveBeenCalledWith(30);
+
+		fireEvent.mouseUp(window);
 	});
 
 	it("renders full-width chat overlay on narrow viewports (< 768px) without desktop resize separator", () => {
