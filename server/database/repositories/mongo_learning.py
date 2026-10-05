@@ -118,6 +118,7 @@ class MongoLearningRepository:
             "title_finalized": True,
             "mode": mode,
             "resolved_mode": resolved_mode,
+            "custom_topic_count": custom_topic_count,
             "status": "in_progress",
             "progress_percent": 0,
             "completed_at": None,
