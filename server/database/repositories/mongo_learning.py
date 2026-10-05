@@ -1604,14 +1604,6 @@ class MongoLearningRepository:
             )
         return revision, nodes, attempts
 
-    def _update_revision_progress(self, revision_id: str) -> dict[str, Any]:
-        document = self._revisions.find_one({'_id': revision_id})
-        if document is None:
-            raise LookupError(f'Revision session not found: {revision_id}')
-        projection = self._load_revision_batch([document])[revision_id][3]
-        self._persist_revision_projection(revision_id, projection)
-        return self._revision_response(document, projection)
-
     def _check_multi_quiz_mastery(
         self,
         node_id: str,
