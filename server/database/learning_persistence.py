@@ -2508,6 +2508,7 @@ class LearningManager:
             SELECT DISTINCT quiz_index
             FROM quiz_attempts
             WHERE node_id = ? AND is_correct = 1
+              AND revision_session_id IS NULL
             """,
             (node_id,),
         )
@@ -2530,14 +2531,14 @@ class LearningManager:
         try:
             cursor = conn.cursor()
 
-            # Get all attempts ordered by attempt_number
+            # Get all original attempts ordered by attempt_number
             cursor.execute(
                 """
                 SELECT
                     id, node_id, attempt_number, quiz_index, selected_option_id,
                     is_correct, score_percent, created_at
                 FROM quiz_attempts
-                WHERE node_id = ?
+                WHERE node_id = ? AND revision_session_id IS NULL
                 ORDER BY attempt_number ASC
                 """,
                 (node_id,),
@@ -2721,6 +2722,7 @@ class LearningManager:
                     SELECT 1
                     FROM quiz_attempts
                     WHERE node_id = ? AND is_correct = 1
+                      AND revision_session_id IS NULL
                     LIMIT 1
                     """,
                     (node_id,),
@@ -2733,6 +2735,7 @@ class LearningManager:
                     SELECT DISTINCT quiz_index
                     FROM quiz_attempts
                     WHERE node_id = ? AND is_correct = 1
+                      AND revision_session_id IS NULL
                     """,
                     (node_id,),
                 )

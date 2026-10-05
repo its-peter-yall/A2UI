@@ -34,6 +34,7 @@ from server.database.repositories.sqlite import (
     SqliteProgressEventRepository,
     SqliteResearchRepository,
 )
+from server.tests.test_revision_sqlite import RevisionSqliteFixture, make_quiz
 
 
 class SqliteRepositoryTests(unittest.TestCase):
@@ -58,6 +59,61 @@ class SqliteRepositoryTests(unittest.TestCase):
         repository = LocalAppSettingsRepository()
         with self.assertRaises(RepositoryUnavailableError):
             repository.get_provider_settings()
+
+    def test_revision_attempts_do_not_enter_original_feedback_or_mastery(
+        self,
+    ) -> None:
+        fixture = RevisionSqliteFixture()
+        fixture.open_fixture()
+        try:
+            store = fixture.manager
+            repository = SqliteLearningRepository(store)
+            revision_id = fixture.revision()
+            original = fixture.snapshot(original_only=True)
+            repository.submit_revision_quiz(
+                revision_id, fixture.node, ["q0-0"], 0
+            )
+            repository.submit_revision_quiz(
+                revision_id, fixture.node, ["q1-0"], 1
+            )
+            self.assertEqual(repository.get_quiz_attempts(fixture.node)[
+                "total_attempts"
+            ], 0)
+            self.assertFalse(repository.check_mastery(fixture.node))
+            self.assertEqual(fixture.snapshot(original_only=True), original)
+            first = repository.create_quiz_attempt(fixture.node, ["q0-0"], 0)
+            self.assertFalse(first["is_mastered"])
+            self.assertFalse(repository.check_mastery(fixture.node))
+            second = repository.create_quiz_attempt(fixture.node, ["q1-0"], 1)
+            self.assertTrue(second["is_mastered"])
+            history = repository.get_quiz_attempts(fixture.node)
+            self.assertEqual(history["total_attempts"], 2)
+            self.assertEqual([a["id"] for a in history["attempts"]],
+                             [first["id"], second["id"]])
+            self.assertEqual([a["attempt_number"] for a in history["attempts"]],
+                             [3, 4])
+            repository.create_quiz_attempt(fixture.node, ["q1-1"], 1)
+            self.assertTrue(repository.check_mastery(fixture.node))
+            # Single-quiz original policy is still any earlier correct attempt.
+            fixture.execute(
+                "UPDATE quiz_data SET payload = ?, format_version = 0 "
+                "WHERE node_id = ?",
+                (make_quiz("q0").model_dump_json(), fixture.node),
+            )
+            self.assertTrue(repository.check_mastery(fixture.node))
+            only_revision = fixture.revision()
+            fixture.execute(
+                "DELETE FROM quiz_attempts WHERE revision_session_id IS NULL"
+            )
+            repository.submit_revision_quiz(
+                only_revision, fixture.node, ["q0-0"], 0
+            )
+            self.assertFalse(repository.check_mastery(fixture.node))
+            self.assertEqual(repository.get_quiz_attempts(fixture.node)[
+                "attempts"
+            ], [])
+        finally:
+            fixture.close_fixture()
 
 
 if __name__ == "__main__":
