@@ -369,3 +369,123 @@ def project_revision_node(
         completed_at=completed_at,
         notices=tuple(notices),
     )
+
+
+@dataclass(frozen=True)
+class RevisionProjection:
+    """Shared metrics for session GET/list, summary, and write reconciliation."""
+
+    nodes: tuple[RevisionNodeProgressWithDetails, ...]
+    status: RevisionSessionStatus
+    progress_percent: int
+    total_quiz_score_percent: Optional[int]
+    nodes_completed: int
+    nodes_total: int
+    correct_attempts: int
+    incorrect_attempts: int
+    total_attempts: int
+    completed_at: Optional[datetime]
+    time_spent_seconds: Optional[int]
+    notices: tuple[RevisionNotice, ...]
+    completion_reconciled: bool
+
+
+def project_revision(
+    *,
+    revision: RevisionProjectionInput,
+    nodes: Sequence[RevisionNodeInput],
+    attempts: Sequence[RevisionAttemptInput],
+) -> RevisionProjection:
+    """Derive all revision metrics from batched inputs without I/O.
+
+    Args:
+        revision: Stored identity, mode, start, and historical completion.
+        nodes: Participating progress rows and their available quiz payloads.
+        attempts: Batched saved attempts, including any caller-supplied extras.
+    Returns:
+        One authoritative view for response and metadata reconciliation.
+    Raises:
+        ValueError: Node ownership or unique membership is invalid.
+    """
+    node_ids = {node.node_id for node in nodes}
+    if len(node_ids) != len(nodes):
+        raise ValueError('duplicate revision node membership')
+    if any(node.revision_session_id != revision.id for node in nodes):
+        raise ValueError('node belongs to another revision')
+    attempts_by_node: dict[str, list[RevisionAttemptInput]] = {}
+    orphan_count = 0
+    for attempt in attempts:
+        if attempt.revision_session_id != revision.id:
+            continue
+        if attempt.node_id not in node_ids:
+            orphan_count += 1
+            continue
+        attempts_by_node.setdefault(attempt.node_id, []).append(attempt)
+    projections = [
+        project_revision_node(
+            revision, node, attempts_by_node.get(node.node_id, []),
+        )
+        for node in sorted(
+            nodes, key=lambda row: (row.sequence_index, row.node_id)
+        )
+    ]
+    participating = [
+        projection
+        for projection in projections
+        if revision.mode == 'full_review' or projection.node.quiz_count > 0
+    ]
+    completion_times = [
+        projection.completed_at
+        for projection in participating
+        if projection.completed_at is not None
+    ]
+    total = len(participating)
+    completed = len(completion_times)
+    status: RevisionSessionStatus = (
+        'completed' if total > 0 and completed == total else 'in_progress'
+    )
+    started = normalize_revision_timestamp(revision.started_at)
+    stored_completed = (
+        normalize_revision_timestamp(revision.stored_completed_at)
+        if revision.stored_completed_at is not None else None
+    )
+    completed_at: Optional[datetime] = None
+    if status == 'completed':
+        evidence_time = max(started, max(completion_times))
+        completed_at = (
+            stored_completed
+            if stored_completed is not None
+            and stored_completed >= evidence_time
+            else evidence_time
+        )
+    total_attempts = sum(p.total_attempts for p in projections)
+    correct_attempts = sum(p.correct_attempts for p in projections)
+    notices = [notice for p in projections for notice in p.notices]
+    if orphan_count:
+        notices.append(_notice('incompatible_attempts', None, orphan_count))
+    reconciled = (
+        status != revision.stored_status or completed_at != stored_completed
+    )
+    if revision.stored_status == 'completed' and reconciled:
+        notices.append(_notice('completion_recalculated', None))
+    return RevisionProjection(
+        nodes=tuple(p.node for p in projections),
+        status=status,
+        progress_percent=(completed * 100) // total if total else 0,
+        total_quiz_score_percent=(
+            (correct_attempts * 100) // total_attempts
+            if total_attempts else None
+        ),
+        nodes_completed=completed,
+        nodes_total=total,
+        correct_attempts=correct_attempts,
+        incorrect_attempts=total_attempts - correct_attempts,
+        total_attempts=total_attempts,
+        completed_at=completed_at,
+        time_spent_seconds=(
+            max(0, int((completed_at - started).total_seconds()))
+            if completed_at is not None else None
+        ),
+        notices=tuple(notices),
+        completion_reconciled=reconciled,
+    )

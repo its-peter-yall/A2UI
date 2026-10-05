@@ -44,6 +44,7 @@ from server.services.revision_progress import (
     evaluate_revision_selection,
     normalize_revision_timestamp,
     normalize_selected_option_ids,
+    project_revision,
     project_revision_node,
 )
 
@@ -352,6 +353,206 @@ class RevisionNodeProjectionTests(unittest.TestCase):
             ],
             ['Explanation q0-0', 'Explanation q0-2'],
         )
+
+
+class RevisionAggregateProjectionTests(unittest.TestCase):
+    def test_completion_accuracy_and_retry_keep_distinct_meanings(
+        self,
+    ) -> None:
+        rows = [
+            saved(),
+            saved('second', index=1, number=2, correct=False,
+                  created_at=SECOND),
+        ]
+        partial = project_revision(
+            revision=revision(), nodes=[topic()], attempts=rows[:1],
+        )
+        self.assertEqual(
+            (partial.nodes_completed, partial.nodes_total), (0, 1)
+        )
+        self.assertEqual(partial.progress_percent, 0)
+        self.assertIsNone(partial.completed_at)
+        complete = project_revision(
+            revision=revision(), nodes=[topic()], attempts=rows,
+        )
+        self.assertEqual(complete.status, 'completed')
+        self.assertEqual(complete.progress_percent, 100)
+        self.assertEqual(complete.total_quiz_score_percent, 50)
+        self.assertEqual(
+            (
+                complete.correct_attempts,
+                complete.incorrect_attempts,
+                complete.total_attempts,
+            ),
+            (1, 1, 2),
+        )
+        self.assertEqual(complete.completed_at, SECOND)
+        self.assertEqual(complete.time_spent_seconds, 7200)
+        persisted = replace(
+            revision(), stored_status='completed',
+            stored_completed_at=SECOND,
+        )
+        retry = saved(
+            'retry', index=1, number=3, correct=True,
+            created_at=datetime(2026, 10, 5, 12, tzinfo=timezone.utc),
+        )
+        refreshed = project_revision(
+            revision=persisted, nodes=[topic()], attempts=rows + [retry],
+        )
+        self.assertEqual(refreshed.nodes[0].status, 'quiz_passed')
+        self.assertEqual(refreshed.total_quiz_score_percent, 66)
+        self.assertEqual(refreshed.total_attempts, 3)
+        self.assertEqual(refreshed.completed_at, SECOND)
+        self.assertFalse(refreshed.completion_reconciled)
+
+    def test_quizless_and_empty_denominators_do_not_auto_complete(
+        self,
+    ) -> None:
+        for nodes in ([], [topic(quizzes=())]):
+            with self.subTest(nodes=nodes):
+                result = project_revision(
+                    revision=revision(), nodes=nodes, attempts=[],
+                )
+                self.assertEqual(result.status, 'in_progress')
+                self.assertEqual(result.nodes_total, 0)
+                self.assertEqual(result.progress_percent, 0)
+                self.assertIsNone(result.total_quiz_score_percent)
+                self.assertIsNone(result.completed_at)
+                self.assertIsNone(result.time_spent_seconds)
+        quizless = topic(
+            quizzes=(), explicit_review_present=True,
+            content_reviewed_at=FIRST,
+        )
+        full = project_revision(
+            revision=revision('full_review'), nodes=[quizless], attempts=[],
+        )
+        self.assertEqual(full.status, 'completed')
+        self.assertEqual((full.nodes_completed, full.nodes_total), (1, 1))
+        self.assertIsNone(full.total_quiz_score_percent)
+        self.assertEqual(full.nodes[0].quiz_count, 0)
+
+    def test_participating_counts_and_topic_order_are_deterministic(
+        self,
+    ) -> None:
+        skipped = topic(
+            quizzes=(), node_id='no-quiz', id='progress-0',
+            sequence_index=0,
+        )
+        practicing = topic(sequence_index=1)
+        rows = [saved(), saved('second', index=1, correct=False)]
+        result = project_revision(
+            revision=revision(), nodes=[practicing, skipped], attempts=rows,
+        )
+        self.assertEqual(
+            [node.node_id for node in result.nodes],
+            ['no-quiz', 'node-1'],
+        )
+        self.assertEqual(
+            (result.nodes_completed, result.nodes_total), (1, 1)
+        )
+        self.assertEqual(result.total_quiz_score_percent, 50)
+        incomplete = project_revision(
+            revision=revision('full_review'),
+            nodes=[
+                replace(
+                    practicing, explicit_review_present=True,
+                    content_reviewed_at=FIRST,
+                ),
+                skipped,
+            ],
+            attempts=rows,
+        )
+        self.assertEqual(
+            (incomplete.nodes_completed, incomplete.nodes_total), (1, 2)
+        )
+        self.assertEqual(incomplete.progress_percent, 50)
+        self.assertIsNone(incomplete.completed_at)
+
+    def test_legacy_completion_is_hidden_then_replaced_on_coverage(
+        self,
+    ) -> None:
+        old = replace(
+            revision(), stored_status='completed',
+            stored_completed_at=FIRST,
+        )
+        first = saved()
+        partial = project_revision(
+            revision=old, nodes=[topic(stored_status='quiz_passed')],
+            attempts=[first],
+        )
+        self.assertEqual(partial.status, 'in_progress')
+        self.assertIsNone(partial.completed_at)
+        self.assertTrue(partial.completion_reconciled)
+        self.assertIn(
+            'completion_recalculated',
+            [notice.code for notice in partial.notices],
+        )
+        self.assertEqual(old.stored_completed_at, FIRST)
+        later = saved(
+            'later', index=1, number=2, correct=False,
+            created_at=SECOND,
+        )
+        complete = project_revision(
+            revision=old, nodes=[topic()], attempts=[first, later],
+        )
+        self.assertEqual(complete.completed_at, SECOND)
+        self.assertTrue(complete.completion_reconciled)
+        reconciled = replace(old, stored_completed_at=SECOND)
+        restored = project_revision(
+            revision=reconciled, nodes=[topic()], attempts=[later, first],
+        )
+        self.assertEqual(restored.completed_at, SECOND)
+        self.assertFalse(restored.completion_reconciled)
+
+    def test_isolation_and_incompatible_data_stay_out_of_accuracy(
+        self,
+    ) -> None:
+        attempts = [
+            saved(),
+            saved('wrong', correct=False, number=2),
+            saved('original', revision_id=None),
+            saved('other-revision', revision_id='revision-2'),
+            saved('old-options', selected=('missing',)),
+        ]
+        nodes = [topic()]
+        before = copy.deepcopy((nodes, attempts))
+        result = project_revision(
+            revision=revision(), nodes=nodes, attempts=attempts,
+        )
+        self.assertEqual(result.total_attempts, 2)
+        self.assertEqual(result.total_quiz_score_percent, 50)
+        self.assertEqual(result.nodes[0].quiz_results[0].id, 'wrong')
+        self.assertEqual(result.notices[0].attempt_count, 1)
+        self.assertEqual((nodes, attempts), before)
+        all_bad = project_revision(
+            revision=revision(), nodes=nodes, attempts=[attempts[-1]],
+        )
+        self.assertIsNone(all_bad.total_quiz_score_percent)
+        self.assertEqual(all_bad.total_attempts, 0)
+
+    def test_invalid_node_ownership_or_duplicate_membership_raises(
+        self,
+    ) -> None:
+        for nodes in (
+            [topic(revision_session_id='revision-2')],
+            [topic(), topic()],
+        ):
+            with self.subTest(nodes=nodes):
+                with self.assertRaises(ValueError):
+                    project_revision(
+                        revision=revision(), nodes=nodes, attempts=[],
+                    )
+
+    def test_own_orphan_attempt_is_not_applied_to_another_topic(self) -> None:
+        orphan = replace(saved(), node_id='removed-node')
+        result = project_revision(
+            revision=revision(), nodes=[topic()], attempts=[orphan],
+        )
+        self.assertEqual(result.total_attempts, 0)
+        self.assertEqual(result.nodes[0].quiz_results, [])
+        self.assertEqual(result.notices[0].code, 'incompatible_attempts')
+        self.assertIsNone(result.notices[0].node_id)
+        self.assertEqual(result.notices[0].attempt_count, 1)
 
 
 def main() -> None:
