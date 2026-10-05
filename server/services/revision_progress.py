@@ -29,10 +29,20 @@ USAGE:
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, Sequence, Union
+from typing import Literal, Optional, Sequence, Union
 
-from server.schemas.learning import QuizCard
+from server.schemas.learning import (
+    QuizCard,
+    RevisionMode,
+    RevisionNodeProgressWithDetails,
+    RevisionNodeStatus,
+    RevisionNotice,
+    RevisionNoticeCode,
+    RevisionQuizAttemptResult,
+    RevisionSessionStatus,
+)
 
 
 def normalize_revision_timestamp(
@@ -112,3 +122,250 @@ def evaluate_revision_selection(
         option.option_id for option in quiz.options if option.is_correct
     }
     return selected == correct
+
+
+@dataclass(frozen=True)
+class RevisionProjectionInput:
+    """Stored revision metadata, without original-course learning state."""
+
+    id: str
+    mode: RevisionMode
+    started_at: datetime
+    stored_status: RevisionSessionStatus = 'in_progress'
+    stored_completed_at: Optional[datetime] = None
+
+
+@dataclass(frozen=True)
+class RevisionNodeInput:
+    """Batched node/quiz/review values supplied by a repository adapter."""
+
+    id: str
+    revision_session_id: str
+    node_id: str
+    node_title: str
+    sequence_index: int
+    quizzes: tuple[QuizCard, ...]
+    stored_status: RevisionNodeStatus = 'pending'
+    reviewed_at: Optional[datetime] = None
+    explicit_review_present: bool = False
+    content_reviewed_at: Optional[datetime] = None
+
+
+@dataclass(frozen=True)
+class RevisionAttemptInput:
+    """A saved attempt; incompatible rows remain in repository storage."""
+
+    id: str
+    revision_session_id: Optional[str]
+    node_id: str
+    attempt_number: int
+    quiz_index: Optional[int]
+    selected_option_ids: Optional[tuple[str, ...]]
+    is_correct: bool
+    score_percent: int
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class RevisionNodeProjection:
+    """One topic's authoritative details and aggregate evidence."""
+
+    node: RevisionNodeProgressWithDetails
+    total_attempts: int
+    correct_attempts: int
+    completed_at: Optional[datetime]
+    notices: tuple[RevisionNotice, ...]
+
+
+def _notice(
+    code: RevisionNoticeCode,
+    node_id: Optional[str],
+    count: int = 0,
+) -> RevisionNotice:
+    """Build one presentation notice for a node or the whole revision."""
+    return RevisionNotice(
+        code=code, node_id=node_id, attempt_count=count,
+    )
+
+
+def _compatible_quiz_index(
+    node: RevisionNodeInput, attempt: RevisionAttemptInput,
+) -> Optional[int]:
+    """Resolve the current quiz an attempt belongs to, or None if stale."""
+    index = attempt.quiz_index
+    if index is None and len(node.quizzes) == 1:
+        index = 0
+    if (
+        index is None
+        or index < 0
+        or index >= len(node.quizzes)
+        or not attempt.id
+        or attempt.attempt_number < 1
+        or attempt.selected_option_ids is None
+    ):
+        return None
+    try:
+        correct = evaluate_revision_selection(
+            node.quizzes[index], attempt.selected_option_ids,
+        )
+    except ValueError:
+        return None
+    if correct != attempt.is_correct:
+        return None
+    if attempt.score_percent != (100 if attempt.is_correct else 0):
+        return None
+    return index
+
+
+def _attempt_result(
+    revision_id: str,
+    quiz_index: int,
+    quiz: QuizCard,
+    attempt: RevisionAttemptInput,
+    quiz_attempt_count: int,
+) -> RevisionQuizAttemptResult:
+    """Assemble one disclosed result from a saved compatible attempt."""
+    selected_ids = list(attempt.selected_option_ids or ())
+    selected = [
+        option
+        for option in quiz.options
+        if option.option_id in selected_ids
+    ]
+    correct = [option for option in quiz.options if option.is_correct]
+    score: Literal[0, 100] = 100 if attempt.is_correct else 0
+    return RevisionQuizAttemptResult(
+        id=attempt.id,
+        revision_session_id=revision_id,
+        node_id=attempt.node_id,
+        quiz_index=quiz_index,
+        attempt_number=attempt.attempt_number,
+        quiz_attempt_count=quiz_attempt_count,
+        selected_option_ids=selected_ids,
+        is_correct=attempt.is_correct,
+        score_percent=score,
+        correct_option_ids=(
+            [option.option_id for option in correct]
+            if attempt.is_correct else []
+        ),
+        explanation=correct[0].explanation if attempt.is_correct else '',
+        selected_explanation=(
+            selected[0].explanation if not attempt.is_correct else None
+        ),
+        created_at=normalize_revision_timestamp(attempt.created_at),
+    )
+
+
+def project_revision_node(
+    revision: RevisionProjectionInput,
+    node: RevisionNodeInput,
+    attempts: Sequence[RevisionAttemptInput],
+) -> RevisionNodeProjection:
+    """Project one topic from explicit reading and its own saved attempts.
+
+    Args:
+        revision: Owning revision identity, mode, and metadata.
+        node: Batched quiz and explicit-review values for this topic.
+        attempts: Batched attempts; foreign revisions/nodes are ignored.
+    Returns:
+        Independent reading, latest quiz feedback, and completion evidence.
+    Raises:
+        ValueError: Node does not belong to this revision.
+    """
+    if node.revision_session_id != revision.id:
+        raise ValueError('node belongs to another revision')
+    notices: list[RevisionNotice] = []
+    content_reviewed_at = node.content_reviewed_at
+    if revision.mode == 'full_review':
+        if (
+            not node.explicit_review_present
+            and node.stored_status == 'reviewed'
+        ):
+            content_reviewed_at = node.reviewed_at or revision.started_at
+            notices.append(
+                _notice('legacy_review_inferred', node.node_id)
+            )
+        elif (
+            content_reviewed_at is None
+            and node.stored_status in ('quiz_passed', 'quiz_failed')
+        ):
+            notices.append(
+                _notice('legacy_review_required', node.node_id)
+            )
+    if content_reviewed_at is not None:
+        content_reviewed_at = normalize_revision_timestamp(
+            content_reviewed_at
+        )
+    groups: dict[int, list[RevisionAttemptInput]] = {}
+    incompatible = 0
+    for attempt in attempts:
+        if (
+            attempt.revision_session_id != revision.id
+            or attempt.node_id != node.node_id
+        ):
+            continue
+        index = _compatible_quiz_index(node, attempt)
+        if index is None:
+            incompatible += 1
+            continue
+        groups.setdefault(index, []).append(attempt)
+    if incompatible:
+        notices.append(
+            _notice('incompatible_attempts', node.node_id, incompatible)
+        )
+    results: list[RevisionQuizAttemptResult] = []
+    for index, group in sorted(groups.items()):
+        latest = max(group, key=lambda row: (row.attempt_number, row.id))
+        results.append(
+            _attempt_result(
+                revision.id,
+                index,
+                node.quizzes[index],
+                latest,
+                len(group),
+            )
+        )
+    completed_at: Optional[datetime] = None
+    status: RevisionNodeStatus = 'pending'
+    if revision.mode == 'full_review' and content_reviewed_at is not None:
+        status = 'reviewed'
+        completed_at = content_reviewed_at
+    elif (
+        revision.mode == 'quiz_only'
+        and node.quizzes
+        and len(groups) == len(node.quizzes)
+    ):
+        status = (
+            'quiz_passed'
+            if all(result.is_correct for result in results)
+            else 'quiz_failed'
+        )
+        completed_at = max(
+            min(
+                normalize_revision_timestamp(row.created_at)
+                for row in group
+            )
+            for group in groups.values()
+        )
+    details = RevisionNodeProgressWithDetails(
+        id=node.id,
+        node_id=node.node_id,
+        node_title=node.node_title,
+        sequence_index=node.sequence_index,
+        status=status,
+        reviewed_at=(
+            normalize_revision_timestamp(node.reviewed_at)
+            if node.reviewed_at is not None else None
+        ),
+        content_reviewed_at=content_reviewed_at,
+        quiz_count=len(node.quizzes),
+        quiz_results=results,
+    )
+    return RevisionNodeProjection(
+        node=details,
+        total_attempts=sum(len(g) for g in groups.values()),
+        correct_attempts=sum(
+            row.is_correct for group in groups.values() for row in group
+        ),
+        completed_at=completed_at,
+        notices=tuple(notices),
+    )
