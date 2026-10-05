@@ -110,6 +110,7 @@ const mockRevisionSession: RevisionSessionWithProgress = {
 	total_quiz_score_percent: null,
 	started_at: "2026-08-06T00:00:00Z",
 	completed_at: null,
+	notices: [],
 	nodes: [
 		{
 			id: "rev-node-1",
@@ -118,6 +119,9 @@ const mockRevisionSession: RevisionSessionWithProgress = {
 			sequence_index: 0,
 			status: "pending",
 			reviewed_at: null,
+			content_reviewed_at: null,
+			quiz_count: 2,
+			quiz_results: [],
 		},
 	],
 };

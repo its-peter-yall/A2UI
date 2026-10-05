@@ -953,14 +953,21 @@ class RevisionSessionResponse(BaseModel):
     revision_number: int = Field(..., description="Revision iteration number", ge=1)
     mode: RevisionMode = Field(..., description="Revision mode")
     status: RevisionSessionStatus = Field(..., description="Revision session status")
-    progress_percent: int = Field(..., description="Revision progress percentage")
+    progress_percent: int = Field(
+        ..., description="Revision progress percentage", ge=0, le=100
+    )
     total_quiz_score_percent: Optional[int] = Field(
         default=None,
         description="Overall quiz accuracy for the revision session",
+        ge=0,
+        le=100,
     )
     started_at: datetime = Field(..., description="Revision start timestamp")
     completed_at: Optional[datetime] = Field(
         default=None, description="Revision completion timestamp"
+    )
+    notices: List[RevisionNotice] = Field(
+        ..., description="Recomputed revision compatibility notices"
     )
 
 
@@ -976,6 +983,13 @@ class RevisionNodeProgress(BaseModel):
     reviewed_at: Optional[datetime] = Field(
         default=None, description="Timestamp when node was reviewed"
     )
+    content_reviewed_at: Optional[datetime] = Field(
+        ..., description="Explicit reading timestamp, independent of attempts"
+    )
+    quiz_count: int = Field(..., ge=0, description="Available quiz count")
+    quiz_results: List[RevisionQuizAttemptResult] = Field(
+        ..., description="Latest compatible attempt per quiz, index ordered"
+    )
 
 
 class RevisionNodeProgressWithDetails(BaseModel):
@@ -990,6 +1004,13 @@ class RevisionNodeProgressWithDetails(BaseModel):
     status: RevisionNodeStatus = Field(..., description="Revision node status")
     reviewed_at: Optional[datetime] = Field(
         default=None, description="Timestamp when node was reviewed"
+    )
+    content_reviewed_at: Optional[datetime] = Field(
+        ..., description="Explicit reading timestamp, independent of attempts"
+    )
+    quiz_count: int = Field(..., ge=0, description="Available quiz count")
+    quiz_results: List[RevisionQuizAttemptResult] = Field(
+        ..., description="Latest compatible attempt per quiz, index ordered"
     )
 
 
@@ -1038,10 +1059,14 @@ class RevisionSummary(BaseModel):
 
     revision_id: str = Field(..., description="Revision session identifier")
     mode: RevisionMode = Field(..., description="Revision mode")
-    progress_percent: int = Field(..., description="Revision progress percentage")
+    progress_percent: int = Field(
+        ..., description="Revision progress percentage", ge=0, le=100
+    )
     total_quiz_score_percent: Optional[int] = Field(
         default=None,
         description="Overall quiz score percentage for revision attempts",
+        ge=0,
+        le=100,
     )
     nodes_reviewed: int = Field(..., description="Completed revision nodes", ge=0)
     nodes_total: int = Field(..., description="Total revision nodes", ge=0)
@@ -1059,25 +1084,89 @@ class RevisionSummary(BaseModel):
         default=None,
         description="Optional performance comparison against original attempts",
     )
+    notices: List[RevisionNotice] = Field(
+        ..., description="Recomputed revision compatibility notices"
+    )
 
 
-class RevisionQuizSubmissionResult(BaseModel):
-    """Result payload for revision quiz submissions."""
+RevisionNoticeCode = Literal[
+    'legacy_review_inferred',
+    'legacy_review_required',
+    'incompatible_attempts',
+    'completion_recalculated',
+]
+
+
+class RevisionNotice(BaseModel):
+    """Compatibility metadata for revision presentation."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    is_correct: bool = Field(..., description="Whether selected option is correct")
+    code: RevisionNoticeCode = Field(..., description='Notice category')
+    node_id: Optional[str] = Field(..., description='Affected node or null')
+    attempt_count: int = Field(
+        ..., ge=0, description='Excluded attempts, zero for other notices'
+    )
+
+
+class RevisionQuizAttemptResult(BaseModel):
+    """Shared restored and immediate revision attempt contract."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(..., min_length=1, description='Saved attempt ID')
+    revision_session_id: str = Field(
+        ..., min_length=1, description='Owning revision ID'
+    )
+    node_id: str = Field(..., min_length=1, description='Concept node ID')
+    quiz_index: int = Field(..., ge=0, description='Zero-based quiz index')
+    attempt_number: int = Field(
+        ..., ge=1, description='Stored node-wide attempt sequence'
+    )
+    quiz_attempt_count: int = Field(
+        ..., ge=1, description='Compatible attempts for revision/node/quiz'
+    )
+    selected_option_ids: List[str] = Field(
+        ..., min_length=1, description='Selected stable option IDs'
+    )
+    is_correct: bool = Field(..., description='Stored exact-match outcome')
+    score_percent: Literal[0, 100] = Field(
+        ..., description='Zero or 100 according to correctness'
+    )
     correct_option_ids: List[str] = Field(
-        default_factory=list,
-        description="Correct option identifier(s)",
+        ..., description='Correct IDs disclosed only after success'
     )
-    explanation: Optional[str] = Field(
-        default=None,
-        description="Explanation for selected option",
+    explanation: str = Field(
+        ..., description='Correct explanation on success, empty when wrong'
     )
+    selected_explanation: Optional[str] = Field(
+        ..., description='Compatibility selected explanation or null'
+    )
+    created_at: datetime = Field(..., description='Saved attempt timestamp')
+
+    @model_validator(mode='after')
+    def validate_disclosure(self) -> 'RevisionQuizAttemptResult':
+        """Reject contradictory scores and unsafe wrong-answer feedback."""
+        if self.score_percent != (100 if self.is_correct else 0):
+            raise ValueError('score_percent contradicts is_correct')
+        if not self.is_correct and (
+            self.correct_option_ids or self.explanation
+        ):
+            raise ValueError('wrong answers cannot disclose correct answers')
+        if self.is_correct and not self.correct_option_ids:
+            raise ValueError('correct answers require correct option IDs')
+        if len(set(self.selected_option_ids)) != len(
+            self.selected_option_ids
+        ):
+            raise ValueError('selected option IDs must be unique')
+        return self
+
+
+class RevisionQuizSubmissionResult(RevisionQuizAttemptResult):
+    """Immediate result adds the independent mode-aware topic status."""
+
     revision_node_status: RevisionNodeStatus = Field(
-        ...,
-        description="Updated revision node status after submission",
+        ..., description='Mode-specific aggregate topic state'
     )
 
 

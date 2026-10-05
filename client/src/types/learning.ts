@@ -275,6 +275,18 @@ export interface SessionListResponse {
 
 export type RevisionMode = "full_review" | "quiz_only";
 
+export type RevisionNoticeCode =
+	| "legacy_review_inferred"
+	| "legacy_review_required"
+	| "incompatible_attempts"
+	| "completion_recalculated";
+
+export interface RevisionNotice {
+	code: RevisionNoticeCode;
+	node_id: string | null;
+	attempt_count: number;
+}
+
 export interface RevisionCreateRequest {
 	mode: RevisionMode;
 }
@@ -289,6 +301,7 @@ export interface RevisionSessionResponse {
 	total_quiz_score_percent: number | null;
 	started_at: string;
 	completed_at: string | null;
+	notices: RevisionNotice[];
 }
 
 export type RevisionNodeStatus =
@@ -304,6 +317,9 @@ export interface RevisionNodeProgressWithDetails {
 	sequence_index: number;
 	status: RevisionNodeStatus;
 	reviewed_at: string | null;
+	content_reviewed_at: string | null;
+	quiz_count: number;
+	quiz_results: RevisionQuizAttemptResult[];
 }
 
 export interface RevisionSessionWithProgress extends RevisionSessionResponse {
@@ -325,18 +341,26 @@ export interface RevisionSummary {
 		original_quiz_score_percent: number;
 		improvement_percent: number;
 	} | null;
+	notices: RevisionNotice[];
 }
 
-export interface RevisionQuizResponse {
+export interface RevisionQuizAttemptResult {
 	id: string;
+	revision_session_id: string;
 	node_id: string;
+	quiz_index: number;
 	attempt_number: number;
+	quiz_attempt_count: number;
 	selected_option_ids: string[];
 	is_correct: boolean;
-	score_percent: number;
+	score_percent: 0 | 100;
 	correct_option_ids: string[];
 	explanation: string; // Explanation for the correct answer
-	selected_explanation?: string; // Explanation for the selected answer (only when incorrect)
+	selected_explanation: string | null; // Selected answer explanation when wrong
+	created_at: string;
+}
+
+export interface RevisionQuizResponse extends RevisionQuizAttemptResult {
 	revision_node_status: RevisionNodeStatus;
 }
 

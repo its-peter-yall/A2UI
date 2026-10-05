@@ -294,16 +294,24 @@ export function RevisionPage() {
 	).length;
 
 	const currentNode = originalSession.nodes[currentIndex];
-	const currentRevisionProgress = currentNode
-		? (revisionProgressMap.get(currentNode.id) ?? {
-				id: `fallback-${currentNode.id}`,
-				node_id: currentNode.id,
-				node_title: currentNode.title,
-				sequence_index: currentNode.sequence_index,
-				status: "pending" as const,
-				reviewed_at: null,
-			})
-		: undefined;
+	const currentRevisionProgress: RevisionNodeProgressWithDetails | undefined =
+		currentNode
+			? (revisionProgressMap.get(currentNode.id) ?? {
+					id: `fallback-${currentNode.id}`,
+					node_id: currentNode.id,
+					node_title: currentNode.title,
+					sequence_index: currentNode.sequence_index,
+					status: "pending",
+					reviewed_at: null,
+					content_reviewed_at: null,
+					quiz_count: currentNode.quiz_set
+						? currentNode.quiz_set.quizzes.length
+						: currentNode.quiz
+							? 1
+							: 0,
+					quiz_results: [],
+				})
+			: undefined;
 
 	return (
 		<div className="min-h-screen bg-background">
