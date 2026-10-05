@@ -616,6 +616,29 @@ class RevisionMongoTests(unittest.TestCase):
         self.assertEqual(created['notices'], [])
         self.assertEqual(created['progress_percent'], 0)
 
+    def test_revision_attempts_never_count_as_original_mastery(self) -> None:
+        self.db.rows['quiz_attempts'] = [
+            attempt('revision-q0'),
+            attempt('revision-q1', index=1, number=2),
+            attempt('original-wrong', number=3, correct=False, revision=None),
+        ]
+        history = self.repo.get_quiz_attempts('n1')
+        self.assertEqual(history['total_attempts'], 1)
+        self.assertFalse(history['is_mastered'])
+        self.assertEqual(history['best_score'], 0)
+        self.assertEqual(history['attempts'][0]['id'], 'original-wrong')
+        self.assertFalse(self.repo.check_mastery('n1'))
+        self.db.rows['quiz_data'][0]['payload'] = QuizSet(
+            quizzes=[make_quiz('q0')],
+        ).model_dump(mode='json')
+        self.assertFalse(self.repo.check_mastery('n1'))
+        missing_scope = attempt('legacy-original', number=4)
+        missing_scope.pop('revision_session_id')
+        self.db.rows['quiz_attempts'].append(missing_scope)
+        self.assertTrue(self.repo.check_mastery('n1'))
+        self.assertEqual(self.repo.get_quiz_attempts('n1')
+                         ['total_attempts'], 2)
+
 
 def main() -> None:
     unittest.main()

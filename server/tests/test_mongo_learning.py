@@ -512,6 +512,32 @@ class MongoLearningTests(unittest.TestCase):
         self.assertIsNone(listed[0]["custom_topic_count"])
         self.assertNotIn("custom_topic_count", document)
 
+    def test_original_attempt_queries_exclude_revision_scope(self) -> None:
+        attempts = self.database["quiz_attempts"]
+        attempts.find.return_value.sort.return_value = []
+        quiz = self.database["quiz_data"]
+        quiz.find_one.return_value = {
+            'node_id': 'n1', 'format_version': 1, 'current_index': 0,
+            'payload': make_quiz_set().model_dump(mode='json'),
+        }
+        self.repository.get_quiz_attempts('n1')
+        attempts.find.assert_called_once_with({
+            'node_id': 'n1', 'revision_session_id': None,
+        })
+        attempts.find_one.return_value = None
+        self.assertFalse(self.repository.check_mastery('n1'))
+        attempts.find_one.assert_called_once_with({
+            'node_id': 'n1', 'is_correct': True,
+            'revision_session_id': None,
+        })
+        attempts.find.reset_mock()
+        attempts.find.return_value = []
+        self.assertFalse(self.repository._check_multi_quiz_mastery('n1', 2))
+        attempts.find.assert_called_once_with({
+            'node_id': 'n1', 'is_correct': True,
+            'revision_session_id': None,
+        })
+
     def test_update_resolved_mode_accepts_custom(self) -> None:
         sessions = self.database["learning_sessions"]
         sessions.update_one.return_value.matched_count = 1

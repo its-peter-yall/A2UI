@@ -1118,7 +1118,9 @@ class MongoLearningRepository:
         }
 
     def get_quiz_attempts(self, node_id: str) -> dict[str, Any]:
-        cursor = self._attempts.find({"node_id": node_id}).sort(
+        cursor = self._attempts.find({
+            'node_id': node_id, 'revision_session_id': None,
+        }).sort(
             "attempt_number",
             ASCENDING,
         )
@@ -1192,7 +1194,10 @@ class MongoLearningRepository:
         if total_quizzes == 1:
             return (
                 self._attempts.find_one(
-                    {"node_id": node_id, "is_correct": True}
+                    {
+                        'node_id': node_id, 'is_correct': True,
+                        'revision_session_id': None,
+                    }
                 )
                 is not None
             )
@@ -1592,7 +1597,10 @@ class MongoLearningRepository:
         correct_indices = {
             int(doc.get("quiz_index") or 0)
             for doc in self._attempts.find(
-                {"node_id": node_id, "is_correct": True}
+                {
+                    'node_id': node_id, 'is_correct': True,
+                    'revision_session_id': None,
+                }
             )
         }
         return correct_indices.issuperset(set(range(total_quizzes)))
