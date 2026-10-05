@@ -511,6 +511,144 @@ class RevisionSqliteTests(RevisionSqliteFixture, unittest.TestCase):
         self.assertEqual(self.manager.get_revision_session(practice)["status"],
                          "in_progress")
 
+    def test_summary_history_and_get_share_accuracy_and_completion_clock(
+        self,
+    ) -> None:
+        revision_id = self.revision()
+        self.seed_attempt(revision_id, 1, 0, "q0-0", True, FIRST)
+        self.seed_attempt(revision_id, 2, 1, "q1-1", False, SECOND)
+        self.seed_attempt(revision_id, 3, 1, "q1-0", True, THIRD)
+        self.seed_attempt(revision_id, 4, 9, "q0-0", True, THIRD)
+        self.manager.create_quiz_attempt(self.node, ["q0-1"], 0)
+        other = self.revision()
+        self.seed_attempt(other, 8, 0, "q0-0", True, FIRST)
+        self.execute(
+            "UPDATE revision_sessions SET progress_percent = 3, "
+            "total_quiz_score_percent = 99 WHERE id = ?", (revision_id,),
+        )
+        before = self.snapshot()
+        restored = self.manager.get_revision_session(revision_id)
+        summary = self.manager.get_revision_summary(revision_id)
+        listed = next(r for r in self.manager.get_revisions_for_session(
+            self.session
+        )[0] if r["id"] == revision_id)
+        self.assertEqual(summary["quizzes_passed"], 2)
+        self.assertEqual(summary["quizzes_failed"], 1)
+        self.assertEqual(summary["quizzes_total"], 3)
+        self.assertEqual(summary["nodes_reviewed"], 1)
+        self.assertEqual(summary["nodes_total"], 1)
+        self.assertEqual(summary["time_spent_seconds"], 7200)
+        self.assertEqual(summary["comparison"], {
+            "original_quiz_score_percent": 0, "improvement_percent": 66,
+        })
+        for key in ("progress_percent", "total_quiz_score_percent", "notices"):
+            self.assertEqual(summary[key], restored[key])
+            self.assertEqual(listed[key], restored[key])
+        self.assertEqual(restored["total_quiz_score_percent"], 66)
+        self.assertEqual(normalize_revision_timestamp(restored["completed_at"]),
+                         normalize_revision_timestamp(SECOND))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_legacy_completion_is_hidden_then_reconciled_on_valid_write(
+        self,
+    ) -> None:
+        revision_id = self.revision()
+        self.seed_attempt(revision_id, 1, 0, "q0-0", True, FIRST)
+        future = "2099-01-01T00:00:00+00:00"
+        self.execute(
+            "UPDATE revision_sessions SET status = 'completed', "
+            "progress_percent = 100, completed_at = ? WHERE id = ?",
+            (future, revision_id),
+        )
+        self.execute(
+            "UPDATE revision_node_progress SET status = 'quiz_passed', "
+            "reviewed_at = ? WHERE revision_session_id = ?",
+            (FIRST, revision_id),
+        )
+        before = self.snapshot()
+        restored = self.manager.get_revision_session(revision_id)
+        summary = self.manager.get_revision_summary(revision_id)
+        self.assertEqual(restored["status"], "in_progress")
+        self.assertIsNone(restored["completed_at"])
+        self.assertEqual(summary["progress_percent"], 0)
+        self.assertIsNone(summary["time_spent_seconds"])
+        self.assertIn("completion_recalculated", [
+            n["code"] for n in restored["notices"]
+        ])
+        self.assertEqual(self.snapshot(), before)
+        with self.assertRaises(ValueError):
+            self.manager.submit_revision_quiz(revision_id, self.node, ["A"], 1)
+        self.assertEqual(self.snapshot(), before)
+        self.manager.submit_revision_quiz(revision_id, self.node, ["q1-1"], 1)
+        completed = self.manager.get_revision_session(revision_id)
+        self.assertEqual(completed["status"], "completed")
+        self.assertNotEqual(
+            normalize_revision_timestamp(completed["completed_at"]),
+            normalize_revision_timestamp(future),
+        )
+        self.manager.submit_revision_quiz(revision_id, self.node, ["q1-0"], 1)
+        self.assertEqual(self.manager.get_revision_session(revision_id)[
+            "completed_at"
+        ], completed["completed_at"])
+
+    def test_legacy_quiz_timestamp_does_not_infer_explicit_review(self) -> None:
+        revision_id = self.revision("full_review")
+        self.execute(
+            "UPDATE revision_node_progress SET status = 'quiz_passed', "
+            "reviewed_at = ? WHERE revision_session_id = ?",
+            (FIRST, revision_id),
+        )
+        restored = self.manager.get_revision_session(revision_id)
+        self.assertEqual(restored["nodes"][0]["status"], "pending")
+        self.assertIsNone(restored["nodes"][0]["content_reviewed_at"])
+        self.assertIn("legacy_review_required", [
+            n["code"] for n in restored["notices"]
+        ])
+        reviewed = self.manager.mark_revision_node_reviewed(
+            revision_id, self.node
+        )
+        self.assertNotEqual(normalize_revision_timestamp(
+            reviewed["content_reviewed_at"]
+        ), normalize_revision_timestamp(FIRST))
+
+    def test_empty_and_quizless_summary_denominators(self) -> None:
+        quizless_node = self.manager.create_concept_node(
+            self.session, 1, "Reading only", "# No quiz", NodeStatus.COMPLETED,
+        )["id"]
+        practice = self.revision()
+        self.seed_attempt(practice, 1, 0, "q0-1", False)
+        self.seed_attempt(practice, 2, 1, "q1-1", False, SECOND)
+        summary = self.manager.get_revision_summary(practice)
+        self.assertEqual(summary["nodes_total"], 1)
+        self.assertEqual(summary["nodes_reviewed"], 1)
+        self.assertEqual(summary["total_quiz_score_percent"], 0)
+        self.assertEqual(len(self.manager.get_revision_session(practice)[
+            "nodes"
+        ]), 2)
+        review = self.revision("full_review")
+        self.manager.mark_revision_node_reviewed(review, quizless_node)
+        self.assertEqual(
+            self.manager.get_revision_summary(review)["nodes_total"], 2
+        )
+        self.execute("DELETE FROM quiz_data WHERE node_id = ?", (self.node,))
+        no_quizzes = self.revision()
+        no_quiz_summary = self.manager.get_revision_summary(no_quizzes)
+        self.assertEqual(no_quiz_summary["nodes_total"], 0)
+        self.assertEqual(no_quiz_summary["progress_percent"], 0)
+        self.assertIsNone(no_quiz_summary["total_quiz_score_percent"])
+        empty = self.revision("full_review")
+        self.execute(
+            "DELETE FROM revision_node_progress WHERE revision_session_id = ?",
+            (empty,),
+        )
+        empty_summary = self.manager.get_revision_summary(empty)
+        self.assertEqual(empty_summary["nodes_total"], 0)
+        self.assertEqual(empty_summary["progress_percent"], 0)
+        self.assertIsNone(empty_summary["time_spent_seconds"])
+        self.assertIsNone(empty_summary["total_quiz_score_percent"])
+        self.assertEqual(self.manager.get_revision_session(empty)["status"],
+                         "in_progress")
+
 
 def main() -> None:
     unittest.main()
