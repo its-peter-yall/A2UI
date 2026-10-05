@@ -264,9 +264,29 @@ class MongoLearningTests(unittest.TestCase):
         }
         self.database["revision_sessions"].count_documents.return_value = 0
         self.database["concept_nodes"].find.return_value = [
-            {"_id": "n1", "title": "One", "sequence_index": 0},
-            {"_id": "n2", "title": "Two", "sequence_index": 1},
+            {
+                "_id": "n1", "learning_session_id": "s1",
+                "title": "One", "sequence_index": 0,
+            },
+            {
+                "_id": "n2", "learning_session_id": "s1",
+                "title": "Two", "sequence_index": 1,
+            },
         ]
+        revisions = self.database["revision_sessions"]
+        progress_collection = self.database["revision_node_progress"]
+        revisions.insert_one.side_effect = (
+            lambda document: setattr(
+                revisions.find_one, "return_value", dict(document),
+            )
+        )
+        progress_collection.insert_many.side_effect = (
+            lambda documents: setattr(
+                progress_collection.find, "return_value", documents,
+            )
+        )
+        self.database["quiz_data"].find.return_value = []
+        self.database["quiz_attempts"].find.return_value = []
         revision = self.repository.create_revision_session(
             "s1",
             "full_review",
@@ -274,6 +294,12 @@ class MongoLearningTests(unittest.TestCase):
         inserts = self.database["revision_node_progress"].insert_many.call_args.args[0]
         self.assertEqual(len(inserts), 2)
         self.assertEqual(revision["revision_number"], 1)
+        for progress in inserts:
+            self.assertIn("content_reviewed_at", progress)
+            self.assertIsNone(progress["content_reviewed_at"])
+        self.assertEqual(revision["nodes"][0]["quiz_count"], 0)
+        self.assertEqual(revision["nodes"][0]["quiz_results"], [])
+        self.assertEqual(revision["notices"], [])
 
     def _wire_transaction_session(self) -> MagicMock:
         """Mock client.start_session + start_transaction like mongo_jobs."""

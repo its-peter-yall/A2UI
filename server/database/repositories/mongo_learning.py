@@ -1248,44 +1248,24 @@ class MongoLearningRepository:
             "completed_at": None,
         }
         self._revisions.insert_one(revision_doc)
-        progress_rows: list[dict[str, Any]] = []
         progress_docs: list[dict[str, Any]] = []
         for node in nodes:
-            progress_id = str(uuid.uuid4())
             progress_docs.append(
                 {
-                    "_id": progress_id,
+                    "_id": str(uuid.uuid4()),
                     "revision_session_id": revision_id,
                     "node_id": node["_id"],
                     "status": "pending",
                     "reviewed_at": None,
-                }
-            )
-            progress_rows.append(
-                {
-                    "id": progress_id,
-                    "revision_session_id": revision_id,
-                    "node_id": node["_id"],
-                    "node_title": node.get("title"),
-                    "sequence_index": int(node.get("sequence_index") or 0),
-                    "status": "pending",
-                    "reviewed_at": None,
+                    "content_reviewed_at": None,
                 }
             )
         if progress_docs:
             self._revision_nodes.insert_many(progress_docs)
-        return {
-            "id": revision_id,
-            "original_session_id": original_session_id,
-            "revision_number": revision_number,
-            "mode": mode,
-            "status": "in_progress",
-            "progress_percent": 0,
-            "total_quiz_score_percent": None,
-            "started_at": now,
-            "completed_at": None,
-            "nodes": progress_rows,
-        }
+        created = self.get_revision_session(revision_id)
+        if created is None:
+            raise RuntimeError('Created revision could not be loaded')
+        return created
 
     def get_revisions_for_session(
         self,
@@ -1423,32 +1403,49 @@ class MongoLearningRepository:
         revision_id: str,
         node_id: str,
     ) -> dict[str, Any]:
-        revision = self._revisions.find_one({"_id": revision_id})
-        if revision is None:
-            raise LookupError(f"Revision session not found: {revision_id}")
-        if revision.get("mode") != "full_review":
-            raise ValueError(
-                "mark-reviewed is only allowed for full_review revisions"
-            )
-        now = utc_iso()
-        updated = self._revision_nodes.find_one_and_update(
-            {"revision_session_id": revision_id, "node_id": node_id},
-            {"$set": {"status": "reviewed", "reviewed_at": now}},
-            return_document=ReturnDocument.AFTER,
+        document, batch, target = self._revision_mutation_inputs(
+            revision_id, node_id,
         )
-        if updated is None:
-            raise LookupError(
-                f"Revision node not found for revision {revision_id}: "
-                f"{node_id}"
+        if document['mode'] != 'full_review':
+            raise ValueError('mark-reviewed requires full_review')
+        revision, nodes, attempts = self._prepare_revision_write(batch)
+        details = next(node for node in batch[3].nodes
+                       if node.node_id == node_id)
+        if not target.explicit_review_present:
+            self._revision_nodes.update_one({
+                '_id': target.id,
+                'content_reviewed_at': {'$exists': False},
+            }, {'$set': {
+                'content_reviewed_at': (
+                    details.content_reviewed_at.isoformat()
+                    if details.content_reviewed_at is not None else None
+                ),
+            }})
+        now = utc_iso()
+        self._revision_nodes.update_one({
+            '_id': target.id, 'content_reviewed_at': None,
+        }, {'$set': {
+            'content_reviewed_at': now, 'status': 'reviewed',
+            'reviewed_at': now,
+        }})
+        # Pre-write reconciliation may have cleared a disproven timestamp.
+        current = dict(document)
+        current['status'] = revision.stored_status
+        current['completed_at'] = (
+            revision.stored_completed_at.isoformat()
+            if revision.stored_completed_at is not None else None
+        )
+        projection = self._load_revision_batch([current])[revision_id][3]
+        try:
+            self._persist_revision_projection(revision_id, projection)
+        except PyMongoError as error:
+            logger.warning(
+                'Revision aggregate deferred revision_id=%s error_type=%s',
+                revision_id, type(error).__name__,
             )
-        self._update_revision_progress(revision_id)
-        return {
-            "id": updated["_id"],
-            "revision_session_id": updated["revision_session_id"],
-            "node_id": updated["node_id"],
-            "status": updated["status"],
-            "reviewed_at": updated["reviewed_at"],
-        }
+        updated = next(node for node in projection.nodes
+                       if node.node_id == node_id)
+        return updated.model_dump(mode='json')
 
     def submit_revision_quiz(
         self,

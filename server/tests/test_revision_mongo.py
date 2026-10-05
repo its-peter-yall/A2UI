@@ -485,6 +485,137 @@ class RevisionMongoTests(unittest.TestCase):
             '2026-10-05T11:00:00Z',
         )
 
+    def test_full_review_is_explicit_idempotent_and_quiz_independent(
+        self,
+    ) -> None:
+        self.db.rows['revision_sessions'][0]['mode'] = 'full_review'
+        before = copy.deepcopy([
+            self.db.rows[name] for name in
+            ('learning_sessions', 'concept_nodes', 'quiz_data')
+        ])
+        self.repo.submit_revision_quiz('r1', 'n1', ['q0-0'])
+        self.assertEqual(self.repo.get_revision_session('r1')
+                         ['progress_percent'], 0)
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=FIRST):
+            reviewed = self.repo.mark_revision_node_reviewed('r1', 'n1')
+        RevisionNodeProgressWithDetails.model_validate(reviewed)
+        self.assertEqual(reviewed['status'], 'reviewed')
+        self.assertEqual(reviewed['content_reviewed_at'],
+                         '2026-10-05T10:00:00Z')
+        self.assertEqual(reviewed['quiz_count'], 2)
+        self.assertEqual(len(reviewed['quiz_results']), 1)
+        self.assertNotIn('revision_session_id', reviewed)
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=THIRD):
+            again = self.repo.mark_revision_node_reviewed('r1', 'n1')
+            wrong = self.repo.submit_revision_quiz('r1', 'n1', ['q1-1'], 1)
+        self.assertEqual(again['content_reviewed_at'],
+                         reviewed['content_reviewed_at'])
+        self.assertEqual(wrong['revision_node_status'], 'reviewed')
+        self.assertEqual(self.repo.get_revision_session('r1')['completed_at'],
+                         '2026-10-05T10:00:00Z')
+        self.assertEqual([
+            self.db.rows[name] for name in
+            ('learning_sessions', 'concept_nodes', 'quiz_data')
+        ], before)
+
+    def test_legacy_review_inference_only_for_absent_reviewed_field(
+        self,
+    ) -> None:
+        self.db.rows['revision_sessions'][0]['mode'] = 'full_review'
+        progress = self.db.rows['revision_node_progress'][0]
+        progress.pop('content_reviewed_at')
+        progress.update(status='reviewed', reviewed_at=FIRST)
+        restored = self.repo.get_revision_session('r1')
+        self.assertEqual(restored['notices'][0]['code'],
+                         'legacy_review_inferred')
+        with patch('server.database.repositories.mongo_learning.utc_iso',
+                   return_value=THIRD):
+            reviewed = self.repo.mark_revision_node_reviewed('r1', 'n1')
+        self.assertEqual(reviewed['content_reviewed_at'],
+                         '2026-10-05T10:00:00Z')
+        self.assertEqual(progress['content_reviewed_at'],
+                         '2026-10-05T10:00:00+00:00')
+        self.assertEqual(self.repo.mark_revision_node_reviewed('r1', 'n1')
+                         ['content_reviewed_at'], reviewed['content_reviewed_at'])
+        self.db['revision_node_progress'].update_one.assert_any_call(
+            {'_id': 'p1', 'content_reviewed_at': {'$exists': False}},
+            {'$set': {'content_reviewed_at': FIRST}},
+        )
+        for status, reviewed_at, present, expected in (
+            ('reviewed', None, False, '2026-10-05T09:00:00Z'),
+            ('quiz_passed', FIRST, False, None),
+            ('quiz_failed', FIRST, False, None),
+            ('reviewed', FIRST, True, None),
+        ):
+            with self.subTest(status=status, present=present):
+                progress.pop('content_reviewed_at', None)
+                progress.update(status=status, reviewed_at=reviewed_at)
+                if present:
+                    progress['content_reviewed_at'] = None
+                node = self.repo.get_revision_session('r1')['nodes'][0]
+                self.assertEqual(node['content_reviewed_at'], expected)
+                self.assertEqual(node['status'],
+                                 'pending' if expected is None else 'reviewed')
+        progress.update(status='quiz_passed', reviewed_at=FIRST)
+        self.repo.submit_revision_quiz('r1', 'n1', ['q0-0'])
+        restored = self.repo.get_revision_session('r1')
+        self.assertIsNone(restored['nodes'][0]['content_reviewed_at'])
+        self.assertIn('legacy_review_required', [
+            notice['code'] for notice in restored['notices']
+        ])
+
+    def test_review_mode_membership_and_source_failure_write_nothing(
+        self,
+    ) -> None:
+        before = copy.deepcopy(self.db.rows)
+        with self.assertRaises(ValueError):
+            self.repo.mark_revision_node_reviewed('r1', 'n1')
+        self.assertEqual(self.db.rows, before)
+        self.db.rows['revision_sessions'][0]['mode'] = 'full_review'
+        for revision, node in (('missing', 'n1'), ('r1', 'missing')):
+            before = copy.deepcopy(self.db.rows)
+            with self.assertRaises(LookupError):
+                self.repo.mark_revision_node_reviewed(revision, node)
+            self.assertEqual(self.db.rows, before)
+        before = copy.deepcopy(self.db.rows)
+        self.db['revision_node_progress'].update_one.side_effect = (
+            AutoReconnect('simulated review failure')
+        )
+        with self.assertRaises(AutoReconnect):
+            self.repo.mark_revision_node_reviewed('r1', 'n1')
+        self.assertEqual(self.db.rows, before)
+
+    def test_committed_review_recovers_after_aggregate_interruption(
+        self,
+    ) -> None:
+        self.db.rows['revision_sessions'][0]['mode'] = 'full_review'
+        self.db['revision_sessions'].update_one.side_effect = AutoReconnect(
+            'simulated aggregate failure'
+        )
+        reviewed = self.repo.mark_revision_node_reviewed('r1', 'n1')
+        self.assertEqual(reviewed['status'], 'reviewed')
+        restored = self.repo.get_revision_session('r1')
+        self.assertEqual(restored['progress_percent'], 100)
+        self.assertEqual(restored['nodes'][0], reviewed)
+        self.assertEqual(self.repo.get_revision_summary('r1')
+                         ['nodes_reviewed'], 1)
+
+    def test_new_revision_starts_explicitly_unreviewed_unanswered(
+        self,
+    ) -> None:
+        self.db.rows['quiz_attempts'] = [attempt('older')]
+        created = self.repo.create_revision_session('s1', 'full_review')
+        RevisionSessionWithProgress.model_validate(created)
+        self.assertEqual(created['nodes'][0]['quiz_results'], [])
+        self.assertIsNone(created['nodes'][0]['content_reviewed_at'])
+        progress = self.db.rows['revision_node_progress'][-1]
+        self.assertIn('content_reviewed_at', progress)
+        self.assertIsNone(progress['content_reviewed_at'])
+        self.assertEqual(created['notices'], [])
+        self.assertEqual(created['progress_percent'], 0)
+
 
 def main() -> None:
     unittest.main()
