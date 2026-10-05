@@ -166,11 +166,18 @@ vi.mock('./providerSettings', () => ({
 
 import {
   cancelGeneration,
+  createRevisionSession,
   deleteSession,
   generateCourse,
   getCourseResearch,
   getLearningSession,
+  getRevisionsList,
+  getRevisionSession,
+  getRevisionSummary,
+  markNodeReviewed,
   resumeGeneration,
+  submitQuiz,
+  submitRevisionQuiz,
 } from './learningApi';
 
 function lastRequestConfig() {
@@ -222,6 +229,38 @@ describe('learningApi secret scope', () => {
       'X-Generator-Model': expect.any(String),
       'X-Quizzer-Model': expect.any(String),
     });
+  });
+
+  it.each([
+    ['createRevisionSession', () => createRevisionSession('session-1', { mode: 'full_review' })],
+    ['getRevisionSession', () => getRevisionSession('rev-1')],
+    ['getRevisionSummary', () => getRevisionSummary('rev-1')],
+    ['getRevisionsList', () => getRevisionsList('session-1', 20, 0)],
+    ['markNodeReviewed', () => markNodeReviewed('rev-1', 'node-1')],
+    ['submitRevisionQuiz', () => submitRevisionQuiz('rev-1', 'node-1', ['stable-id'], 1)],
+    ['submitQuiz', () => submitQuiz('node-1', ['stable-id'], 0)],
+  ])('%s remains credential-free', async (_name, invoke) => {
+    await invoke();
+    expect(JSON.stringify(lastRequestConfig()?.headers ?? {})).not.toMatch(
+      /Authorization|X-Provider-Api-Key|X-OpenRouter-Key|X-GeneralCompute-Key|X-Tavily-Key|X-Exa-Key|X-Brave-Key|X-SerpApi-Key|llm-secret|tvly-secret/i,
+    );
+  });
+
+  it('passes cancellation signals only as transport configuration', async () => {
+    const controller = new AbortController();
+    await getRevisionSession('rev-1', controller.signal);
+    expect(mocks.instance.get).toHaveBeenLastCalledWith(
+      '/learning/revisions/rev-1', { signal: controller.signal },
+    );
+    await getRevisionSummary('rev-1', controller.signal);
+    expect(mocks.instance.get).toHaveBeenLastCalledWith(
+      '/learning/revisions/rev-1/summary', { signal: controller.signal },
+    );
+    await submitRevisionQuiz('rev-1', 'node-1', ['stable-id'], 1);
+    expect(mocks.instance.post).toHaveBeenLastCalledWith(
+      '/learning/revisions/rev-1/nodes/node-1/submit-quiz',
+      { selected_option_ids: ['stable-id'], quiz_index: 1 },
+    );
   });
 });
 

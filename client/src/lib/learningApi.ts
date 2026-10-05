@@ -281,10 +281,16 @@ export const getSessionsList = async (
 
 export const getRevisionSession = async (
   revisionId: string,
+  signal?: AbortSignal,
 ): Promise<RevisionSessionWithProgress> => {
-  const response = await api.get<RevisionSessionWithProgress>(
-    `/learning/revisions/${revisionId}`,
-  );
+  const response = signal
+    ? await api.get<RevisionSessionWithProgress>(
+        `/learning/revisions/${revisionId}`,
+        { signal },
+      )
+    : await api.get<RevisionSessionWithProgress>(
+        `/learning/revisions/${revisionId}`,
+      );
   return response.data;
 };
 
@@ -313,10 +319,16 @@ export const submitRevisionQuiz = async (
 
 export const getRevisionSummary = async (
   revisionId: string,
+  signal?: AbortSignal,
 ): Promise<RevisionSummary> => {
-  const response = await api.get<RevisionSummary>(
-    `/learning/revisions/${revisionId}/summary`,
-  );
+  const response = signal
+    ? await api.get<RevisionSummary>(
+        `/learning/revisions/${revisionId}/summary`,
+        { signal },
+      )
+    : await api.get<RevisionSummary>(
+        `/learning/revisions/${revisionId}/summary`,
+      );
   return response.data;
 };
 

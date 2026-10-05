@@ -30,10 +30,12 @@ import { useQuery } from '@tanstack/react-query';
 import { getRevisionSession } from '@/lib/learningApi';
 
 /**
- * Query key factory for revision sessions.
+ * Query key factory for revision sessions, summaries, and per-session lists.
  */
 export const revisionQueryKeys = {
   session: (revisionId: string) => ['revision', revisionId] as const,
+  summary: (revisionId: string) => ['revision-summary', revisionId] as const,
+  list: (sessionId: string) => ['revisions', sessionId] as const,
 } as const;
 
 /**
@@ -45,7 +47,7 @@ export const revisionQueryKeys = {
 export function useRevisionSession(revisionId: string) {
   return useQuery({
     queryKey: revisionQueryKeys.session(revisionId),
-    queryFn: () => getRevisionSession(revisionId),
+    queryFn: ({ signal }) => getRevisionSession(revisionId, signal),
     enabled: !!revisionId,
     staleTime: 30_000,
   });
