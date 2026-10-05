@@ -5,12 +5,12 @@ status: in-progress
 skipped_phases: [review]
 goal_status: approved
 design_status: approved
-dag_status: provisional-awaiting-research
+dag_status: complete
 current_phase: planning
-resume_gate: cleared-2026-10-04-user-approved-and-asked-to-proceed
-pause_reason: none; user approved the written goal and authorized proceeding
+resume_gate: resumed-2026-10-05-P1-P4-verified-complete
+pause_reason: none; resumed after interruption, P1-P4 verified complete, P5 pending
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-05
 ---
 
 # State & Dependency Graph: Real-Time Course Generation
@@ -36,8 +36,8 @@ updated: 2026-10-04
 
 - [x] Step 1: Brainstorming & Goal Alignment (goal committed 33df5dc; approved by user)
 - [x] Step 2: Technical Research (`docs/realtime-course-generation/research.md`, commit dea0894; reconciled above)
-- [ ] Step 3: Planning Completed (plan1.md done `5655061`; P2/P3/P4 planners dispatched)
-- [ ] Step 4: Execution Completed (P1 worker done and verified; P2/P3/P4 pending)
+- [#] Step 3: Planning Completed (plan1-plan4 done: 5655061, d0ae0d2, 4989928, b2e42eb; plan5 pending)
+- [#] Step 4: Execution Completed (P1, P2, P3, P4 workers complete and verified; P5 pending)
 - [x] Step 5: Unified Code Review (Skipped via --skip review; no reviewer dispatch)
 - [ ] Step 6: Final Verification & Report (`docs/realtime-course-generation/final_report.md`)
 
@@ -122,10 +122,10 @@ Goal alignment notes:
 | Plan ID | Title & scope | Worker dependencies | Touched files / subsystems | Planner status | Worker status | Commits |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **P1** | Streaming contracts, `create_partial` agent path, broadcaster, replay foundation | None | `server/schemas/progress.py`, `server/utils/instructor_client.py`, `server/agents/base.py`, `server/services/session_event_stream.py`, SSE framing | Done (`5655061`) | Completed | `eeebf07`, `724d527`, `c01d11b`, `d9f4472`, `b75f396`, `c195a6e`, `252d559`, `3503448` |
-| **P2** | Live research synthesis and retrieved-source updates | P1 | `server/agents/researcher.py`, `server/services/research_runner.py`, focused research tests | Dispatching (parallel foreground) | Not dispatched | None |
-| **P3** | Live curriculum and topic generation integration | P1 | `server/agents/planner.py`, `server/agents/generator.py`, `server/graph/nodes.py`, focused graph/agent tests | Dispatching (parallel foreground) | Not dispatched | None |
-| **P4** | Client streaming state, automatic overlays, topic hydration | P1 | Client contracts, `useGenerationDrafts`, SSE/reducers, `LearningPage`, `LearningPathContainer`, `CourseSourcesPanel`, `TableOfContentsModal`, `SkeletonCard`, colocated tests | Dispatching (parallel foreground) | Not dispatched | None |
-| **P5** | Integrated acceptance and verification-gate coverage | P2, P3, P4 | Dedicated server/client acceptance tests, `vitest.generation.config.ts`, `verification.md` | Not dispatched | Not dispatched; awaits P2/P3/P4 | None |
+| **P2** | Live research synthesis and retrieved-source updates | P1 | `server/agents/researcher.py`, `server/services/research_runner.py`, focused research tests | Done (`d0ae0d2`) | Completed | `fe879af`, `ef51d2e`, `fed5206`, `897ab76`, `51ef697`, `9a4823c`, `4563b1e` |
+| **P3** | Live curriculum and topic generation integration | P1 | `server/agents/planner.py`, `server/agents/generator.py`, `server/graph/nodes.py`, focused graph/agent tests | Done (`4989928`) | Completed | `2038747`, `8d011bf`, `9ea6063`, `a2cd5fe`, `f35fb2a`, `b279788`, `8414656` |
+| **P4** | Client streaming state, automatic overlays, topic hydration | P1 | Client contracts, `useGenerationDrafts`, SSE/reducers, `LearningPage`, `LearningPathContainer`, `CourseSourcesPanel`, `TableOfContentsModal`, `SkeletonCard`, colocated tests | Done (`b2e42eb`) | Completed | `7b71774`, `d9529c6`, `f618e6c`, `48a5d78`, `6afab2f`, `10d73f4`, `b30eea0`, `dcc7a27`, `9faaa4e`, `c714252`, `b3c7bd3`, `50fbf90` |
+| **P5** | Integrated acceptance and verification-gate coverage | P2, P3, P4 | `server/tests/test_realtime_generation_acceptance.py`, `client/src/features/learning/__tests__/realtimeCourseGeneration.test.tsx`, `client/vitest.generation.config.ts`, `verification.md` | Pending (planner re-dispatch required) | Not dispatched | None |
 
 ```text
 Written-goal approval + explicit proceed
@@ -252,9 +252,13 @@ evidence of A3/A5/A6. Hidden/locked learner content and quizzes retain their rul
 | Artifact | Current status | Commit record |
 | :--- | :--- | :--- |
 | `goal.md` | Written and user-approved | `33df5dc` |
-| `state.md` | Fully populated; in progress | `33df5dc`, plus the approval/resume commit for this file |
+| `state.md` | Fully populated; reconciled on resume | `33df5dc`, `47d7394`, `92c1992`, plus this resume commit |
 | `research.md` | Complete; reconciled into fixed decisions | `dea0894` |
-| `plan1.md` through `plan5.md` | Not created; blocked | None |
+| `plan1.md` | Written and executed | `5655061` |
+| `plan2.md` | Written and executed | `d0ae0d2` |
+| `plan3.md` | Written and executed | `4989928` |
+| `plan4.md` | Written and executed | `b2e42eb` |
+| `plan5.md` | Not created; planner re-dispatch pending | None |
 | `review.md` | Intentionally omitted via --skip review | Not applicable |
 | `verification.md` | Not created | None |
 | `final_report.md` | Not created | None |
@@ -289,11 +293,72 @@ Run from the stated directories and record actual results:
 
 ## Current checkpoint
 
-**P1 COMPLETE.** Plan `plan1.md` (`5655061`); worker landed 8 commits
-(`eeebf07`..`3503448`). Orchestrator re-ran the 9 focused P1 test modules: 30
-tests, OK. Landed contract: `InstructorClient.create_partial_structured`,
-`BaseAgent.generate_streaming`, `SessionLiveStreamBroadcaster`
-(`begin_target`/`publish`/`retire_target`/`subscribe`/`snapshots`/`clear_session`),
-module singleton `session_live_stream`, and the six new typed live payloads in
-`server/schemas/progress.py`. P2/P3/P4 planners now dispatching in parallel
-foreground. No client work, no paid provider calls.
+**P1, P2, P3, P4 COMPLETE AND VERIFIED.** P5 is the only remaining plan.
+
+Resume reconciles this state file against git on 2026-10-05. The prior
+checkpoint text below described P2/P3/P4 planners as "dispatching"; that was
+stale. Git evidence (45 commits since `dea0894`) shows all three planner and
+worker pairs landed and committed.
+
+Landed surface verified by `git diff --stat 92c1992..HEAD` (42 files,
++11306/-159):
+
+- P1 foundation: typed live draft contracts, `create_partial_structured`,
+  `BaseAgent.generate_streaming`, `SessionLiveStreamBroadcaster`, durable/live
+  cursor separation, bounded retention and backpressure, replay parity.
+- P2 research: accepted unique source counts, safe synthesis deltas, correction
+  reset before validated readiness, cancellation and safe failure warnings.
+- P3 curriculum/topics: live planner attempts and partials, isolated replans,
+  explanation streaming across corrections, concurrent topic isolation,
+  previews retained until durable module readiness.
+- P4 client: `useGenerationDrafts`, `useGenerationOverlays`,
+  `DraftMarkdownPreview`, `SkeletonCard`, `TableOfContentsModal`,
+  `CourseSourcesPanel`, `GenerationStatusPanel`, `useSessionEvents`,
+  `LearningPage`, `LearningPathContainer`, `types/generation.ts`, and
+  `client/vitest.generation.config.ts`.
+
+### Baseline verification (2026-10-05, actual results)
+
+| Check | Result |
+| :--- | :--- |
+| `client/`: `npm run test -- --run` | PASS - 39 files, 273 tests |
+| Repo root: `server/.venv/Scripts/python.exe -m unittest` | 547 tests, 12 errors, all pre-existing |
+
+### Pre-existing server failures (NOT realtime regressions)
+
+All 12 errors are inherited from the earlier `custom-learning-mode` workflow
+and were reproduced at the pre-workflow baseline commit `33df5dc` in a
+throwaway git worktree, where the same 12 errors occur with no realtime code
+present. Recorded separately per the goal's verification rule.
+
+| File | Failing tests | Root symptom |
+| :--- | :--- | :--- |
+| `server/tests/test_repository_contracts.py` | 2 | `NameError: name 'inspect' is not defined` - missing stdlib import in the test |
+| `server/tests/test_mongo_learning.py` | 6 | `KeyError: 'custom_topic_count'` on inserted documents |
+| `server/tests/test_depth_mode_persistence.py` | 4 | `custom_topic_count` round-trip and legacy-migration assertions |
+
+No realtime-owned module fails. P5 must not report these as passing and must
+not silently absorb them; they are candidates for a separate targeted TDD
+fix worker if the user wants them closed.
+
+### Interruption incident (2026-10-05)
+
+The first P5 planner dispatch failed with an upstream idle timeout and left
+uncommitted production edits to P4-owned files (`generationEvents.ts`,
+`LearningPage.tsx`, `index.ts` and their tests) instead of a plan. The working
+tree was verifiably clean at session start, so the drift was isolated and
+preserved as `stash@{0}` rather than committed. It introduces
+`shouldShowGenerationStatusPanel` to hide the generation strip when
+`COMPLETE`/`COMPLETE_DEGRADED` has no unfinished topics - plausible A12
+truthful-UI behavior, but unverified and out of P5 ownership. It must be
+re-derived under TDD by a scoped worker, not adopted from the stash.
+
+## Next actions
+
+1. Re-dispatch the P5 planner in the foreground to write `plan5.md`.
+2. Immediately dispatch the P5 worker once the plan is committed; P2/P3/P4
+   prerequisites are satisfied.
+3. Route any production defect P5 discovers to a targeted TDD fix worker
+   instead of fixing it inside acceptance scope.
+4. Run the full final verification matrix and write `verification.md` and
+   `final_report.md`, reporting pre-existing failures separately.
