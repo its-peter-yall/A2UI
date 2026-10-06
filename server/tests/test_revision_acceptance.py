@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import unittest
 
+from fastapi.testclient import TestClient
+
 from server.schemas.learning import RevisionQuizSubmissionResult
 from server.tests.revision_acceptance_helpers import (
-    AcceptanceFixture, route_client, wire_fixture,
+    AcceptanceFixture, create_browser_app, route_client, wire_fixture,
 )
 
 
@@ -113,6 +115,25 @@ class RevisionAcceptanceTests(unittest.TestCase):
                     )
                     self.assertIn(response.status_code, (400, 404), response.text)
                     self.assertEqual(fixture.raw_snapshot(backend), before)
+
+
+    def test_browser_factory_uses_disposable_courses_and_no_provider(self) -> None:
+        app = create_browser_app()
+        with TestClient(app) as client:
+            data = client.get("/fixture").json()
+            self.assertEqual(set(data["routes"]), {"full_review", "quiz_only"})
+            self.assertEqual(data["title"], "P7 DISPOSABLE — Review parity")
+            self.assertNotIn("api_key", str(data))
+            self.assertNotIn("a2ui.db", str(data))
+            session = data["session_id"]
+            response = client.post(
+                f"/learning/sessions/{session}/nodes/{data['node_id']}/chat",
+                json={"message": "Fixture prompt", "history": [],
+                      "selected_heading_ids": []},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertIn('"delta"', response.text)
+            self.assertIn("[DONE]", response.text)
 
 
 def main() -> None:

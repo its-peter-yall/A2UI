@@ -16,11 +16,12 @@ KEY COMPONENTS:
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 import itertools
 import json
 import sqlite3
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, asynccontextmanager, closing, contextmanager
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Iterator
@@ -28,6 +29,8 @@ from unittest.mock import patch
 from uuid import UUID
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
 from server.database.repositories.facade import RepositoryFacade
@@ -259,6 +262,98 @@ def wire_fixture(backend: str, mode: str) -> dict:
             result["submissions"] = [first, second_attempt, retry]
             result["original_after"] = fixture.raw_snapshot(backend, True)
             return result
+
+
+def create_browser_app() -> FastAPI:
+    """Return a disposable local browser target with deterministic chat."""
+    resources = ExitStack()
+    fixture = resources.enter_context(AcceptanceFixture("full_review"))
+    fixture.execute(
+        "UPDATE learning_sessions SET course_title = ?",
+        ("P7 DISPOSABLE — Review parity",),
+    )
+    with frozen_writes(START, 20):
+        fixture.manager.create_concept_node(
+            fixture.session, 1, "Topic B", "## Plain heading\n\n"
+            "Fallback paragraph without curiosity.\n\n"
+            + "\n\n".join(
+                f"Paragraph {i}: disposable scrolling content."
+                for i in range(35)
+            ),
+            NodeStatus.COMPLETED,
+        )
+        review = fixture.manager.create_revision_session(
+            fixture.session, "full_review"
+        )
+        practice = fixture.manager.create_revision_session(
+            fixture.session, "quiz_only"
+        )
+    paragraphs = "\n\n".join(f"Scroll paragraph {i}." for i in range(35))
+    fixture.execute(
+        "UPDATE concept_nodes SET content_markdown = ? WHERE id = ?",
+        ("# Foundations\n\nOriginal paragraph.\n\n" + paragraphs +
+         "\n\n## Curiosity Spark\n- Why study A?", fixture.node),
+    )
+    routes = {
+        "full_review": f"/learn/{fixture.session}/revise/{review['id']}",
+        "quiz_only": f"/learn/{fixture.session}/revise/{practice['id']}",
+    }
+
+    @contextmanager
+    def bind_ports():
+        with ExitStack() as stack:
+            stack.enter_context(patch(
+                "server.routers.learning.learning_manager",
+                RepositoryFacade(lambda: fixture.repositories["sqlite"]),
+            ))
+            stack.enter_context(patch(
+                "server.routers.learning.generation_job_store",
+                SimpleNamespace(to_public_by_session=lambda _: None),
+            ))
+            stack.enter_context(patch(
+                "server.routers.learning.research_store",
+                SimpleNamespace(get_citations_by_session=lambda _: {}),
+            ))
+            yield
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        try:
+            with bind_ports():
+                yield
+        finally:
+            resources.close()
+
+    app = FastAPI(lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5178", "http://127.0.0.1:5178"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.get("/fixture")
+    def fixture_info() -> dict:
+        return {
+            "title": "P7 DISPOSABLE — Review parity",
+            "routes": routes,
+            "session_id": fixture.session,
+            "node_id": fixture.node,
+        }
+
+    @app.post("/learning/sessions/{session_id}/nodes/{node_id}/chat")
+    async def fixture_chat(session_id: str, node_id: str):
+        async def frames():
+            for index in range(40):
+                text = f"Deterministic {node_id} response {index}.\n\n"
+                yield f"data: {json.dumps({'delta': text})}\n\n"
+                await asyncio.sleep(0.15)
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(frames(), media_type="text/event-stream")
+
+    # First-match test-only chat route precedes the production router.
+    app.include_router(router)
+    return app
 
 
 def main() -> None:
