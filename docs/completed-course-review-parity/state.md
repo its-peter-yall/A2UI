@@ -9,11 +9,11 @@ design_status: approved
 dag_status: complete
 dag_execution: in-progress
 resume_gate: authorized
-current_phase: planning
-pause_reason: cleared 2026-10-05 by explicit user approval of goal.md and the DAG
+current_phase: defect-resolution
+pause_reason: none
 planner_dispatch: foreground parallel only; plans carry no doc headers
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # State & Dependency Graph: Completed-Course Review Parity
@@ -40,8 +40,9 @@ updated: 2026-10-05
   resume or modify the real-time course-generation workflow as part of this task.
 - No isolated worktree was requested. Future agents share this checkout under
   the ownership and commit-serialization rules below.
-- `dag_status: complete` means the dependency graph is fully defined, not that
-  planning or implementation has happened. All seven plans remain undispatched.
+- `dag_status: complete` means the dependency graph is fully defined. All seven
+  plans and implementation workers have run; P7 acceptance surfaced two blocking
+  defects that are now assigned to their owning plans for resolution.
 
 ## Workflow milestones
 
@@ -50,8 +51,8 @@ updated: 2026-10-05
 - [x] Step 2: Technical Research (Skipped via `--skip research`).
 - [x] Step 3: Planning Completed (`plan1.md` through `plan7.md` all written and
   committed: `074ce34` `a96bb8a` `5bcb4de` `4817d61` `211ec27` `58b8231` `0153f92`).
-- [ ] Step 4: Execution Completed (P1-P5 complete and independently verified;
-  P6 and P7 outstanding).
+- [ ] Step 4: Execution Completed (P1-P7 planned workers have run; P7 found
+  two blocking producer/coverage defects now in owner-directed remediation).
 - [x] Step 5: Unified Code Review (Skipped via `--skip review`).
 - [ ] Step 6: Final Verification & Report (`verification.md`, `final_report.md`).
 
@@ -137,9 +138,9 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 | **P2** | SQLite persistence, compatibility, and serialized revision API | P1 | SQLite LearningManager, revision router handlers, SQL/API tests | `[x]` `a96bb8a` | `[x]` Complete | `9d9645e` `b57758e` `1b73d6c` `44c697f` `15728ff` `0453158` `36d8c59` |
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | `[x]` Complete | `9761bb6` `b061f75` `51ae7ca` `eed5232` `a41660d` `288c7e2` `8f38386` `62dafeb` `63eb1e1` |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | `[x]` Complete | `8ecc748` `10f3133` `59e0128` `baa1821` `61a0143` |
-| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
-| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | `[x]` Complete | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` |
-| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | Planner done / waiting for P6 worker | `0153f92` |
+| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | Complete; defect fixes pending | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
+| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | Complete; A20 focus-restoration fix pending | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` |
+| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | `[x]` Complete; two producer/coverage blockers routed | `504b42d` `2c6f8db` `3062902` `1a9c5c6` `6ad8c19` `3f623f2` `3e1bda9` `8d9a961` `8346e51` |
 
 ### Execution graph
 
@@ -493,15 +494,15 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_sqlite server.tests.test_revision_api` | P2 SQL and serialized routes | PASS — 21 tests, OK, 4.315s |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_mongo_learning` (run BEFORE P3, at baseline) | Baseline check of pre-existing Mongo suite state | FAIL (PRE-EXISTING) — 16 tests, 7 errors, all `KeyError: 'custom_topic_count'`. Reproduced identically at pre-workflow commit `3c8681c` in a detached worktree; both files untouched by P1/P5. Not a workflow regression. P3 was made to fix it; see the post-P3 PASS row below. |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_mongo server.tests.test_migrate_to_mongo server.tests.test_mongo_learning` | P3 Mongo/migration, including the previously failing suite | PASS — 45 tests, OK, 0.154s. The 7 pre-existing `custom_topic_count` errors are RESOLVED by P3 (`a41660d`, `288c7e2`, `51ae7ca`). |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_repository_parity server.tests.test_revision_acceptance` | P7 cross-store acceptance | Not run |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 614 tests, OK, 70.561s (re-verified after P6) |
-| `client/` | `npm run test -- --run` | Full client regression suite | PASS (learning + revision API) — `npx vitest run src/features/learning src/lib/learningApi.test.ts`: 37 test files, 316 tests passed, 22.83s, 0 failures (re-verified after P6). Full-repo client suite deferred to the final gate. |
-| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — built in 19.75s, no type errors (re-verified after P6) |
-| `client/` | `npm run lint` | ESLint/hook checks | PASS — 0 errors, 0 warnings (clean after P6; the earlier 3 generated-`client/coverage/` warnings are gone) |
-| `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | Not run |
-| `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | Not run |
-| Running app | Full Review + Practice, desktop/mobile, right-hand chat, mixed results, refresh, repeated prefill | Actual layout/behavior evidence | Not run |
-| Repository root | `git diff --check` and staged-document checks | Documentation/source whitespace | Initialization documentation only; no application verification |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_repository_parity server.tests.test_revision_acceptance` | P7 cross-store acceptance | PASS — 10 P7 acceptance tests (included in P7 Gate 2, 76 total focused tests) |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 624 tests, OK, 82.657s at P7 verification HEAD `8d9a961` |
+| `client/` | `npm run test -- --run` | Full client regression suite | BLOCKED — 53 files / 412 tests, 410 passed, 2 failed: A20 focus restoration in both modes. Exact failing tests and owner routing in `verification.md`. |
+| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — exit 0, built in 11.43s at P7 verification HEAD `8d9a961` |
+| `client/` | `npm run lint` | ESLint/hook checks | PASS WITH GENERATED ARTIFACT WARNINGS — exit 0, 0 errors, 3 warnings from untracked generated `client/coverage/revision/*.js` report helpers |
+| `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | BLOCKED — 19 files / 169 tests, 167 passed / 2 A20 failures; 4/5 units pass, `useConceptChatPanel.ts` branches 73.68% < 81%. P5 remediation pending. |
+| `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | BLOCKED by same 2 A20 tests (410/412 pass); generation coverage threshold itself passed; config unchanged by P7 |
+| Running app | Full Review + Practice, desktop/mobile, right-hand chat, mixed results, refresh, repeated prefill | Actual layout/behavior evidence | CAPTURED using disposable app/SQLite data: `p7-full-review-desktop.png`, `p7-full-review-mobile.png`, `p7-practice-desktop.png`, `p7-practice-mobile.png`; details and limitations in `verification.md` |
+| Repository root | `git diff --check` and staged-document checks | Documentation/source whitespace | PASS — `git diff --check` exit 0 at P7 verification |
 
 - Measure baseline tests/build/lint after approval, using a verifier subagent
   if needed, before implementation obscures pre-existing failures. Baseline
@@ -531,8 +532,8 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | `plan6.md` | Written | `58b8231` |
 | `plan7.md` | Written | `0153f92` |
 | `review.md` | Skipped; do not create | None |
-| `verification.md` | Pending P7/final gate | None |
-| `final_report.md` | Pending final verification | None |
+| `verification.md` | P7 evidence complete; honest blocked verdict and owner-routed defects recorded | `8346e51` |
+| `final_report.md` | Pending defect fixes and final reruns | None |
 
 Planner commits `074ce34` (P1) and `211ec27` (P5) are recorded and verified as
 single-file, path-scoped commits. P1 worker commits: `34f01e5` `dac308a`
@@ -554,10 +555,10 @@ The orchestrator verified this is PRE-EXISTING, not caused by P1-P5:
 touched by this workflow), and running the suite from a detached worktree at the
 pre-workflow commit `3c8681c` reproduces the identical 7 errors.
 
-P3 owns the narrow regression fixtures for this file. It must fix or explicitly
-isolate these failures within its own scope and must NOT report them as a pass.
-This baseline is recorded per the rule that pre-existing failures are reported
-separately and never disguised.
+P3 fixed this within its scope. The 45-test P3 Mongo/migration suite and the full
+614-test server suite pass after that fix. P7 reran the expanded full suite at
+624 tests and all passed; this baseline remains recorded as historical context,
+not a current failure.
 
 ## Unrelated stash observed (left untouched)
 
@@ -584,8 +585,8 @@ change pauses affected downstream work and must be coordinated here first.
   an ID tie-breaker.
 - `revision_node_status` is a mode-aware aggregate topic state and is explicitly
   NOT the per-quiz correctness indicator.
-- Repository-adapter integration remains PENDING in P2 (SQLite) and P3 (Mongo);
-  P1 deliberately stopped at contracts and pure projection.
+- Repository-adapter integration is COMPLETE in P2 (SQLite) and P3 (Mongo), and
+  was verified in P7's cross-store parity and serialized-wire acceptance tests.
 
 ## P5 handoff interfaces (recorded for P6)
 
@@ -609,44 +610,63 @@ change pauses affected downstream work and must be coordinated here first.
 - `ChatPanel` now displays the chat topic title and supports repeated prefill of
   the same curiosity question after a previous prefill was consumed and after
   close/reopen, without auto-sending.
-- Revision-page wiring of these interfaces remains PENDING in P6; P5 did not
-  touch `RevisionPage.tsx`.
+- Revision-page wiring was completed by P6. P7 uncovered the focus-return issue
+  caused by how the revision page mounts/unmounts its chat trigger; see the
+  defect-remediation handoff below.
+
+## P7 defect-remediation handoff
+
+P7 is complete as an evidence phase, but the feature is NOT complete. Its ledger
+at `docs/completed-course-review-parity/verification.md` identifies two blockers.
+The orchestrator independently reproduced the A20 `full_review` focus failure
+with the exact targeted Vitest command; P7 also reproduced the same issue in both
+modes and in a disposable live browser. Do not change P7 evidence/tests to make
+the failures disappear without a producer fix.
+
+| Defect | Root cause / reproduction | Owner and allowed files | Required TDD resolution |
+| --- | --- | --- | --- |
+| A20 focus restore fails on Escape in both modes | `RevisionPage.tsx` conditionally removes the `Open concept chat` FAB while chat is open (`!chat.isOpen && currentNode`). `ChatPanel` captures `document.activeElement` after that commit, so its previous-focus ref is BODY; closing restores focus to BODY instead of the invoking control. P7 assertion fails at `completedCourseReviewParity.test.tsx` focus assertion; orchestrator reproduced `full_review` failure on 2026-10-06. | P6; `RevisionPage.tsx`, `RevisionPage.test.tsx` only. Do not edit P5 `ChatPanel.tsx` or P7 test. | Add/verify a regression proving FAB focus after Escape; keep the trigger mounted or otherwise retain an actual focusable invoker without changing modal accessibility. Run both P7 A20 mode cases and P6 tests. |
+| Focused revision coverage below threshold | P7 coverage run reports `useConceptChatPanel.ts` branch coverage 73.68% (28/38), below 81%. Remaining public-hook fallback/title-fill branches are unreachable through production UI; P7's two extra reachable UI paths were already added but did not meet the threshold. | P5; `useConceptChatPanel.test.ts` only unless investigation shows a production defect. | Add direct hook tests covering public `openChat`, `askQuestion`, and `toggleHeadingChat` same-node/title-fallback cases. Do not reduce the 81% per-file threshold, remove coverage includes, or add ignores. Rerun the focused revision coverage command. |
+
+Both follow-up workers must use TDD, stay in their assigned files, and serialize
+commits through `Local\A2UI_completed_course_review_parity_git`. Once they report,
+independently verify commits and rerun the ledger's blocked commands: targeted A20
+tests, full client suite, revision coverage, generation coverage, build/lint, plus
+full server suite if any server-affecting changes occur. Update `verification.md`
+with post-fix evidence; do not mark final completion until all required gates pass.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: EXECUTION WAVE 4 — P7 WORKER READY TO DISPATCH.**
+**CURRENT GATE: DEFECT RESOLUTION — P5/P6 FOLLOW-UP WORKERS READY TO DISPATCH.**
 
-P1 and P5 are complete. Planner commits `074ce34` and `211ec27`; P1 worker
-`34f01e5` `dac308a` `05e13f0` `fffaf88` `24a882d` `b0eb4ce`; P5 worker `9933d74`
-`e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a`. The
-orchestrator independently re-ran the P1 server suites (27 tests, OK), the P1/P5
-focused client suites (57 tests, 8 files), `npm run build`, and `npm run lint`;
-results are in the evidence table. P1 and P5 handoff interfaces are recorded
-above for downstream planners.
+P1-P6 planned workers have completed; P7 completed its acceptance/evidence phase
+and committed the test harness, four disposable-browser screenshots, coverage
+config, and `verification.md` (`504b42d` through `8346e51`). The P7 ledger is the
+authoritative record of detailed commands and outcomes. Current result summary:
+server 624/624 pass; full client 410/412 pass with two A20 focus failures; focused
+revision coverage 4/5 units pass while P5's `useConceptChatPanel.ts` branch
+coverage is 73.68% against an 81% threshold; build passes; lint passes with three
+generated coverage-report warnings; browser evidence exists for both modes at
+desktop and mobile sizes.
 
-Because P1 is complete, the P2, P3, and P4 planning gates are now open. Remaining
-steps, in order:
+Remaining steps, in order:
 
-1. DONE — P2/P3/P4 planners committed `a96bb8a`, `5bcb4de`, `4817d61`; their
-   workers completed and were independently re-verified by the orchestrator.
-2. DONE — P3 RESOLVED the 7 pre-existing `custom_topic_count` errors; the full
-   614-test server suite and the 45-test Mongo/migration suite now pass.
-3. DONE — P6 and P7 planners dispatched concurrently in foreground; committed
-   `58b8231` (12 TDD tasks, 59 steps) and `0153f92` (1869 lines). The P6 worker
-   was dispatched immediately because P1, P4, and P5 are complete. The P7 worker
-   is HELD until the P6 worker completes, because P7 consumes the finished P6
-   behavior in its browser-like acceptance suite.
-4. DONE — P6 worker completed (`93a7eb5` through `b022199`, 11 commits).
-   Orchestrator re-verified: 316 client tests / 37 files pass, full 614-test server
-   suite passes, `npm run build` passes, `npm run lint` is clean.
-5. Dispatch the P7 worker immediately. P7 owns acceptance/parity suites, the
-   focused revision coverage config, browser evidence, and `verification.md`.
-6. Route any defect P7 discovers back to its owning plan's TDD worker; no
-   production fixes belong to P7. Then complete the remaining final gates:
-   full-repo client suite and `npm run test:generation:coverage`.
-7. Write/commit `final_report.md`, mark actual milestones complete, set
-   `status: complete` and `current_phase: complete`, add a non-destructive git
-   note, and report verified outcomes and remaining caveats to the user.
+1. Dispatch a P5-owned hook-test worker to cover the remaining
+   `useConceptChatPanel.ts` branches without changing the production hook or
+   weakening the 81% threshold. It owns only
+   `client/src/features/learning/useConceptChatPanel.test.ts`.
+2. Dispatch a P6-owned focus-restoration worker to keep the revision chat opener
+   available as the real focus-return target; it owns only
+   `RevisionPage.tsx` and `RevisionPage.test.tsx`. The P7 A20 regression remains
+   unchanged and is the acceptance-level reproduction.
+3. Verify each defect with TDD owner tests, then independently rerun the affected
+   A20 cases, full client suite, focused revision coverage, generation coverage,
+   build/lint, and final server suite. Update `verification.md` with exact
+   post-fix evidence and preserve the P7 browser evidence/limitations.
+4. If any gate still fails, route it to the owning worker; do not declare it
+   complete. Once every blocker is green, commit final verification updates and
+   `final_report.md`, mark milestones complete, set `status: complete` and
+   `current_phase: complete`, add a non-destructive git note, and report outcomes.
 
 If interrupted, load the `resume` skill and resume from this state plus reported
 commits/status, without rereading plans/research in the orchestrator. Recorded
