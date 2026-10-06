@@ -248,6 +248,207 @@ async function completeReading() {
   await screen.findByRole('heading', { name: 'Topic A' });
 }
 
+describe('chat ownership and lifecycle', () => {
+  it('A11/A12/A20: repeated prefill never sends; headings and explicit retarget own the conversation', async () => {
+    const h = mountRevision('full_review');
+    const stream = chatStream();
+    seedChat(h.wire.original.id, h.wire.original.nodes[1].id, 'Preserved B history');
+    await screen.findByRole('heading', { name: 'Topic A' });
+    const question = screen.getByRole('button', { name: 'Why study A?' });
+    fireEvent.click(question);
+    const composer = await screen.findByRole('textbox', { name: 'Ask a question about this concept' });
+    expect(composer).toHaveValue('Why study A?');
+    await waitFor(() => expect(composer).toHaveFocus());
+    const renderedQuestion = screen.getAllByText('Why study A?')
+      .filter((match) => match.tagName !== 'TEXTAREA');
+    expect(renderedQuestion).toHaveLength(1);
+    expect(renderedQuestion[0].closest('button')).not.toBeNull();
+    expect(transport.stream).not.toHaveBeenCalled();
+    fireEvent.change(composer, { target: { value: 'Different draft' } });
+    fireEvent.click(question);
+    expect(composer).toHaveValue('Why study A?');
+    fireEvent.click(screen.getByRole('button', { name: 'Chat about "Foundations"' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(stream.calls).toHaveLength(1));
+    expect(stream.calls[0].nodeId).toBe(h.wire.original.nodes[0].id);
+    const heading = screen.getByRole('button', { name: 'Chat about "Foundations"' }).closest('[data-heading-id]');
+    const headingId = heading?.getAttribute('data-heading-id');
+    if (!headingId) throw new Error('Real Markdown heading ID missing');
+    expect(stream.calls[0].selectedHeadingIds).toEqual([headingId]);
+    fireEvent.click(question);
+    expect(composer).toHaveValue('Why study A?');
+    expect(transport.stream).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Stop streaming' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next topic' }));
+    await screen.findByRole('heading', { name: 'Topic B' });
+    expect(screen.getByRole('dialog', { name: 'Chat: Topic A' })).toBeInTheDocument();
+    expect(stream.calls[0].signal?.aborted).toBe(false);
+    expect(screen.getByText('Fallback paragraph without curiosity.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Why study A?' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chat about "Plain heading"' }));
+    await screen.findByRole('dialog', { name: 'Chat: Topic B' });
+    expect(stream.calls[0].signal?.aborted).toBe(true);
+    expect(screen.getByText('Preserved B history')).toBeInTheDocument();
+    act(() => { stream.calls[0].onDelta('Forbidden late A delta'); });
+    expect(screen.queryByText('Forbidden late A delta')).not.toBeInTheDocument();
+    const bComposer = screen.getByRole('textbox');
+    fireEvent.change(bComposer, { target: { value: 'B question' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await waitFor(() => expect(stream.calls).toHaveLength(2));
+    expect(stream.calls[1].nodeId).toBe(h.wire.original.nodes[1].id);
+    expect(stream.calls[1].selectedHeadingIds).not.toContain(headingId);
+    await act(async () => { stream.finish(1, 'B answer'); });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Chat: Topic B' })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Open concept chat' }));
+    await screen.findByText('B answer');
+    expect(localStorage.getItem(`concept_chat_${h.wire.original.id}_${h.wire.original.nodes[1].id}`)).toContain('B answer');
+  });
+
+  it.each<RevisionMode>(['full_review', 'quiz_only'])('A20: %s completion/re-entry preserve chat and expiry still applies', async (mode) => {
+    const original = wires[mode].original;
+    const key = `concept_chat_${original.id}_${original.nodes[0].id}`;
+    seedChat(original.id, original.nodes[0].id, 'Saved through completion');
+    const h = mountRevision(mode, wires[mode].mixed);
+    await screen.findByRole('button', { name: 'Open concept chat' });
+    const opener = screen.getByRole('button', { name: 'Open concept chat' });
+    opener.focus();
+    fireEvent.click(opener);
+    await screen.findByText('Saved through completion');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open concept chat' })).toHaveFocus());
+    expect(localStorage.getItem(key)).toContain('Saved through completion');
+    h.view.unmount();
+    seedChat(original.id, original.nodes[0].id, 'Expired fixture history', Date.now() - 3_600_001);
+    mountRevision(mode, wires[mode].mixed);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
+    await screen.findByRole('textbox');
+    expect(screen.queryByText('Expired fixture history')).not.toBeInTheDocument();
+    expect(localStorage.getItem(key)).not.toContain('Expired fixture history');
+  });
+
+  it('A13: desktop separator clamps to 25–38 and mobile uses a bounded overlay', async () => {
+    const h = mountRevision('quiz_only');
+    fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
+    const separator = await screen.findByRole('separator', { name: 'Resize chat panel' });
+    expect(separator).toHaveAttribute('aria-valuenow', '25');
+    fireEvent.keyDown(separator, { key: 'End' });
+    expect(separator).toHaveAttribute('aria-valuenow', '38');
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    expect(separator).toHaveAttribute('aria-valuenow', '38');
+    fireEvent.keyDown(separator, { key: 'Home' });
+    fireEvent.keyDown(separator, { key: 'ArrowRight' });
+    expect(separator).toHaveAttribute('aria-valuenow', '25');
+    h.view.unmount();
+    vi.stubGlobal('matchMedia', (query: string): MediaQueryList => ({
+      media: query, matches: false, onchange: null, addListener: vi.fn(), removeListener: vi.fn(),
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: () => true,
+    }));
+    mountRevision('quiz_only');
+    fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
+    expect(await screen.findByTestId('concept-chat-overlay')).toHaveClass('absolute', 'inset-0');
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close concept chat' }));
+    await waitFor(() => expect(screen.queryByTestId('concept-chat-overlay')).not.toBeInTheDocument());
+  });
+});
+
+describe('edge-case rendered contracts', () => {
+  it('A4: shuffled multiple-choice disclosure explains each correct option separately', async () => {
+    const h = mountRevision('quiz_only');
+    const card = h.wire.original.nodes[0].quiz_set?.quizzes[0];
+    if (!card) throw new Error('Expected quiz-set fixture');
+    const multi = { ...card, question_type: 'multiple_choice', options: card.options.map((option, index) => ({
+      ...option, is_correct: index === 0 || index === 2,
+    })) } satisfies NonNullable<ConceptNode['quiz']>;
+    h.view.unmount();
+    const source: LearningSessionWithNodes = { ...h.wire.original,
+      nodes: h.wire.original.nodes.map((node, index) => index === 0
+        ? { ...node, quiz_set: { quizzes: [multi], current_index: 0, shuffle_seed: null } } : node) };
+    const real = mountRevision('quiz_only', undefined, source);
+    real.holdRefetch();
+    await screen.findByRole('checkbox', { name: /Option 0/ });
+    transport.submit.mockResolvedValueOnce({ ...real.wire.submissions[1], quiz_index: 0,
+      selected_option_ids: ['q0-0'], selected_explanation: 'Explanation q0-0',
+      attempt_number: 2, quiz_attempt_count: 1 });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Option 0/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByText('Incorrect');
+    expect(screen.getByText('Your selection is incorrect.')).toBeInTheDocument();
+    expect(screen.getByText('Explanation q0-0')).toBeInTheDocument();
+    expect(screen.queryByText('Explanation q0-2')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Option 0.*wrong/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Option 2/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Option 0/ }));
+    transport.submit.mockResolvedValueOnce({ ...real.wire.submissions[0], quiz_index: 0,
+      selected_option_ids: ['q0-2', 'q0-0'], correct_option_ids: ['q0-0', 'q0-2'],
+      attempt_number: 3, quiz_attempt_count: 2 });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByText('Correct!');
+    expect(screen.getByText('Explanation q0-0')).toBeInTheDocument();
+    expect(screen.getByText('Explanation q0-2')).toBeInTheDocument();
+    expect(screen.getByText('Explanation q0-1')).toBeInTheDocument();
+    expect(transport.submit.mock.calls.at(-1)?.[2]).toEqual(['q0-2', 'q0-0']);
+    await real.releaseRefetch();
+  });
+
+  it.each<RevisionMode>(['full_review', 'quiz_only'])('A15/A16: %s notices and quizless states are visible without false completion', async (mode) => {
+    const base = wires[mode].initial;
+    const quizless: RevisionSessionWithProgress = { ...base, nodes: base.nodes.map((node) => ({
+      ...node, quiz_count: 0, quiz_results: [],
+    })), notices: [{ code: 'incompatible_attempts', node_id: base.nodes[0].node_id, attempt_count: 2 },
+      { code: 'legacy_review_required', node_id: base.nodes[0].node_id, attempt_count: 0 }] };
+    const source: LearningSessionWithNodes = { ...wires[mode].original,
+      nodes: wires[mode].original.nodes.map((node) => ({
+      ...node, quiz: null, quiz_set: null,
+    })) };
+    const h = mountRevision(mode, quizless, source);
+    await screen.findByText('No quiz available for this topic.');
+    expect(screen.queryByRole('button', { name: 'View Summary' })).not.toBeInTheDocument();
+    expect(screen.getByText(/historical attempts were retained/i)).toBeInTheDocument();
+    if (mode === 'quiz_only') {
+      expect(screen.getByText(/No practice quizzes available/i)).toBeInTheDocument();
+      expect(screen.queryByTestId('revision-full-review-content')).not.toBeInTheDocument();
+    } else {
+      expect(screen.getByRole('button', { name: 'Mark as Reviewed' })).toBeEnabled();
+      expect(screen.getByText(/explicit reading review/i)).toBeInTheDocument();
+    }
+    h.view.unmount();
+    mountRevision(mode, { ...base, nodes: [] }, {
+      ...source, nodes: [], total_nodes: 0, completed_nodes: 0,
+    });
+    await screen.findByRole('heading', { name: source.course_title });
+    expect(screen.queryByRole('button', { name: 'View Summary' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit Answer' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Revision Summary' })).not.toBeInTheDocument();
+  });
+});
+
+type StreamParams = Parameters<typeof import('@/lib/chatApi').streamConceptChat>[0];
+const streams: Array<ReturnType<typeof deferred<void>>> = [];
+function chatStream() {
+  const calls: StreamParams[] = [];
+  const gates: Array<ReturnType<typeof deferred<void>>> = [];
+  transport.stream.mockImplementation((params: StreamParams) => {
+    calls.push(params);
+    const gate = deferred<void>();
+    gates.push(gate); streams.push(gate);
+    params.signal?.addEventListener('abort', () => gate.resolve(undefined), { once: true });
+    return gate.promise;
+  });
+  return { calls, finish: (index: number, text: string) => {
+    const call = calls[index]; const gate = gates[index];
+    if (!call || !gate) throw new Error('Missing deterministic stream');
+    call.onDelta(text); gate.resolve(undefined);
+  } };
+}
+function seedChat(sessionId: string, nodeId: string, content: string, timestamp = Date.now()) {
+  localStorage.setItem(`concept_chat_${sessionId}_${nodeId}`, JSON.stringify({
+    messages: [{ role: 'assistant', content }], lastPromptTimestamp: timestamp, webSearchEnabled: false,
+  }));
+}
+
 // Framer Motion spring/exit transitions do not run deterministically in jsdom;
 // every client component test in this repository mocks the same boundary. All
 // revision components, hooks, QueryClient, and the router remain real.
@@ -427,7 +628,8 @@ beforeEach(() => {
     removeEventListener: vi.fn(), dispatchEvent: () => true,
   }));
 });
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => { for (const stream of streams.splice(0)) stream.resolve(undefined); });
   cleanup();
   for (const client of clients.splice(0)) client.clear();
   vi.restoreAllMocks();

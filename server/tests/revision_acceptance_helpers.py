@@ -83,7 +83,7 @@ class AcceptanceFixture(RevisionSqliteFixture):
             self.execute(
                 "UPDATE concept_nodes SET title = ?, content_markdown = ? "
                 "WHERE id = ?",
-                ("Topic A", "# Foundations\n\nOriginal paragraph.\n\n"
+                ("Topic A", "# Topic Overview\n\n## Foundations\n\nOriginal paragraph.\n\n"
                  "## Curiosity Spark\n- Why study A?", self.node),
             )
             self.manager.create_quiz_attempt(self.node, ["q0-1"], 0)
@@ -192,7 +192,7 @@ def wire_fixture(backend: str, mode: str) -> dict:
     with AcceptanceFixture(mode) as fixture:
         with frozen_writes(START, 20):
             second = fixture.manager.create_concept_node(
-                fixture.session, 1, "Topic B", "# Plain heading\n\n"
+                fixture.session, 1, "Topic B", "## Plain heading\n\n"
                 "Fallback paragraph without curiosity.", NodeStatus.COMPLETED,
             )["id"]
             fixture.execute(
