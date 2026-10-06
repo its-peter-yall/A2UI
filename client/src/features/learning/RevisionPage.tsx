@@ -277,6 +277,42 @@ function RevisionPageBody({
 		activeTopicTitle: currentNode?.title,
 	});
 
+	/**
+	 * The element that invoked chat, captured when an open action starts.
+	 *
+	 * ChatPanel refocuses its own captured element on desktop close, but the
+	 * sub-768px overlay unmounts the whole panel, so a close there leaves focus
+	 * on body; the page then restores this recorded opener instead.
+	 */
+	const chatOpenerRef = useRef<HTMLElement | null>(null);
+	const openChatCapturingOpener = (open: () => void) => {
+		if (!chat.isOpen) {
+			const active = document.activeElement;
+			chatOpenerRef.current =
+				active instanceof HTMLElement && active !== document.body
+					? active
+					: null;
+		}
+		open();
+	};
+
+	// Run after ChatPanel's own restore (effects run child first): recover the
+	// recorded opener only when close still left focus on body, which is the
+	// mobile-overlay unmount path, and never steal a successful restore.
+	const wasChatOpen = useRef(false);
+	useEffect(() => {
+		if (chat.isOpen) {
+			wasChatOpen.current = true;
+			return;
+		}
+		if (!wasChatOpen.current) return;
+		wasChatOpen.current = false;
+		const opener = chatOpenerRef.current;
+		chatOpenerRef.current = null;
+		if (!opener || document.activeElement !== document.body) return;
+		if (opener.isConnected) opener.focus();
+	}, [chat.isOpen]);
+
 	// Carousel navigation
 	const goToSlide = useCallback(
 		(index: number) => {
@@ -618,14 +654,22 @@ function RevisionPageBody({
 												: []
 										}
 										onToggleHeadingChat={(headingId) =>
-											chat.toggleHeadingChat(
-												headingId,
-												currentNode.id,
-												currentNode.title,
+											openChatCapturingOpener(() =>
+												chat.toggleHeadingChat(
+													headingId,
+													currentNode.id,
+													currentNode.title,
+												),
 											)
 										}
 										onAskQuestion={(question) =>
-											chat.askQuestion(question, currentNode.id, currentNode.title)
+											openChatCapturingOpener(() =>
+												chat.askQuestion(
+													question,
+													currentNode.id,
+													currentNode.title,
+												),
+											)
 										}
 									/>
 								</motion.div>
@@ -681,13 +725,28 @@ function RevisionPageBody({
 				</div>
 			)}
 
-			{/* Chat FAB - bottom-right fixed */}
-			{!chat.isOpen && currentNode && (
+			{/*
+			 * Chat FAB - bottom-right fixed. It stays mounted while chat is open
+			 * so the panel can restore focus to it on close; opacity-0 (never
+			 * hidden/invisible, which would blur it and defeat that capture)
+			 * plus pointer-events, tabindex, and aria-hidden keep it out of
+			 * pointer, keyboard, and assistive reach in that state.
+			 */}
+			{currentNode && (
 				<button
-					onClick={() => chat.openChat(currentNode.id, currentNode.title)}
-					className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center cursor-pointer"
+					onClick={() =>
+						openChatCapturingOpener(() =>
+							chat.openChat(currentNode.id, currentNode.title),
+						)
+					}
+					className={cn(
+						"fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center cursor-pointer",
+						chat.isOpen && "pointer-events-none opacity-0",
+					)}
 					aria-label="Open concept chat"
 					data-testid="revision-chat-fab"
+					aria-hidden={chat.isOpen || undefined}
+					tabIndex={chat.isOpen ? -1 : undefined}
 				>
 					<MessageCircle className="h-6 w-6" />
 				</button>

@@ -708,6 +708,69 @@ it("uses the mobile overlay without a desktop separator", async () => {
 });
 
 it.each<RevisionMode>(["full_review", "quiz_only"])(
+	"restores chat opener focus after Escape closes %s concept chat",
+	async (mode) => {
+		revisionData.mode = mode;
+		mountRevision();
+		const fab = await screen.findByTestId("revision-chat-fab");
+		fab.focus();
+		fireEvent.click(fab);
+		const composer = await screen.findByRole("textbox", {
+			name: "Ask a question about this concept",
+		});
+		await waitFor(() => expect(composer).toHaveFocus());
+		fireEvent.keyDown(document, { key: "Escape" });
+		await waitFor(() =>
+			expect(screen.getByTestId("revision-chat-fab")).toHaveFocus(),
+		);
+	},
+);
+
+it("keeps the chat opener mounted but unexposed while chat is open", async () => {
+	mountRevision();
+	const fab = await screen.findByTestId("revision-chat-fab");
+	fab.focus();
+	fireEvent.click(fab);
+	await screen.findByRole("textbox", {
+		name: "Ask a question about this concept",
+	});
+	expect(fab).toHaveAttribute("aria-hidden", "true");
+	expect(fab).toHaveAttribute("tabindex", "-1");
+	expect(
+		screen.queryByRole("button", { name: "Open concept chat" }),
+	).not.toBeInTheDocument();
+	fireEvent.keyDown(document, { key: "Escape" });
+	await waitFor(() =>
+		expect(screen.getByTestId("revision-chat-fab")).toHaveFocus(),
+	);
+});
+
+it("restores chat opener focus after Escape closes the mobile overlay chat", async () => {
+	window.matchMedia = vi.fn().mockImplementation((media: string) => ({
+		media,
+		matches: false,
+		onchange: null,
+		addListener: vi.fn(),
+		removeListener: vi.fn(),
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+		dispatchEvent: vi.fn(),
+	}));
+	mountRevision();
+	const fab = await screen.findByTestId("revision-chat-fab");
+	fab.focus();
+	fireEvent.click(fab);
+	expect(screen.getByTestId("concept-chat-overlay")).toBeInTheDocument();
+	await screen.findByRole("textbox", {
+		name: "Ask a question about this concept",
+	});
+	fireEvent.keyDown(document, { key: "Escape" });
+	await waitFor(() =>
+		expect(screen.getByTestId("revision-chat-fab")).toHaveFocus(),
+	);
+});
+
+it.each<RevisionMode>(["full_review", "quiz_only"])(
 	"preserves %s inputs and previous feedback through a failed retry",
 	async (mode) => {
 		revisionData.mode = mode;
