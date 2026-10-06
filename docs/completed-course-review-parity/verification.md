@@ -3,11 +3,12 @@
 ## Scope and provenance
 P7 verifies P1–P6; it does not implement production fixes.
 
-- Tested HEAD: `8d9a961` (`test(review-parity): add disposable desktop and mobile acceptance evidence`), branch `master`.
+- Initial P7 evidence HEAD: `8d9a961` (`test(review-parity): add disposable desktop and mobile acceptance evidence`), branch `master`.
+- Post-remediation verification HEAD: `91da45b` (`test(review-parity): assert expired revision chat storage is removed`).
 - P6 handoff commit: `ab06f95` (`docs(review-parity): record P6 completion, P7 worker unblocked`).
 - Date: 2026-10-06 (all times local, UTC+05:30).
 - Node: v24.18.0. Python (server `.venv`): 3.14.6. Vite 7.3.3.
-- Fixture origin for browser evidence: `http://127.0.0.1:5178` (dedicated Vite process, `VITE_API_URL=http://127.0.0.1:8018`) backed by the disposable uvicorn factory `server.tests.revision_acceptance_helpers:create_browser_app` at `http://127.0.0.1:8018`, title `P7 DISPOSABLE — Review parity`. Both processes were started and stopped by P7; no user dev server was touched; no API key, provider, or user database was involved (fixture SQLite lives in a `TemporaryDirectory` owned by the app lifetime).
+- Fixture origin for browser evidence: `http://127.0.0.1:5178` (dedicated Vite process, `VITE_API_URL=http://127.0.0.1:8018`) backed by the disposable uvicorn factory `server.tests.revision_acceptance_helpers:create_browser_app` at `http://127.0.0.1:8018`, title `P7 DISPOSABLE — Review parity`. P7 stopped the backend after its run; its Vite process remained on 5178 and was confirmed by process command line/time to be the P7 client. The orchestrator reused that fixture origin for a post-fix smoke check and stopped the leftover Vite process and its npm parent. No user dev server was touched; no API key, provider, or user database was involved (fixture SQLite lives in a `TemporaryDirectory` owned by app lifetime).
 - P7 owned/committed files: `server/tests/test_revision_repository_parity.py`, `server/tests/test_revision_acceptance.py`, `server/tests/revision_acceptance_helpers.py`, `client/src/features/learning/__tests__/completedCourseReviewParity.test.tsx`, `client/vitest.revision.config.ts`, `docs/completed-course-review-parity/verification.md`, and the four PNG evidences. No production files were modified.
 
 Categorical labels used below: **REAL** (executed in this session, command + exit code + counts recorded), **DEFERRED** (routed to an owner plan with evidence), **UNAVAILABLE** (tool could not produce the observation; never counted as a pass).
@@ -20,12 +21,19 @@ P3 resolved seven pre-existing custom_topic_count errors, originally reproduced 
 remaining failure if the current rerun passes. Initial lint had zero errors and
 three generated-coverage warnings. Record new warnings/failures separately.
 
-- Current server full discovery: **624 tests, all passing** (was 614 passing pre-P6/P7; growth is P1–P7's new tests, none failing).
-- Current full client suite: **412 tests, 410 passing, 2 failing** — the only failures are the two known A20 producer-defect tests (`A20: full_review…`, `A20: quiz_only…`, routed to P5/P6, see Defects).
+- Current server full discovery after owner fixes: **624 tests, all passing** (was 614 passing pre-P6/P7; growth is P1–P7's new tests, none failing).
+- Current full client suite after owner fixes: **427 tests, all passing** across 53 files. The two A20 mode cases pass after P6 fixed focus return (`1450c34`) and P7 corrected the expired-storage null assertion (`91da45b`).
+- Current focused revision coverage: **184 tests, all passing**; all five included production units clear all 81% per-file metrics. `useConceptChatPanel.ts` now has 100% statements/lines/branches/functions (46/46 branches), following P5 test commit `0ed3a66`.
+- Current generation coverage gate: **427 tests, all passing**; generation thresholds remain unchanged and pass.
+- Current build: pass (11.79s). Current lint: exit 0, zero errors; six warnings are unused eslint-disable directives in generated `coverage/` HTML-report JavaScript only.
 - `server.tests.test_mongo_learning` custom_topic_count baseline: **resolved by P3** — included in Gate 2 and Gate 3 reruns at HEAD `8d9a961`, all passing. Historical reference: reproduced at `3c8681c`; not a remaining failure.
-- Lint now: 0 errors, 3 warnings — all three warnings are `Unused eslint-disable directive` from the **untracked generated** `client/coverage/revision/{block-navigation,prettify,sorter}.js` HTML-report helper files produced by the revision coverage run; not source files, not new source warnings. Initial lint (pre-P7) was 0 errors / 0 warnings; the 3 generated-coverage warnings noted in the baseline were the same class of artifact warnings.
+- Initial P7 lint (before generating both coverage reports): 0 errors / 3 warnings in generated coverage helpers. Latest post-fix lint: 0 errors / 6 warnings; the additional three are from generated `client/coverage/{block-navigation,prettify,sorter}.js` helpers. No source lint warnings/errors were introduced.
 
 ## Commands and outcomes
+The table below records the initial P7 run before owner remediation (historical
+first-run findings). The post-remediation reruns later in this document are the
+current final verdict and supersede these first-run failures.
+
 | Time / HEAD | Working directory | Exact command | Exit code | Files/tests/counts or diagnostics | Evidence | Verdict |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-06T12:49:29+0530 / `8d9a961` | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_contracts server.tests.test_revision_progress server.tests.test_repository_contracts -v` | 0 | Ran 27 tests, OK | `/tmp/p7-g1.log` (session log) | REAL PASS |
@@ -38,6 +46,42 @@ three generated-coverage warnings. Record new warnings/failures separately.
 | 2026-10-06T12:52:53+0530 (lint ran immediately after build in the same session, ≈12:53:05) / `8d9a961` | `client/` | `npm run lint` | 0 | 0 errors, 3 warnings (all from untracked generated `coverage/revision/*.js` report helpers) | `/tmp/p7-g8.log` (session log) | REAL PASS with warnings |
 | 2026-10-06T12:53:25+0530 / `8d9a961` | `client/` | `npm run test:generation:coverage` | 1 | 53 files / 412 tests: 410 passed, 2 failed (same two A20 defect tests); **no generation coverage-threshold error** | `/tmp/p7-g9.log` (session log) | REAL FAILURE (routed defect) |
 | 2026-10-06T12:54:09+0530 / `8d9a961` | Repository root | `git diff --check` | 0 | no output (no whitespace errors) | session record | REAL PASS |
+
+## Post-remediation reruns
+
+The following commands were run after the P5/P6/P7 follow-up commits, against
+source HEAD `91da45b` (2026-10-06). These outcomes supersede the earlier blocked
+verdicts below; the first-pass failures remain in the history to show what was
+fixed and why.
+
+| Working directory | Exact command | Exit code | Result |
+| --- | --- | --- | --- |
+| `client/` | `npx vitest run src/features/learning/__tests__/completedCourseReviewParity.test.tsx -t 'A20:'` | 0 | 1 file; 3 passed, 14 skipped. Both Full Review and Practice A20 focus/expiry cases pass. |
+| `client/` | `npm run test -- --run` | 0 | Full client suite: 53 files; 427 passed, 0 failed (32.53s). |
+| `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | 0 | 19 files; 184 passed, 0 failed (46.41s). All five new production units clear 81% in branches/functions/lines/statements. |
+| `client/` | `npm run test:generation:coverage` | 0 | 53 files; 427 passed, 0 failed (47.71s); generation coverage config unchanged. |
+| `client/` | `npm run build` | 0 | TypeScript and Vite build passed in 11.79s; only the existing large-chunk warning. |
+| `client/` | `npm run lint` | 0 | 0 errors; 6 warnings, all unused eslint-disable directives in generated `coverage/` and `coverage/revision/` HTML helper files. No source lint errors. |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | 0 | Full server suite: 624 tests, OK (85.595s). |
+| Repository root | `git diff --check` | 0 | No whitespace errors. |
+
+Post-fix coverage summary from `client/coverage/revision/coverage-summary.json`:
+
+| Unit | Statements / lines | Branches | Functions |
+| --- | ---: | ---: | ---: |
+| `QuizResultDetails.tsx` | 100% | 100% | 100% |
+| `RevisionQuizSection.tsx` | 100% | 100% | 100% |
+| `revisionQuizState.ts` | 100% | 100% | 100% |
+| `ConceptChatLayout.tsx` | 97.93% | 94.59% | 100% |
+| `useConceptChatPanel.ts` | 100% | 100% | 100% |
+
+The disposable browser factory was restarted for a post-fix Full Review smoke
+check and loaded through the existing P7 Vite origin. The route/data rendered and
+chat opened/closed with the disposable SQLite fixture; the browser tool does not
+provide a reliable keyboard-Escape injection or active-element read, so the
+post-fix keyboard/focus assertion is credited to the real RTL A20 tests, not to
+that smoke check. Existing four screenshots remain valid for the unchanged
+desktop/mobile layout and are explicitly pre-focus-fix visual evidence.
 
 Session logs (`/tmp/p7-g*.log`) are tool-managed temp files; counts above were read directly from them and are not staged as repo files.
 
@@ -131,32 +175,39 @@ Tool-limit notes (honest classification): the generic coordinate `scroll` was no
 ## Defects and reruns
 | Defect | Reproduction | Actual/expected | Owner | Failing command | Fix commit | Affected reruns |
 | --- | --- | --- | --- | --- | --- | --- |
-| A20 focus restoration: chat FAB focus is lost on Escape-close | Any mode: open chat (FAB or curiosity/heading control), close via Escape; RTL: `A20: %s completion/re-entry preserve chat and expiry still applies` fails at `expect(getByRole('button', { name: 'Open concept chat' })).toHaveFocus()`; browser: after mobile Escape-close `activeElement` = BODY | Actual: focus target `<body>`; expected: `Open concept chat` FAB. Root cause: `RevisionPage` unmounts the FAB while chat is open (render condition `!chat.isOpen && currentNode`), so `ChatPanel.previousFocusRef` captures `document.activeElement` = `<body>` at open time and restores focus to `<body>` | P5 (`ChatPanel` focus restore) / P6 (`RevisionPage` FAB unmount) | `npx vitest run src/features/learning/__tests__/completedCourseReviewParity.test.tsx` (2 failed); also fails inside Gates 5, 6, 9 | none yet — routed, not patched by P7 | Gates 4, 5, 6, 9 exit 1 is attributable to exactly these 2 tests; every other test in those runs passes |
-| Revision coverage gate: `useConceptChatPanel.ts` branches 73.68% < 81% perFile threshold | `npx vitest run --config vitest.revision.config.ts --coverage` → `ERROR: Coverage for branches (73.68%) does not meet global threshold (81%)` | Actual 28/38 branches; expected ≥ 81%. Uncovered branches are title-falsy/same-node-title-fill fallbacks (lines ~131–133, 154, 159–160, 182) that **no production call site can reach** (both pages always pass a non-empty title) — missing hook unit tests | P5 (`src/features/learning/useConceptChatPanel.test.ts`) | Gate 5 (exit 1 even if A20 were fixed) | none yet — routed; P7 already added the two UI-reachable scenarios (commit `3e1bda9`, 68.57%→73.68%) | Gate 5 only |
+| A20 focus restoration: chat FAB focus was lost on Escape-close | Initial run: both mode cases failed focus restoration; live browser also observed BODY after mobile Escape-close. | Actual was BODY because `RevisionPage` unmounted the FAB while chat was open. P6 now keeps the opener mounted but inaccessible while open and restores non-body opener focus after mobile panel unmount. | P6 | Initial targeted run failed; post-fix `npx vitest run src/features/learning/__tests__/completedCourseReviewParity.test.tsx -t 'A20:'` passes 3/3 selected tests. | Fixed by `1450c34`; tests by `RevisionPage.test.tsx`; P7 expiry matcher also corrected in `91da45b`. | RESOLVED — full client suite 427/427 passes; revision and generation coverage gates pass. |
+| Revision coverage gate: `useConceptChatPanel.ts` branches were 73.68% < 81% | Initial `npx vitest run --config vitest.revision.config.ts --coverage` measured 28/38 branches. Uncovered paths were public-hook title fallback/title-fill cases not reachable via current page UI. | P5 added direct `renderHook` cases for active/current title fallbacks and same-node title fill. No production behavior or threshold changed. Latest: 46/46 branches, 100% statements/lines/branches/functions. | P5 | Initial Gate 5 failed threshold; post-fix focused coverage command exits 0 with 184/184 tests. | Fixed by `0ed3a66`. | RESOLVED — all five units meet 81% in all four metrics. |
+| P7 expiry assertion used string matcher for removed storage item | After the focus fix, both A20 tests advanced to line 335 and threw because `localStorage.getItem(key)` was `null`, then `.not.toContain(string)` received null. | Expired storage removal is the expected behavior. P7 changed the assertion to `toBeNull()` while retaining the UI absence assertion; no producer code changed. | P7 test harness | Initial post-P6 targeted run failed at null/string matcher; current A20 run passes 3 selected tests. | Fixed by `91da45b`. | RESOLVED — full client suite 427/427 passes. |
 | Minor visual quirk (non-blocking observation): desktop content pane clipped 4px on the left | Measured geometry at 1280px: content `{x:-4, w:960}` + separator 4px + chat 320px = 1284 > 1280 inside `overflow-hidden` root | Actual: 75/25 flex split does not reserve the separator width; expected (cosmetic): no clipping. No assertion or guideline violated; padding absorbs it visually | P5 (`ConceptChatLayout` split math) — informational | n/a (measured, no failing test) | none | none |
 
-Historical baseline failure `test_mongo_learning` custom_topic_count (reproduced at `3c8681c`): **resolved by P3**; current reruns pass (Gates 2 and 3 at HEAD `8d9a961`). Kept as historical reference only, not a remaining failure.
+Historical baseline failure `test_mongo_learning` custom_topic_count (reproduced at `3c8681c`): **resolved by P3**; current reruns pass, including the post-remediation full server suite (624 tests at source HEAD `91da45b`). Kept as historical reference only, not a remaining failure.
 
-Rerun discipline: after each P7-owned change (Task 7 coverage extension commit `3e1bda9`, Task 8 commit `8d9a961`), the affected suites were rerun; no passing result in this ledger predates the latest owned change that could affect it. P7 did not modify any producer file to obtain a pass.
+Rerun discipline: after each P7-owned change (Task 7 coverage extension `3e1bda9`, browser evidence `8d9a961`, and expiry assertion fix `91da45b`), affected suites were rerun. P5/P6 changes were also followed by targeted, full client, coverage, build/lint, and full server reruns. P7 did not modify any producer file to obtain a pass.
 
-## Unrun or blocked gates
-“Not run”, “blocked”, warnings, and failures are not passes. All ten final-gate commands from the plan were executed and recorded in *Commands and outcomes* — no gate was skipped or left unrun. No skipped standalone research/review verdict is manufactured.
+## Unrun gates and remaining evidence limitations
 
-Blocked-exit items (unresolved, owned elsewhere; they block an unconditional PASS until the owner lands fixes):
+All planned final gates were run. There are no current code/test/coverage blockers.
+The initial failures listed above are resolved and the post-remediation outcomes
+are recorded in the current rerun table. No skipped standalone research/review
+verdict is manufactured.
 
-1. **DEFERRED → P5/P6**: A20 focus-restoration producer defect (2 failing tests, both modes; live browser reproduction). Blocks a green client suite (Gates 4, 6, 9) and full Gate 5 greenness.
-2. **DEFERRED → P5**: `useConceptChatPanel.ts` branch coverage 73.68% < 81% (missing hook unit tests for branches unreachable via production UI). Blocks Gate 5's coverage thresholds.
-3. **UNAVAILABLE (evidence limitation, not a gate)**: retroactive browser console-log reading; exact 768.0px live boundary; CUA-level separator key events. Each is compensated by recorded tool evidence plus the deterministic RTL assertions referenced in A13/A20; none is counted as a browser pass.
+Remaining evidence limitations (not failed gates): retroactive browser console
+history and direct post-fix Escape key/focus inspection are unavailable through
+the browser control API; the exact 768.0px live boundary and CUA-level separator
+key injection were not observed directly. Deterministic RTL assertions cover
+these cases; the four disposable desktop/mobile screenshots remain layout
+evidence from before the focus-only fix. No such limitation is counted as a
+browser pass.
 
 ## Exit decision
 Only PASS after all A1–A20 assertions/evidence exist, both adapters pass, all five
 new units exceed 80% in every metric, both coverage gates and all required commands
 are recorded, and desktop/mobile evidence exists for both modes without user writes.
 
-- A1–A19: **REAL PASS** — every row cites assertions actually executed at HEAD `8d9a961` (RTL, both adapter transcripts/wire, upstream P2/P3 names, build, strict decode).
-- A20: **REAL PARTIAL** — all assertions pass except the two focus-restoration assertions (one test × two modes), a genuine producer defect reproduced in a real browser and routed to P5/P6 with evidence.
+- A1–A19: **REAL PASS** — every row cites genuine assertions (RTL, both adapter transcripts/wire, upstream P2/P3 names, build, strict decode).
+- A20: **REAL PASS** — focus restoration and expired-history removal pass in both modes after P6 producer fix and P7 matcher correction; targeted rerun is 3/3 passing.
 - Both adapters: **PASS** (Gate 2: 76 tests; parity transcripts; wire equality).
-- Per-file coverage: 4 of 5 new units **≥ 81% in all four metrics**; `useConceptChatPanel.ts` branches **73.68% < 81%** — missing unit tests routed to P5 (unreachable-via-UI branches).
-- Both coverage gates: recorded. Revision gate: exit 1 (routed branch gap + A20). Generation gate: exit 1 attributable solely to the two A20 tests; generation thresholds themselves show no error.
-- All ten required commands: recorded with real working directories, exit codes, counts, and tested HEAD; `git diff --check` clean; four desktop/mobile screenshots exist for both modes with disposable data only; no user DB or settings were read or written; no API key or provider was used.
-- **Verdict: NOT an unconditional PASS.** All P7-owned work is complete and evidenced; two unresolved producer defects (A20 focus restoration → P5/P6; hook branch-coverage unit tests → P5) block the client-side gates and therefore block completion. They must be fixed by their owner plans and the affected gates (4, 5, 6, 9) rerun; no production code was patched inside P7. Server-side state is fully green (624/624). The orchestrator alone updates `state.md`/`final_report.md` and makes the final completion decision.
+- Per-file coverage: all 5 new units **≥ 81% in all four metrics**; `useConceptChatPanel.ts` now 100% branch coverage.
+- Both coverage gates: **PASS** — revision coverage 184/184 and generation coverage 427/427; neither threshold was weakened.
+- All final commands: recorded with working directories, exit codes, counts, and tested HEAD; `git diff --check` clean; four desktop/mobile screenshots exist for both modes with disposable data only; no user DB/settings or API key/provider were used.
+- **Verdict: PASS after remediation.** A1–A20 are evidenced, both adapters are equivalent, full server (624/624) and full client (427/427) suites pass, build passes, lint has no errors, and both coverage gates pass. P7 did not modify producer code; P5/P6 resolved their assigned blockers and the P7 test assertion was corrected by P7 ownership.
