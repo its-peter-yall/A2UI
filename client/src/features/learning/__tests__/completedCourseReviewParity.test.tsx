@@ -268,6 +268,14 @@ describe('chat ownership and lifecycle', () => {
     fireEvent.click(question);
     expect(composer).toHaveValue('Why study A?');
     fireEvent.click(screen.getByRole('button', { name: 'Chat about "Foundations"' }));
+    expect(screen.getByText(/1 heading selected/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selections' }));
+    expect(screen.queryByText(/1 heading selected/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chat about "Foundations"' }));
+    expect(screen.getByText(/1 heading selected/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chat about "Foundations"' }));
+    expect(screen.queryByText(/1 heading selected/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chat about "Foundations"' }));
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
     await waitFor(() => expect(stream.calls).toHaveLength(1));
     expect(stream.calls[0].nodeId).toBe(h.wire.original.nodes[0].id);
