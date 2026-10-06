@@ -15,7 +15,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,6 +60,193 @@ describe.each<RevisionMode>(['full_review', 'quiz_only'])('%s integrated feedbac
     await h.releaseRefetch();
   });
 });
+
+describe.each<RevisionMode>(['full_review', 'quiz_only'])('%s navigation and completion', (mode) => {
+  it('A5/A6: mounted drafts survive quiz/topic navigation; remount restores matching saved results', async () => {
+    const h = mountRevision(mode);
+    await screen.findByRole('heading', { name: 'Topic A' });
+    fireEvent.click(screen.getByRole('radio', { name: /Option 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next quiz' }));
+    fireEvent.click(screen.getByRole('radio', { name: /Option 0/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Previous quiz' }));
+    expect(screen.getByRole('radio', { name: /Option 1/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip quiz' }));
+    expect(screen.getByRole('radio', { name: /Option 0/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Next topic' }));
+    await screen.findByRole('heading', { name: 'Topic B' });
+    fireEvent.click(screen.getByRole('button', { name: 'Previous topic' }));
+    await screen.findByRole('heading', { name: 'Topic A' });
+    expect(screen.getByRole('radio', { name: /Option 0/ })).toBeChecked();
+    expect(h.posts()).toHaveLength(0);
+    h.view.unmount();
+    const restored = mountRevision(mode, h.wire.mixed);
+    await screen.findByRole('button', { name: 'Quiz 1: correct' });
+    fireEvent.click(screen.getByRole('button', { name: 'Quiz 2: incorrect' }));
+    expect(screen.getByText('Explanation q1-1')).toBeInTheDocument();
+    expect(screen.getByText('Attempt #1 • Score: 0%')).toBeInTheDocument();
+    expect(screen.getByTestId('quiz-result-option-q1-1')).toHaveTextContent('Your answer');
+    expect(screen.getByTestId('quiz-result-option-q1-0')).not.toHaveTextContent('Your answer');
+    expect(screen.queryByText('Explanation q1-0')).not.toBeInTheDocument();
+    await navigateTo(restored, restored.wire.fresh.id);
+    await screen.findByRole('button', { name: 'Quiz 1: unanswered' });
+    expect(screen.getByRole('button', { name: 'Quiz 2: unanswered' })).toBeInTheDocument();
+    expect(screen.queryByText('Incorrect')).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Option 1/ })).not.toBeChecked();
+  });
+
+  it('A7/A8/A9/A10/A16: completion and latest feedback stay independent of attempt accuracy', async () => {
+    const h = mountRevision(mode);
+    await screen.findByRole('heading', { name: 'Topic A' });
+    fireEvent.click(screen.getByRole('radio', { name: /Option 0/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByText('Correct!');
+    expect(screen.getByTestId('revision-status-badge')).toHaveTextContent(
+      mode === 'full_review' ? 'Reading pending' : 'Practice pending');
+    fireEvent.click(screen.getByRole('button', { name: 'Next quiz' }));
+    fireEvent.click(screen.getByRole('radio', { name: /Option 1/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByText('Incorrect');
+    if (mode === 'full_review') {
+      expect(screen.getByRole('button', { name: 'Mark as Reviewed' })).toBeEnabled();
+      await completeReading();
+    }
+    await screen.findByRole('button', { name: 'View Summary' });
+    await waitFor(() => expect(screen.getByText(mode === 'full_review'
+      ? /2\s*\/\s*2.*reviewed/i : /1\s*\/\s*1.*(?:finished|attempted)/i)).toBeInTheDocument());
+    expect(screen.queryByRole('dialog', { name: 'Revision Summary' })).not.toBeInTheDocument();
+    expect(screen.getByText('Incorrect')).toBeInTheDocument();
+    expect(screen.getByTestId('revision-status-badge')).toHaveTextContent(
+      mode === 'full_review' ? 'Reviewed' : 'Practice finished');
+    fireEvent.click(screen.getByRole('button', { name: 'View Summary' }));
+    const firstSummary = await screen.findByRole('dialog', { name: 'Revision Summary' });
+    expect(within(firstSummary).getByText('50%')).toBeInTheDocument();
+    expect(within(firstSummary).getByTestId('quizzes-passed')).toHaveTextContent(/correct attempts/i);
+    expect(within(firstSummary).getByTestId('quizzes-failed')).toHaveTextContent(/incorrect attempts/i);
+    fireEvent.keyDown(firstSummary, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    expect(screen.getByRole('radio', { name: /Option 1/ })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Quiz 2: incorrect' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Option 0/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByText('Attempt #2 • Score: 100%');
+    expect(screen.getByRole('button', { name: 'Quiz 1: correct' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quiz 2: correct' })).toBeInTheDocument();
+    expect(screen.getByTestId('revision-status-badge')).toHaveTextContent(
+      mode === 'full_review' ? 'Reviewed' : 'Practice finished');
+    fireEvent.click(screen.getByRole('button', { name: 'View Summary' }));
+    const nextSummary = await screen.findByRole('dialog', { name: 'Revision Summary' });
+    await waitFor(() => expect(within(nextSummary).getByText('66%')).toBeInTheDocument());
+    expect(within(nextSummary).getByTestId('quizzes-passed')).toHaveTextContent('2');
+    expect(within(nextSummary).getByTestId('quizzes-failed')).toHaveTextContent('1');
+    expect(h.wire.retry.completed_at).toBe(h.wire.mixed.completed_at);
+    fireEvent.keyDown(nextSummary, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open Table of Contents' }));
+    const toc = await screen.findByRole('dialog');
+    expect(within(toc).queryByText(/Mastered/)).not.toBeInTheDocument();
+    const aRow = within(toc).getByRole('button', { name: 'Topic A' }).closest('tr');
+    if (!aRow) throw new Error('Expected Topic A table row');
+    expect(aRow).toHaveTextContent(mode === 'full_review' ? /Reviewed/ : /Practice finished/);
+    fireEvent.keyDown(toc, { key: 'Escape' });
+    await act(async () => { await h.router.navigate('/history'); });
+    fireEvent.click(await screen.findByTestId('revision-history-toggle'));
+    const row = await screen.findByTestId('revision-row');
+    expect(row).toHaveTextContent('66%');
+    expect(row).not.toHaveTextContent(/Mastered/);
+    fireEvent.click(row);
+    await screen.findByRole('heading', { name: 'Topic A' });
+    expect(screen.queryByRole('dialog', { name: 'Revision Summary' })).not.toBeInTheDocument();
+  });
+});
+
+describe('failure and route isolation', () => {
+  it('A14: failed retry and review preserve previous feedback, inputs and reading state', async () => {
+    const h = mountRevision('full_review', wires.full_review.before_review);
+    await screen.findByRole('button', { name: 'Quiz 2: incorrect' });
+    fireEvent.click(screen.getByRole('button', { name: 'Quiz 2: incorrect' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try Again' }));
+    fireEvent.click(screen.getByRole('radio', { name: /Option 0/ }));
+    transport.submit.mockRejectedValueOnce(new Error('Disposable submission failure'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByRole('alert');
+    expect(screen.getByRole('radio', { name: /Option 0/ })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Submit Answer' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Quiz 2: incorrect' })).toHaveClass('bg-red-500');
+    expect(screen.getByText('Explanation q1-1')).toBeInTheDocument();
+    transport.review.mockRejectedValueOnce(new Error('Disposable review failure'));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as Reviewed' }));
+    await waitFor(() => expect(transport.review).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mark as Reviewed' })).toBeEnabled());
+    expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('revision-status-badge')).toHaveTextContent('Reading pending');
+    expect(screen.getByRole('radio', { name: /Option 0/ })).toBeChecked();
+    expect(h.wire.original.nodes[0].status).toBe('COMPLETED');
+  });
+
+  it.each(['resolve', 'reject'])('A19: late %s cannot leak loading/results/selections/summary into a new route', async (outcome) => {
+    const h = mountRevision('quiz_only');
+    await screen.findByRole('heading', { name: 'Topic A' });
+    const pending = deferred<RevisionQuizResponse>();
+    transport.submit.mockReturnValueOnce(pending.promise);
+    fireEvent.click(screen.getByRole('radio', { name: /Option 0/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
+    await screen.findByRole('button', { name: 'Submitting...' });
+    await navigateTo(h, h.wire.fresh.id);
+    await screen.findByRole('button', { name: 'Quiz 1: unanswered' });
+    expect(screen.getByRole('radio', { name: /Option 0/ })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Submit Answer' })).toBeDisabled();
+    await act(async () => {
+      if (outcome === 'resolve') pending.resolve(h.wire.submissions[0]);
+      else pending.reject(new Error('Old-route failure'));
+    });
+    expect(screen.getByRole('button', { name: 'Quiz 1: unanswered' })).toBeInTheDocument();
+    expect(screen.queryByText('Correct!')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submitting...' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Revision Summary' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View Summary' })).not.toBeInTheDocument();
+  });
+
+  it('A19: a late review and an old summary response cannot complete or obscure the destination', async () => {
+    const h = mountRevision('full_review');
+    await screen.findByRole('heading', { name: 'Topic A' });
+    const review = deferred<RevisionNodeProgressWithDetails>();
+    transport.review.mockReturnValueOnce(review.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as Reviewed' }));
+    await waitFor(() => expect(transport.review).toHaveBeenCalledOnce());
+    await navigateTo(h, h.wire.fresh.id);
+    await screen.findByRole('button', { name: 'Mark as Reviewed' });
+    await act(async () => { review.resolve(h.wire.reviews[0]); });
+    expect(screen.getByTestId('revision-status-badge')).toHaveTextContent('Reading pending');
+    expect(screen.getByRole('button', { name: 'Mark as Reviewed' })).toBeEnabled();
+    h.setCurrent(h.wire.mixed);
+    await navigateTo(h, h.wire.initial.id);
+    await screen.findByRole('button', { name: 'View Summary' });
+    const summaryGate = deferred<RevisionSummary>();
+    transport.summary.mockReturnValueOnce(summaryGate.promise);
+    fireEvent.click(screen.getByRole('button', { name: 'View Summary' }));
+    await waitFor(() => expect(transport.summary).toHaveBeenCalled());
+    await navigateTo(h, h.wire.fresh.id);
+    await act(async () => { summaryGate.resolve(h.wire.summary_mixed); });
+    await waitFor(() => expect(screen.getByTestId('revision-status-badge'))
+      .toHaveTextContent('Reading pending'));
+    expect(screen.queryByRole('dialog', { name: 'Revision Summary' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View Summary' })).not.toBeInTheDocument();
+  });
+});
+
+async function navigateTo(h: ReturnType<typeof mountRevision>, id: string) {
+  await act(async () => { await h.router.navigate(h.route(id)); });
+}
+async function completeReading() {
+  fireEvent.click(screen.getByRole('button', { name: 'Mark as Reviewed' }));
+  await waitFor(() => expect(screen.getByTestId('revision-status-badge')).toHaveTextContent('Reviewed'));
+  fireEvent.click(screen.getByRole('button', { name: 'Next topic' }));
+  await screen.findByRole('heading', { name: 'Topic B' });
+  fireEvent.click(screen.getByRole('button', { name: 'Mark as Reviewed' }));
+  await waitFor(() => expect(screen.getByTestId('revision-status-badge')).toHaveTextContent('Reviewed'));
+  fireEvent.click(screen.getByRole('button', { name: 'Previous topic' }));
+  await screen.findByRole('heading', { name: 'Topic A' });
+}
 
 // Framer Motion spring/exit transitions do not run deterministically in jsdom;
 // every client component test in this repository mocks the same boundary. All
