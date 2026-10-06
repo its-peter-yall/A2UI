@@ -1,15 +1,15 @@
 ---
 objective: completed-course-review-parity
 workflow: maw
-status: in-progress
+status: complete
 skipped_phases: [research, review]
 source: docs/completed-course-review-parity/goal.md
 goal_status: approved
 design_status: approved
 dag_status: complete
-dag_execution: in-progress
+dag_execution: complete
 resume_gate: authorized
-current_phase: defect-resolution
+current_phase: complete
 pause_reason: none
 planner_dispatch: foreground parallel only; plans carry no doc headers
 created: 2026-10-05
@@ -33,16 +33,16 @@ updated: 2026-10-06
   authority over other workflow directories.
 - Main orchestrator manages approvals, documentation, DAG, dispatch, and final
   verification only. It never implements application code directly.
-- Orchestrator must not read `research.md` or `plan*.md`. Verify future plans via
-  `git log -1 --stat <reported-commit>` and use planner/worker summary reports.
+- Orchestrator must not read `research.md` or `plan*.md`. Plans are complete;
+  future resumptions should verify their commits with `git log -1 --stat` and
+  use worker summary reports.
 - The working tree was clean at initialization. Preserve all subsequent user
   changes, including work associated with other workflow directories. Do not
   resume or modify the real-time course-generation workflow as part of this task.
 - No isolated worktree was requested. Future agents share this checkout under
   the ownership and commit-serialization rules below.
 - `dag_status: complete` means the dependency graph is fully defined. All seven
-  plans and implementation workers have run; P7 acceptance surfaced two blocking
-  defects that are now assigned to their owning plans for resolution.
+  plans, implementation workers, defect follow-ups, and final gates are complete.
 
 ## Workflow milestones
 
@@ -51,10 +51,11 @@ updated: 2026-10-06
 - [x] Step 2: Technical Research (Skipped via `--skip research`).
 - [x] Step 3: Planning Completed (`plan1.md` through `plan7.md` all written and
   committed: `074ce34` `a96bb8a` `5bcb4de` `4817d61` `211ec27` `58b8231` `0153f92`).
-- [ ] Step 4: Execution Completed (P1-P7 planned workers have run; P7 found
-  two blocking producer/coverage defects now in owner-directed remediation).
+- [x] Step 4: Execution Completed (P1-P7 planned workers and P5/P6/P7 defect
+  follow-ups completed; acceptance blockers resolved).
 - [x] Step 5: Unified Code Review (Skipped via `--skip review`).
-- [ ] Step 6: Final Verification & Report (`verification.md`, `final_report.md`).
+- [x] Step 6: Final Verification & Report (`verification.md` and
+  `final_report.md`, committed at `0f5dd9b`; final state checkpoint follows).
 
 Checked skipped milestones record configuration only; they are not evidence of
 research, review, code execution, or verification.
@@ -130,7 +131,7 @@ approval. They are not independently assumed to be approved by the conversion.
 skipped, so there is no `R` prerequisite. A `P#` worker dependency means that
 worker's relevant code/tests are verified, committed, and reported complete.
 Planner readiness is separate from worker readiness so planning can overlap
-execution. No table entry authorizes dispatch while the workflow is paused.
+execution. User authorization was recorded; all plans and workers are now done.
 
 | Plan ID | Title & scope | Worker dependencies | Files / subsystems | Planner status | Worker status | Commits |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -139,8 +140,8 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | `[x]` Complete | `9761bb6` `b061f75` `51ae7ca` `eed5232` `a41660d` `288c7e2` `8f38386` `62dafeb` `63eb1e1` |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | `[x]` Complete | `8ecc748` `10f3133` `59e0128` `baa1821` `61a0143` |
 | **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete; P7 coverage blocker resolved | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` `0ed3a66` |
-| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | `[x]` Complete; focus producer fix committed, final rerun pending | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` `1450c34` |
-| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | Evidence complete; test assertion correction pending | `504b42d` `2c6f8db` `3062902` `1a9c5c6` `6ad8c19` `3f623f2` `3e1bda9` `8d9a961` `8346e51` |
+| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | `[x]` Complete; A20 focus fix independently verified | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` `1450c34` |
+| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | `[x]` Complete; verified PASS after defect reruns | `504b42d` `2c6f8db` `3062902` `1a9c5c6` `6ad8c19` `3f623f2` `3e1bda9` `8d9a961` `8346e51` `91da45b` |
 
 ### Execution graph
 
@@ -495,14 +496,14 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_mongo_learning` (run BEFORE P3, at baseline) | Baseline check of pre-existing Mongo suite state | FAIL (PRE-EXISTING) — 16 tests, 7 errors, all `KeyError: 'custom_topic_count'`. Reproduced identically at pre-workflow commit `3c8681c` in a detached worktree; both files untouched by P1/P5. Not a workflow regression. P3 was made to fix it; see the post-P3 PASS row below. |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_mongo server.tests.test_migrate_to_mongo server.tests.test_mongo_learning` | P3 Mongo/migration, including the previously failing suite | PASS — 45 tests, OK, 0.154s. The 7 pre-existing `custom_topic_count` errors are RESOLVED by P3 (`a41660d`, `288c7e2`, `51ae7ca`). |
 | Repository root | `server/.venv/Scripts/python.exe -m unittest server.tests.test_revision_repository_parity server.tests.test_revision_acceptance` | P7 cross-store acceptance | PASS — 10 P7 acceptance tests (included in P7 Gate 2, 76 total focused tests) |
-| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 624 tests, OK, 82.657s at P7 verification HEAD `8d9a961` |
-| `client/` | `npm run test -- --run` | Full client regression suite | BLOCKED — 53 files / 412 tests, 410 passed, 2 failed: A20 focus restoration in both modes. Exact failing tests and owner routing in `verification.md`. |
-| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — exit 0, built in 11.43s at P7 verification HEAD `8d9a961` |
-| `client/` | `npm run lint` | ESLint/hook checks | PASS WITH GENERATED ARTIFACT WARNINGS — exit 0, 0 errors, 3 warnings from untracked generated `client/coverage/revision/*.js` report helpers |
-| `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | BLOCKED — 19 files / 169 tests, 167 passed / 2 A20 failures; 4/5 units pass, `useConceptChatPanel.ts` branches 73.68% < 81%. P5 remediation pending. |
-| `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | BLOCKED by same 2 A20 tests (410/412 pass); generation coverage threshold itself passed; config unchanged by P7 |
-| Running app | Full Review + Practice, desktop/mobile, right-hand chat, mixed results, refresh, repeated prefill | Actual layout/behavior evidence | CAPTURED using disposable app/SQLite data: `p7-full-review-desktop.png`, `p7-full-review-mobile.png`, `p7-practice-desktop.png`, `p7-practice-mobile.png`; details and limitations in `verification.md` |
-| Repository root | `git diff --check` and staged-document checks | Documentation/source whitespace | PASS — `git diff --check` exit 0 at P7 verification |
+| Repository root | `server/.venv/Scripts/python.exe -m unittest discover -s server/tests -t .` | Full server regression suite | PASS — 624 tests, OK; rerun after P6/P7 completion in current session |
+| `client/` | `npm run test -- --run` | Full client regression suite | PASS — 53 files / 427 tests, all passed in 32.53s at source HEAD `91da45b` |
+| `client/` | `npm run build` | TypeScript diagnostics and production build | PASS — exit 0, built in 11.79s after defect fixes |
+| `client/` | `npm run lint` | ESLint/hook checks | PASS — 0 errors; 6 warnings are generated coverage-report JS helper files only |
+| `client/` | `npx vitest run --config vitest.revision.config.ts --coverage` | Focused new-unit coverage, >80% | PASS — 19 files / 184 tests, all passed; all five units meet 81% in every metric; hook branches 100% |
+| `client/` | `npm run test:generation:coverage` | Preserve existing generation coverage gate | PASS — 53 files / 427 tests; existing generation coverage config unchanged |
+| Running app | Full Review + Practice, desktop/mobile, right-hand chat, mixed results, refresh, repeated prefill | Actual layout/behavior evidence | CAPTURED using disposable app/SQLite data: `p7-full-review-desktop.png`, `p7-full-review-mobile.png`, `p7-practice-desktop.png`, `p7-practice-mobile.png`; post-fix keyboard focus verified in both modes with RTL A20 tests; details/limitations in `verification.md` |
+| Repository root | `git diff --check` and staged-document checks | Documentation/source whitespace | PASS — latest `git diff --check` exit 0; state/report docs pending their scoped final commit |
 
 - Measure baseline tests/build/lint after approval, using a verifier subagent
   if needed, before implementation obscures pre-existing failures. Baseline
@@ -532,8 +533,8 @@ each run; do not replace Not run with a pass inferred from a worker summary.
 | `plan6.md` | Written | `58b8231` |
 | `plan7.md` | Written | `0153f92` |
 | `review.md` | Skipped; do not create | None |
-| `verification.md` | P7 evidence complete; honest blocked verdict and owner-routed defects recorded | `8346e51` |
-| `final_report.md` | Pending defect fixes and final reruns | None |
+| `verification.md` | P7 evidence and post-remediation reruns; PASS verdict | `0f5dd9b` (P7 evidence originally `8346e51`) |
+| `final_report.md` | Final summary | `0f5dd9b` |
 
 Planner commits `074ce34` (P1) and `211ec27` (P5) are recorded and verified as
 single-file, path-scoped commits. P1 worker commits: `34f01e5` `dac308a`
@@ -610,62 +611,45 @@ change pauses affected downstream work and must be coordinated here first.
 - `ChatPanel` now displays the chat topic title and supports repeated prefill of
   the same curiosity question after a previous prefill was consumed and after
   close/reopen, without auto-sending.
-- Revision-page wiring was completed by P6. P7 uncovered the focus-return issue
-  caused by how the revision page mounts/unmounts its chat trigger; see the
-  defect-remediation handoff below.
+- Revision-page wiring was completed by P6. P7 uncovered a focus-return issue
+  caused by how the revision page mounts/unmounts its chat trigger; P6 fixed it
+  in `1450c34` and both-mode RTL assertions pass.
 
-## P7 defect-remediation handoff
+## P7 defect-remediation record
 
-P7 is complete as an evidence phase, but the feature is NOT complete. Its ledger
-at `docs/completed-course-review-parity/verification.md` identifies two blockers.
-The orchestrator independently reproduced the A20 `full_review` focus failure
-with the exact targeted Vitest command; P7 also reproduced the same issue in both
-modes and in a disposable live browser. Do not change P7 evidence/tests to make
-the failures disappear without a producer fix.
+P7 completed its acceptance/evidence phase and initially reported two blocking
+findings. Both were fixed by their owners. A third issue was identified as a P7
+test matcher defect after the producer fix exposed the next assertion; P7
+corrected it without changing production code. All are recorded in
+`docs/completed-course-review-parity/verification.md`.
 
 | Defect | Root cause / reproduction | Owner and allowed files | Required TDD resolution |
 | --- | --- | --- | --- |
-| A20 focus restore fails on Escape in both modes | `RevisionPage.tsx` conditionally removed the `Open concept chat` FAB while chat was open, so `ChatPanel` recorded BODY as its prior focus target. P6 now keeps the opener mounted but removes it from pointer/keyboard/assistive reach while chat is open, and records/restores non-body openers for overlay unmount. Owner fix `1450c34`. | P6; `RevisionPage.tsx`, `RevisionPage.test.tsx`. | RESOLVED IN CODE: new P6 tests cover both modes and mobile overlay. P7 A20 now passes the focus assertion and advances to a separate P7 localStorage assertion bug; after correcting that test, rerun both A20 cases and the full client gates. |
-| Focused revision coverage below threshold | Before P5 follow-up, P7 measured `useConceptChatPanel.ts` branches at 73.68% (28/38) against 81%. P5 added direct hook tests for active/current title fallback paths in `useConceptChatPanel.test.ts`, commit `0ed3a66`. Latest revision run reports 100% branch/function/line/statement coverage for all five included units. | P5; `useConceptChatPanel.test.ts`. | RESOLVED IN COVERAGE: latest run's only two failures are P7 A20 assertion failures; no coverage threshold failure remains. Re-run after P7 test correction for a zero exit code. |
-| P7 expiry assertion misuses string matcher after correct cleanup | `useConceptChat` removes an expired entry with `localStorage.removeItem`; `getItem(key)` therefore returns `null`. The A20 test uses `.not.toContain('Expired fixture history')`, which throws a matcher type error on null even though cleanup succeeded. Focus assertions now pass. | P7; `client/src/features/learning/__tests__/completedCourseReviewParity.test.tsx` only. No production change. | Change the assertion to directly expect `localStorage.getItem(key)` to be `null` (and retain the UI absence assertion). Verify the existing failure first, then both A20 cases pass. |
+| A20 focus restore fails on Escape in both modes | `RevisionPage.tsx` previously removed the `Open concept chat` FAB while chat was open, so `ChatPanel` captured BODY as its focus target. P6 keeps the opener mounted but unavailable to pointer/keyboard/assistive navigation while open, and restores non-body openers after mobile panel unmount. | P6; `RevisionPage.tsx`, `RevisionPage.test.tsx`. | RESOLVED by `1450c34`; P6 regression tests and P7 A20 cases pass in both modes. |
+| Focused revision coverage below threshold | Initial P7 measurement was 73.68% (28/38) branch coverage on `useConceptChatPanel.ts` against 81%. P5 added direct hook tests for active/current title fallback paths. | P5; `useConceptChatPanel.test.ts`. | RESOLVED by `0ed3a66`; latest focused revision gate passes 184/184 and all five units clear all four thresholds (hook: 100%). |
+| P7 expiry assertion misused string matcher after successful cleanup | Expired storage is removed, so `localStorage.getItem(key)` returns `null`; the original `.not.toContain(string)` matcher rejected that null. | P7; `completedCourseReviewParity.test.tsx` only. | RESOLVED by `91da45b`; assertion now expects null, preserving the UI absence check. Targeted A20 passes 3/3 and full client suite passes 427/427. |
 
-Both follow-up workers must use TDD, stay in their assigned files, and serialize
-commits through `Local\A2UI_completed_course_review_parity_git`. Once they report,
-independently verify commits and rerun the ledger's blocked commands: targeted A20
-tests, full client suite, revision coverage, generation coverage, build/lint, plus
-full server suite if any server-affecting changes occur. Update `verification.md`
-with post-fix evidence; do not mark final completion until all required gates pass.
+All three follow-ups were TDD-scoped, owned-file-only commits serialized through
+`Local\A2UI_completed_course_review_parity_git`. Their tests and the previously
+blocked commands were rerun; exact post-fix evidence is in `verification.md`.
 
 ## Current gate and resume procedure
 
-**CURRENT GATE: DEFECT RESOLUTION — P5/P6 FOLLOW-UP WORKERS READY TO DISPATCH.**
+**CURRENT GATE: COMPLETE.**
 
-P1-P6 planned workers have completed; P7 completed its acceptance/evidence phase
-and committed the test harness, four disposable-browser screenshots, coverage
-config, and `verification.md` (`504b42d` through `8346e51`). The P7 ledger is the
-authoritative record of detailed commands and outcomes. Current result summary:
-server 624/624 pass; full client 410/412 pass with two A20 focus failures; focused
-revision coverage 4/5 units pass while P5's `useConceptChatPanel.ts` branch
-coverage is 73.68% against an 81% threshold; build passes; lint passes with three
-generated coverage-report warnings; browser evidence exists for both modes at
-desktop and mobile sizes.
+P1-P7 implementation/acceptance workers and all three owner-directed follow-ups
+are complete. P5 coverage fix `0ed3a66`, P6 focus fix `1450c34`, and P7 expiry
+assertion correction `91da45b` resolved the blockers. Independent final reruns:
+624/624 server tests, 427/427 full client tests, 184/184 revision-coverage tests
+with every per-file metric above 81%, 427/427 generation-coverage tests, build
+pass, lint zero errors (generated coverage helper warnings only), and clean
+`git diff --check`. Four disposable browser screenshots cover both modes and
+desktop/mobile. Detailed provenance and tool limitations are recorded in
+`verification.md`.
 
-Remaining steps, in order:
-
-1. DONE — P5 coverage worker committed `0ed3a66`; P6 focus worker committed
-   `1450c34`. Focus regression assertions in the P7 test now advance past focus;
-   the revision coverage report now shows 100% on all five included units.
-2. Dispatch a P7-owned test-only worker to correct the expired-storage assertion
-   (`getItem` returns null after successful removal; use a null assertion rather
-   than a string `.not.toContain` matcher). Keep all producer code unchanged.
-3. Once corrected, independently rerun both A20 cases, P6 revision page tests,
-   full client suite, focused revision coverage, generation coverage, build/lint,
-   and final server suite. Update `verification.md` with exact post-fix evidence
-   and preserve the P7 browser evidence/limitations.
-4. If any gate still fails, route it to the owning worker; do not declare it
-   complete. Once every blocker is green, commit final verification updates and
-   `final_report.md`, mark milestones complete, set `status: complete` and
-   `current_phase: complete`, add a non-destructive git note, and report outcomes.
+Final report and verification were committed at `0f5dd9b`. This state checkpoint
+records the completed status. The final git note is added to this commit without
+overwriting an existing note.
 
 If interrupted, load the `resume` skill and resume from this state plus reported
 commits/status, without rereading plans/research in the orchestrator. Recorded
