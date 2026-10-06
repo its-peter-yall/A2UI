@@ -332,7 +332,7 @@ describe('chat ownership and lifecycle', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
     await screen.findByRole('textbox');
     expect(screen.queryByText('Expired fixture history')).not.toBeInTheDocument();
-    expect(localStorage.getItem(key)).not.toContain('Expired fixture history');
+    expect(localStorage.getItem(key)).toBeNull();
   });
 
   it('A13: desktop separator clamps to 25–38 and mobile uses a bounded overlay', async () => {
