@@ -138,9 +138,9 @@ execution. No table entry authorizes dispatch while the workflow is paused.
 | **P2** | SQLite persistence, compatibility, and serialized revision API | P1 | SQLite LearningManager, revision router handlers, SQL/API tests | `[x]` `a96bb8a` | `[x]` Complete | `9d9645e` `b57758e` `1b73d6c` `44c697f` `15728ff` `0453158` `36d8c59` |
 | **P3** | Mongo parity, compatibility, and storage migration preservation | P1 | Mongo learning repository, migration preservation, Mongo tests | `[x]` `5bcb4de` | `[x]` Complete | `9761bb6` `b061f75` `51ae7ca` `eed5232` `a41660d` `288c7e2` `8f38386` `62dafeb` `63eb1e1` |
 | **P4** | Shared option feedback and controlled revision card/quiz UI | P1 | Shared feedback renderer, revision quiz/card, state helpers/tests | `[x]` `4817d61` | `[x]` Complete | `8ecc748` `10f3133` `59e0128` `baa1821` `61a0143` |
-| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | Complete; defect fixes pending | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` |
-| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | Complete; A20 focus-restoration fix pending | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` |
-| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | `[x]` Complete; two producer/coverage blockers routed | `504b42d` `2c6f8db` `3062902` `1a9c5c6` `6ad8c19` `3f623f2` `3e1bda9` `8d9a961` `8346e51` |
+| **P5** | Reusable split chat layout, prefill, and conversation ownership | G | Chat layout/controller, panel/hook, normal-container integration/tests | `[x]` `211ec27` | `[x]` Complete; P7 coverage blocker resolved | `9933d74` `e5027c8` `a26c448` `afd7c95` `92bfce3` `e8fcefe` `56c62fe` `e89624a` `0ed3a66` |
+| **P6** | Revision page/cache integration, completion, and summary | P1, P4, P5 | Revision page/hooks, API client, summary/history, integration tests | `[x]` `58b8231` | `[x]` Complete; focus producer fix committed, final rerun pending | `93a7eb5` `91501de` `968b888` `6e7cb65` `435a8bb` `cd1f930` `91db9e4` `bcef12f` `819765e` `8a6886f` `b022199` `1450c34` |
+| **P7** | Cross-layer acceptance, storage parity, and coverage evidence | P2, P3, P6 | Acceptance/parity suites, revision coverage configuration, evidence | `[x]` `0153f92` | Evidence complete; test assertion correction pending | `504b42d` `2c6f8db` `3062902` `1a9c5c6` `6ad8c19` `3f623f2` `3e1bda9` `8d9a961` `8346e51` |
 
 ### Execution graph
 
@@ -625,8 +625,9 @@ the failures disappear without a producer fix.
 
 | Defect | Root cause / reproduction | Owner and allowed files | Required TDD resolution |
 | --- | --- | --- | --- |
-| A20 focus restore fails on Escape in both modes | `RevisionPage.tsx` conditionally removes the `Open concept chat` FAB while chat is open (`!chat.isOpen && currentNode`). `ChatPanel` captures `document.activeElement` after that commit, so its previous-focus ref is BODY; closing restores focus to BODY instead of the invoking control. P7 assertion fails at `completedCourseReviewParity.test.tsx` focus assertion; orchestrator reproduced `full_review` failure on 2026-10-06. | P6; `RevisionPage.tsx`, `RevisionPage.test.tsx` only. Do not edit P5 `ChatPanel.tsx` or P7 test. | Add/verify a regression proving FAB focus after Escape; keep the trigger mounted or otherwise retain an actual focusable invoker without changing modal accessibility. Run both P7 A20 mode cases and P6 tests. |
-| Focused revision coverage below threshold | P7 coverage run reports `useConceptChatPanel.ts` branch coverage 73.68% (28/38), below 81%. Remaining public-hook fallback/title-fill branches are unreachable through production UI; P7's two extra reachable UI paths were already added but did not meet the threshold. | P5; `useConceptChatPanel.test.ts` only unless investigation shows a production defect. | Add direct hook tests covering public `openChat`, `askQuestion`, and `toggleHeadingChat` same-node/title-fallback cases. Do not reduce the 81% per-file threshold, remove coverage includes, or add ignores. Rerun the focused revision coverage command. |
+| A20 focus restore fails on Escape in both modes | `RevisionPage.tsx` conditionally removed the `Open concept chat` FAB while chat was open, so `ChatPanel` recorded BODY as its prior focus target. P6 now keeps the opener mounted but removes it from pointer/keyboard/assistive reach while chat is open, and records/restores non-body openers for overlay unmount. Owner fix `1450c34`. | P6; `RevisionPage.tsx`, `RevisionPage.test.tsx`. | RESOLVED IN CODE: new P6 tests cover both modes and mobile overlay. P7 A20 now passes the focus assertion and advances to a separate P7 localStorage assertion bug; after correcting that test, rerun both A20 cases and the full client gates. |
+| Focused revision coverage below threshold | Before P5 follow-up, P7 measured `useConceptChatPanel.ts` branches at 73.68% (28/38) against 81%. P5 added direct hook tests for active/current title fallback paths in `useConceptChatPanel.test.ts`, commit `0ed3a66`. Latest revision run reports 100% branch/function/line/statement coverage for all five included units. | P5; `useConceptChatPanel.test.ts`. | RESOLVED IN COVERAGE: latest run's only two failures are P7 A20 assertion failures; no coverage threshold failure remains. Re-run after P7 test correction for a zero exit code. |
+| P7 expiry assertion misuses string matcher after correct cleanup | `useConceptChat` removes an expired entry with `localStorage.removeItem`; `getItem(key)` therefore returns `null`. The A20 test uses `.not.toContain('Expired fixture history')`, which throws a matcher type error on null even though cleanup succeeded. Focus assertions now pass. | P7; `client/src/features/learning/__tests__/completedCourseReviewParity.test.tsx` only. No production change. | Change the assertion to directly expect `localStorage.getItem(key)` to be `null` (and retain the UI absence assertion). Verify the existing failure first, then both A20 cases pass. |
 
 Both follow-up workers must use TDD, stay in their assigned files, and serialize
 commits through `Local\A2UI_completed_course_review_parity_git`. Once they report,
@@ -651,18 +652,16 @@ desktop and mobile sizes.
 
 Remaining steps, in order:
 
-1. Dispatch a P5-owned hook-test worker to cover the remaining
-   `useConceptChatPanel.ts` branches without changing the production hook or
-   weakening the 81% threshold. It owns only
-   `client/src/features/learning/useConceptChatPanel.test.ts`.
-2. Dispatch a P6-owned focus-restoration worker to keep the revision chat opener
-   available as the real focus-return target; it owns only
-   `RevisionPage.tsx` and `RevisionPage.test.tsx`. The P7 A20 regression remains
-   unchanged and is the acceptance-level reproduction.
-3. Verify each defect with TDD owner tests, then independently rerun the affected
-   A20 cases, full client suite, focused revision coverage, generation coverage,
-   build/lint, and final server suite. Update `verification.md` with exact
-   post-fix evidence and preserve the P7 browser evidence/limitations.
+1. DONE — P5 coverage worker committed `0ed3a66`; P6 focus worker committed
+   `1450c34`. Focus regression assertions in the P7 test now advance past focus;
+   the revision coverage report now shows 100% on all five included units.
+2. Dispatch a P7-owned test-only worker to correct the expired-storage assertion
+   (`getItem` returns null after successful removal; use a null assertion rather
+   than a string `.not.toContain` matcher). Keep all producer code unchanged.
+3. Once corrected, independently rerun both A20 cases, P6 revision page tests,
+   full client suite, focused revision coverage, generation coverage, build/lint,
+   and final server suite. Update `verification.md` with exact post-fix evidence
+   and preserve the P7 browser evidence/limitations.
 4. If any gate still fails, route it to the owning worker; do not declare it
    complete. Once every blocker is green, commit final verification updates and
    `final_report.md`, mark milestones complete, set `status: complete` and
