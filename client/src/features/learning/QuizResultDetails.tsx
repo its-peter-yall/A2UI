@@ -36,8 +36,23 @@ export function QuizResultDetails({
   const hasCorrectSelection = quiz.options.some(
     (option) => selected.has(option.option_id) && option.is_correct,
   );
+  const hasIncorrectSelection = quiz.options.some(
+    (option) => selected.has(option.option_id) && !option.is_correct,
+  );
   const isPartiallyCorrect =
     !result.is_correct && isMultipleChoice && hasCorrectSelection;
+  let multipleChoiceHint: string | null = null;
+  if (!result.is_correct && isMultipleChoice) {
+    if (hasCorrectSelection && hasIncorrectSelection) {
+      multipleChoiceHint = 'Some of the selected options are incorrect.';
+    } else if (hasCorrectSelection) {
+      multipleChoiceHint = 'There is more than one correct option.';
+    } else if (selected.size === 1) {
+      multipleChoiceHint = 'The selected option is incorrect.';
+    } else {
+      multipleChoiceHint = 'The selected options are incorrect.';
+    }
+  }
   return (
     <div className="space-y-6">
       <div ref={headerRef} tabIndex={-1} role="status" aria-label="Quiz result"
@@ -61,12 +76,8 @@ export function QuizResultDetails({
                 : 'Incorrect'}
           </p>
           <p className="text-sm">Attempt #{attemptCount} • Score: {result.score_percent}%</p>
-          {!result.is_correct && isMultipleChoice && (
-            <p className="text-sm">
-              {isPartiallyCorrect
-                ? 'There is more than one correct option.'
-                : 'Your selection is incorrect.'}
-            </p>
+          {multipleChoiceHint && (
+            <p className="text-sm">{multipleChoiceHint}</p>
           )}
         </div>
         {headerAccessory}

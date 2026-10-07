@@ -69,6 +69,34 @@ describe('QuizResultDetails', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it('tells mixed multi-select that some selected options are incorrect', () => {
+    render(<QuizResultDetails quiz={quiz} result={{
+      ...correct, is_correct: false, score_percent: 0,
+      selected_option_ids: ['two', 'nine', 'four'], correct_option_ids: [],
+    }} attemptCount={2} />);
+    expect(screen.getByText('Partially correct')).toBeInTheDocument();
+    expect(screen.getByText('Some of the selected options are incorrect.')).toBeInTheDocument();
+    expect(screen.queryByText('There is more than one correct option.')).not.toBeInTheDocument();
+  });
+
+  it('tells a single wrong multi-select that the selected option is incorrect', () => {
+    render(<QuizResultDetails quiz={quiz} result={{
+      ...correct, is_correct: false, score_percent: 0,
+      selected_option_ids: ['nine'], correct_option_ids: [],
+    }} attemptCount={1} />);
+    expect(screen.getByText('Incorrect')).toBeInTheDocument();
+    expect(screen.getByText('The selected option is incorrect.')).toBeInTheDocument();
+  });
+
+  it('tells a fully wrong multi-select that the selected options are incorrect', () => {
+    render(<QuizResultDetails quiz={quiz} result={{
+      ...correct, is_correct: false, score_percent: 0,
+      selected_option_ids: ['nine', 'four'], correct_option_ids: [],
+    }} attemptCount={1} />);
+    expect(screen.getByText('Incorrect')).toBeInTheDocument();
+    expect(screen.getByText('The selected options are incorrect.')).toBeInTheDocument();
+  });
+
   it('explains only the wrong selected single-choice option, ignoring leaked correct IDs', () => {
     render(<QuizResultDetails quiz={{ ...quiz, question_type: 'single_choice' }} result={{
       ...correct, is_correct: false, score_percent: 0,
