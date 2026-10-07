@@ -24,10 +24,13 @@
  */
 
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import { describe, test, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, test, expect, vi } from "vitest";
 import { ConceptCard } from "./ConceptCard";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ConceptNode, QuizCard, QuizSubmitResponse } from "@/types/learning";
+
+const api = vi.hoisted(() => ({ getQuizAttempts: vi.fn() }));
+vi.mock("@/lib/learningApi", () => api);
 
 // Mock the streamRegenerateNode API
 vi.mock("@/lib/regenApi", () => ({
@@ -87,6 +90,20 @@ function renderWithProviders(ui: React.ReactElement) {
 		</QueryClientProvider>
 	);
 }
+
+beforeEach(() => {
+	api.getQuizAttempts.mockResolvedValue({
+		node_id: mockNode.id,
+		total_attempts: 0,
+		is_mastered: false,
+		best_score: 0,
+		attempts: [],
+	});
+});
+
+afterEach(() => {
+	vi.clearAllMocks();
+});
 
 describe("ConceptCard Component", () => {
 	test("renders the concept node title", () => {
@@ -285,5 +302,77 @@ describe("ConceptCard normal feedback regression", () => {
 		expect(screen.getByRole("button", { name: "Submit Answer" })).toBeInTheDocument();
 		expect(screen.queryByText("Loading quiz feedback...")).not.toBeInTheDocument();
 		expect(screen.queryByText("Correct!")).not.toBeInTheDocument();
+	});
+
+	test("restores persisted feedback after reload without mutation state", async () => {
+		api.getQuizAttempts.mockResolvedValue({
+			node_id: mockNode.id,
+			total_attempts: 1,
+			is_mastered: false,
+			best_score: 0,
+			attempts: [
+				{
+					id: "attempt-1",
+					node_id: mockNode.id,
+					attempt_number: 1,
+					quiz_index: 0,
+					selected_option_ids: ["z"],
+					is_correct: false,
+					score_percent: 0,
+					correct_option_ids: ["x"],
+					explanation: "Z distractor explanation",
+					is_mastered: false,
+					created_at: "2026-10-07T00:00:00Z",
+					updated_at: null,
+				},
+			],
+		});
+		const quiz: QuizCard = {
+			question_text: "Normal learning multi-select",
+			difficulty: "easy",
+			question_type: "multiple_choice",
+			options: [
+				{ option_id: "x", display_label: "D", text: "X", is_correct: true, explanation: "X explanation is unique" },
+				{ option_id: "y", display_label: "A", text: "Y", is_correct: true, explanation: "Y explanation is unique" },
+				{ option_id: "z", display_label: "B", text: "Z", is_correct: false, explanation: "Z distractor explanation" },
+				{ option_id: "w", display_label: "C", text: "W", is_correct: false, explanation: "W distractor explanation" },
+			],
+		};
+		const onRetry = vi.fn();
+		renderWithProviders(
+			<ConceptCard
+				node={{ ...mockNode, status: "SHOWING_FEEDBACK", quiz }}
+				onRetryQuiz={onRetry}
+			/>,
+		);
+		expect(await screen.findByText("Incorrect")).toBeInTheDocument();
+		expect(screen.queryByText("Feedback unavailable")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+		expect(onRetry).toHaveBeenCalledWith(mockNode.id);
+	});
+
+	test("offers retry when SHOWING_FEEDBACK cannot restore a result", async () => {
+		api.getQuizAttempts.mockResolvedValue({
+			node_id: mockNode.id,
+			total_attempts: 0,
+			is_mastered: false,
+			best_score: 0,
+			attempts: [],
+		});
+		const onRetry = vi.fn();
+		const onPrevious = vi.fn();
+		renderWithProviders(
+			<ConceptCard
+				node={{ ...mockNode, status: "SHOWING_FEEDBACK", quiz: null, quiz_set: null }}
+				onRetryQuiz={onRetry}
+				onPrevious={onPrevious}
+				canPrevious={true}
+			/>,
+		);
+		expect(await screen.findByText("Feedback unavailable")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+		expect(onRetry).toHaveBeenCalledWith(mockNode.id);
+		fireEvent.click(screen.getByRole("button", { name: /Previous/ }));
+		expect(onPrevious).toHaveBeenCalled();
 	});
 });

@@ -194,11 +194,13 @@ export interface QuizAttempt {
 	id: string;
 	node_id: string;
 	attempt_number: number;
-	selected_option_id: string;
+	quiz_index?: number;
+	selected_option_ids: string[];
 	is_correct: boolean;
 	score_percent: number;
-	correct_option_id: string;
-	explanation: string;
+	correct_option_ids?: string[];
+	explanation?: string;
+	selected_explanation?: string | null;
 	is_mastered: boolean;
 	created_at: string;
 	updated_at: string | null;

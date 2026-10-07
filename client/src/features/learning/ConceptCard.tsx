@@ -744,7 +744,7 @@ export function ConceptCard({
 							{node.status === "SHOWING_FEEDBACK" &&
 								!showFeedback &&
 								!showQuizForm && (
-									<>
+									<div className="space-y-4">
 										{isFeedbackLoading && (
 											<LoadingState message="Loading quiz feedback..." />
 										)}
@@ -752,17 +752,23 @@ export function ConceptCard({
 											<ErrorState
 												title="Unable to load feedback"
 												message="Please try again in a moment."
+												onRetry={onRetryQuiz ? handleRetry : undefined}
 												showHomeLink={false}
 											/>
 										)}
 										{!isFeedbackLoading && !feedbackError && (
 											<ErrorState
 												title="Feedback unavailable"
-												message="We couldn't load the latest quiz result."
+												message="We couldn't load the latest quiz result. Retry the quiz to continue."
+												onRetry={onRetryQuiz ? handleRetry : undefined}
 												showHomeLink={false}
 											/>
 										)}
-									</>
+										<div className="flex justify-between items-center pt-4 border-t">
+											{renderPreviousButton()}
+											<div />
+										</div>
+									</div>
 								)}
 
 							{/* COMPLETED state */}

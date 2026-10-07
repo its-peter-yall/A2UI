@@ -16,7 +16,7 @@
  *
  * KEY COMPONENTS:
  *    - useQuizFeedback: Returns result, attemptCount, isLoading, error
- *    - Fallback result builder: Reconstructs QuizSubmitResponse from history
+ *    - feedbackFromHistory: Rebuilds QuizSubmitResponse from selected_option_ids
  *
  * DEPENDENCIES:
  *    - External: @tanstack/react-query
@@ -37,7 +37,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getQuizAttempts } from '@/lib/learningApi';
-import type { NodeStatus, QuizCard, QuizSubmitResponse } from '@/types/learning';
+import type {
+  NodeStatus,
+  QuizAttemptHistory,
+  QuizCard,
+  QuizSubmitResponse,
+} from '@/types/learning';
 
 interface UseQuizFeedbackProps {
   nodeId: string;
@@ -52,6 +57,55 @@ interface UseQuizFeedbackReturn {
   attemptCount: number;
   isLoading: boolean;
   error: Error | null;
+}
+
+function feedbackFromHistory(
+  nodeId: string,
+  nodeStatus: NodeStatus,
+  history: QuizAttemptHistory,
+  quiz?: QuizCard | null,
+): QuizSubmitResponse | undefined {
+  if (history.attempts.length === 0) {
+    return undefined;
+  }
+  const lastAttempt = history.attempts[history.attempts.length - 1];
+  const selectedIds = lastAttempt.selected_option_ids ?? [];
+  if (selectedIds.length === 0) {
+    return undefined;
+  }
+
+  const isCorrect = lastAttempt.is_correct;
+  const selectedOptions = quiz?.options.filter((option) =>
+    selectedIds.includes(option.option_id),
+  ) ?? [];
+  const correctOptions = quiz?.options.filter((option) => option.is_correct) ?? [];
+  const correctOptionIds = isCorrect
+    ? (lastAttempt.correct_option_ids?.length
+        ? lastAttempt.correct_option_ids
+        : correctOptions.map((option) => option.option_id))
+    : [];
+
+  return {
+    node_id: nodeId,
+    attempt_number: lastAttempt.attempt_number,
+    is_correct: isCorrect,
+    score_percent: lastAttempt.score_percent ?? (isCorrect ? 100 : 0),
+    correct_option_ids: correctOptionIds,
+    selected_option_ids: selectedIds,
+    explanation: isCorrect
+      ? (lastAttempt.explanation || correctOptions[0]?.explanation || '')
+      : '',
+    selected_explanation: isCorrect
+      ? undefined
+      : (lastAttempt.selected_explanation
+          || selectedOptions[0]?.explanation
+          || lastAttempt.explanation
+          || undefined),
+    quiz_index: lastAttempt.quiz_index ?? 0,
+    is_mastered: history.is_mastered ?? isCorrect,
+    next_node_unlocked: history.is_mastered ?? isCorrect,
+    node_status: nodeStatus,
+  };
 }
 
 export function useQuizFeedback({
@@ -82,39 +136,12 @@ export function useQuizFeedback({
     ? latestResult.attempt_number
     : (history?.total_attempts ?? 0);
 
-  // Build fallback result from history (when user reloads page)
+  // Rebuild from persisted history after reload. Do not require the selected
+  // option to exist on `quiz`: after a correct non-mastered answer the server
+  // advances current_index, so node.quiz may already be the next card.
   const fallbackResult =
-    !hasLatestResult && history && history.attempts.length > 0 && quiz
-      ? (() => {
-          const lastAttempt = history.attempts[history.attempts.length - 1];
-          const correctOptions = quiz.options.filter((option) => option.is_correct);
-          const selectedOption = quiz.options.find(
-            (option) => option.option_id === lastAttempt.selected_option_id
-          );
-          if (correctOptions.length === 0 || !selectedOption) {
-            return undefined;
-          }
-          const correctOptionIds = correctOptions.map((opt) => opt.option_id);
-          const isCorrect = lastAttempt.is_correct ?? selectedOption.is_correct;
-          const scorePercent =
-            lastAttempt.score_percent ?? (isCorrect ? 100 : 0);
-          const isMastered = history.is_mastered ?? isCorrect;
-          // Only reveal correct answers if the last attempt was correct
-          // For wrong answers, don't reveal correct options to maintain learning
-          return {
-            node_id: nodeId,
-            attempt_number: lastAttempt.attempt_number,
-            is_correct: isCorrect,
-            score_percent: scorePercent,
-            correct_option_ids: isCorrect ? correctOptionIds : [],
-            selected_option_ids: [lastAttempt.selected_option_id],
-            explanation: isCorrect ? correctOptions[0].explanation : "",
-            selected_explanation: isCorrect ? undefined : selectedOption.explanation,
-            is_mastered: isMastered,
-            next_node_unlocked: isMastered,
-            node_status: nodeStatus,
-          };
-        })()
+    !hasLatestResult && history
+      ? feedbackFromHistory(nodeId, nodeStatus, history, quiz)
       : undefined;
 
   // Priority: latestResult (from mutation) > fallbackResult (from history) > undefined
