@@ -127,12 +127,13 @@ describe.each(modes)('RevisionConceptCard %s', (mode) => {
     expect(screen.getByRole('radio', { name: /Wrong choice/ })).toBeChecked();
     expect(submit).not.toHaveBeenCalled();
   });
-  it('discloses incomplete shuffled multi-select as an incorrect selection and allows retry', () => {
+  it('discloses incomplete shuffled multi-select as partially correct and allows retry', () => {
     const multi: ConceptNode = { ...node, quiz: { ...quiz, question_type: 'multiple_choice',
       options: quiz.options.map((option) => option.option_id === 'z' ? { ...option, is_correct: true } : option) } };
     const wrong = { ...attempt(0, false), selected_option_ids: ['x'] };
     render(<CardHarness mode={mode} topic={multi} data={progress([wrong])} />);
-    expect(screen.getByText('Your selection is incorrect.')).toBeInTheDocument();
+    expect(screen.getByText('Partially correct')).toBeInTheDocument();
+    expect(screen.getByText('There is more than one correct option.')).toBeInTheDocument();
     expect(screen.getByText('X exact reason')).toBeInTheDocument();
     expect(screen.queryByText('Z exact reason')).not.toBeInTheDocument();
     expect(screen.queryByText('Correct answer')).not.toBeInTheDocument();

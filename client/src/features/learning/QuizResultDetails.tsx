@@ -32,6 +32,12 @@ export function QuizResultDetails({
   useEffect(() => { headerRef.current?.focus(); }, [result]);
   const selected = new Set(result.selected_option_ids);
   const correct = new Set(result.is_correct ? result.correct_option_ids : []);
+  const isMultipleChoice = quiz.question_type === 'multiple_choice';
+  const hasCorrectSelection = quiz.options.some(
+    (option) => selected.has(option.option_id) && option.is_correct,
+  );
+  const isPartiallyCorrect =
+    !result.is_correct && isMultipleChoice && hasCorrectSelection;
   return (
     <div className="space-y-6">
       <div ref={headerRef} tabIndex={-1} role="status" aria-label="Quiz result"
@@ -39,14 +45,28 @@ export function QuizResultDetails({
           'flex items-center gap-3 rounded-lg p-4 focus-visible:ring-2 focus-visible:ring-primary',
           result.is_correct
             ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200'
-            : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
+            : isPartiallyCorrect
+              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
+              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200',
         )}>
-        <span aria-hidden="true">{result.is_correct ? '✅' : '❌'}</span>
+        <span aria-hidden="true">
+          {result.is_correct ? '✅' : isPartiallyCorrect ? '⚠️' : '❌'}
+        </span>
         <div>
-          <p className="text-lg font-semibold">{result.is_correct ? 'Correct!' : 'Incorrect'}</p>
+          <p className="text-lg font-semibold">
+            {result.is_correct
+              ? 'Correct!'
+              : isPartiallyCorrect
+                ? 'Partially correct'
+                : 'Incorrect'}
+          </p>
           <p className="text-sm">Attempt #{attemptCount} • Score: {result.score_percent}%</p>
-          {!result.is_correct && quiz.question_type === 'multiple_choice' && (
-            <p className="text-sm">Your selection is incorrect.</p>
+          {!result.is_correct && isMultipleChoice && (
+            <p className="text-sm">
+              {isPartiallyCorrect
+                ? 'There is more than one correct option.'
+                : 'Your selection is incorrect.'}
+            </p>
           )}
         </div>
         {headerAccessory}
@@ -56,13 +76,16 @@ export function QuizResultDetails({
         {quiz.options.map((option) => {
           const isSelected = selected.has(option.option_id);
           const isCorrect = correct.has(option.option_id);
+          const isOptionCorrect = option.is_correct;
           const disclose = result.is_correct || isSelected;
           return (
             <div key={option.option_id} data-testid={`quiz-result-option-${option.option_id}`}
               className={cn('rounded-lg border-2 p-4',
                 isCorrect ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                   : !result.is_correct && isSelected
-                    ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                    ? isMultipleChoice && isOptionCorrect
+                      ? 'border-amber-500 bg-amber-50 dark:bg-amber-900/20'
+                      : 'border-red-500 bg-red-50 dark:bg-red-900/20'
                     : 'border-muted bg-muted/30',
               )}>
               <div className="flex items-start gap-3">

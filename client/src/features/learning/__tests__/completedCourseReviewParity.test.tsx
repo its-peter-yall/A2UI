@@ -381,8 +381,8 @@ describe('edge-case rendered contracts', () => {
       attempt_number: 2, quiz_attempt_count: 1 });
     fireEvent.click(screen.getByRole('checkbox', { name: /Option 0/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Submit Answer' }));
-    await screen.findByText('Incorrect');
-    expect(screen.getByText('Your selection is incorrect.')).toBeInTheDocument();
+    await screen.findByText('Partially correct');
+    expect(screen.getByText('There is more than one correct option.')).toBeInTheDocument();
     expect(screen.getByText('Explanation q0-0')).toBeInTheDocument();
     expect(screen.queryByText('Explanation q0-2')).not.toBeInTheDocument();
     expect(screen.queryByText(/Option 0.*wrong/i)).not.toBeInTheDocument();
