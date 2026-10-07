@@ -313,11 +313,19 @@ describe('chat ownership and lifecycle', () => {
     expect(localStorage.getItem(`concept_chat_${h.wire.original.id}_${h.wire.original.nodes[1].id}`)).toContain('B answer');
   });
 
-  it.each<RevisionMode>(['full_review', 'quiz_only'])('A20: %s completion/re-entry preserve chat and expiry still applies', async (mode) => {
-    const original = wires[mode].original;
+  it('A20: quiz_only never offers concept chat', async () => {
+    mountRevision('quiz_only', wires.quiz_only.mixed);
+    await screen.findByRole('heading', { name: 'Topic A' });
+    expect(screen.queryByRole('button', { name: 'Open concept chat' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('revision-chat-fab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Chat:/ })).not.toBeInTheDocument();
+  });
+
+  it('A20: full_review completion/re-entry preserve chat and expiry still applies', async () => {
+    const original = wires.full_review.original;
     const key = `concept_chat_${original.id}_${original.nodes[0].id}`;
     seedChat(original.id, original.nodes[0].id, 'Saved through completion');
-    const h = mountRevision(mode, wires[mode].mixed);
+    const h = mountRevision('full_review', wires.full_review.mixed);
     await screen.findByRole('button', { name: 'Open concept chat' });
     const opener = screen.getByRole('button', { name: 'Open concept chat' });
     opener.focus();
@@ -328,7 +336,7 @@ describe('chat ownership and lifecycle', () => {
     expect(localStorage.getItem(key)).toContain('Saved through completion');
     h.view.unmount();
     seedChat(original.id, original.nodes[0].id, 'Expired fixture history', Date.now() - 3_600_001);
-    mountRevision(mode, wires[mode].mixed);
+    mountRevision('full_review', wires.full_review.mixed);
     fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
     await screen.findByRole('textbox');
     expect(screen.queryByText('Expired fixture history')).not.toBeInTheDocument();
@@ -336,7 +344,7 @@ describe('chat ownership and lifecycle', () => {
   });
 
   it('A13: desktop separator clamps to 25–38 and mobile uses a bounded overlay', async () => {
-    const h = mountRevision('quiz_only');
+    const h = mountRevision('full_review');
     fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
     const separator = await screen.findByRole('separator', { name: 'Resize chat panel' });
     expect(separator).toHaveAttribute('aria-valuenow', '25');
@@ -352,7 +360,7 @@ describe('chat ownership and lifecycle', () => {
       media: query, matches: false, onchange: null, addListener: vi.fn(), removeListener: vi.fn(),
       addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: () => true,
     }));
-    mountRevision('quiz_only');
+    mountRevision('full_review');
     fireEvent.click(await screen.findByRole('button', { name: 'Open concept chat' }));
     expect(await screen.findByTestId('concept-chat-overlay')).toHaveClass('absolute', 'inset-0');
     expect(screen.queryByRole('separator')).not.toBeInTheDocument();

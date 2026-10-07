@@ -17,7 +17,7 @@
  *    ConceptCard, driving the read → quiz → feedback → mastery flow.
  *
  * KEY COMPONENTS:
- *    - ConceptCard: Main card wrapper with status-based styling and animations
+ *    - ConceptCard: Main card wrapper with status-based styling
  *    - Status Styles: Visual differentiation for each node status
  *    - Quiz Interface: Radio button quiz with submit/retry functionality
  *    - Review Mode: Expandable explanation in COMPLETED state
@@ -26,8 +26,7 @@
  * DEPENDENCIES:
  *    - External: react, lucide-react
  *    - Internal: @/lib/utils, @/types/learning, ./MarkdownRenderer,
- *                ./QuizFeedback, ./useQuizFeedback, ./ErrorStates,
- *                ./animations/CardTransitions
+ *                ./QuizFeedback, ./useQuizFeedback, ./ErrorStates
  *
  * USAGE:
  *    ```tsx
@@ -49,7 +48,7 @@
  * ============================================================================
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, RefreshCw, List, BookOpen, Download } from "lucide-react";
 import type {
@@ -73,11 +72,6 @@ import { ErrorState, LoadingState } from "./ErrorStates";
 import { parseCuriosityQuestions } from "./curiosityParser";
 import { CuriositySpark } from "./CuriositySpark";
 import { SourceCitations } from "./SourceCitations";
-import {
-	AnimatedCard,
-	ContentTransition,
-	UnlockPulse,
-} from "./animations/CardTransitions";
 
 interface ConceptCardProps {
 	node: ConceptNode;
@@ -96,6 +90,7 @@ interface ConceptCardProps {
 	canSkip?: boolean;
 	canPrevious?: boolean;
 	isTransitioning?: boolean;
+	isSubmitting?: boolean;
 	selectedHeadingIds?: string[];
 	onToggleHeadingChat?: (headingId: string) => void;
 	onAskQuestion?: (question: string) => void;
@@ -148,6 +143,7 @@ export function ConceptCard({
 	canSkip = false,
 	canPrevious = false,
 	isTransitioning = false,
+	isSubmitting = false,
 	quizResult,
 	selectedHeadingIds = [],
 	onToggleHeadingChat,
@@ -207,25 +203,6 @@ export function ConceptCard({
 		});
 	};
 
-
-	// Track previous status for animations
-
-	// Track previous status for animations
-	const prevStatusRef = useRef<NodeStatus>(node.status);
-	const [previousStatus, setPreviousStatus] = useState<
-		NodeStatus | undefined
-	>();
-
-	useEffect(() => {
-		if (prevStatusRef.current !== node.status) {
-			setPreviousStatus(prevStatusRef.current);
-			prevStatusRef.current = node.status;
-		}
-	}, [node.status]);
-
-	const isUnlocking =
-		previousStatus === "LOCKED" && node.status === "VIEWING_EXPLANATION";
-
 	const {
 		result: feedbackResult,
 		attemptCount,
@@ -238,6 +215,15 @@ export function ConceptCard({
 		quiz: node.quiz,
 		nodeStatus: node.status,
 	});
+
+	const revealedQuiz = node.quiz_set || node.quiz;
+	const showFeedback =
+		node.status === "SHOWING_FEEDBACK" && !!revealedQuiz && !!feedbackResult;
+	const showQuizForm =
+		node.status === "IN_QUIZ" ||
+		(node.status === "SHOWING_FEEDBACK" &&
+			!showFeedback &&
+			!!(node.quiz_hidden || node.quiz_set_hidden));
 
 	// Complexity badge styles
 	const complexityStyles = {
@@ -327,7 +313,6 @@ export function ConceptCard({
 	const handleSubmitQuiz = (quizIndex: number) => {
 		if (selectedOptions.size > 0) {
 			onQuizSubmit?.(node.id, Array.from(selectedOptions), quizIndex);
-			setSelectedOptions(new Set());
 		}
 	};
 
@@ -341,7 +326,7 @@ export function ConceptCard({
 			onClick={onPrevious}
 			disabled={!canPrevious}
 			className={cn(
-				"flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors text-sm font-medium",
+				"flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted text-sm font-medium",
 				!canPrevious && "opacity-0 pointer-events-none",
 			)}
 		>
@@ -351,13 +336,7 @@ export function ConceptCard({
 	);
 
 	return (
-		<UnlockPulse isUnlocking={isUnlocking}>
-			<AnimatedCard
-				status={node.status}
-				previousStatus={previousStatus}
-				onAnimationComplete={() => setPreviousStatus(undefined)}
-			>
-				<article
+		<article
 					className={cn(
 						"border rounded-lg overflow-hidden topic-card-content relative", // Added relative class
 						statusStyles[node.status],
@@ -447,8 +426,7 @@ export function ConceptCard({
 					</div>
 
 					{/* Card Body - State-based content */}
-					<ContentTransition contentKey={`${node.id}-${node.status}-${isRegeneratingLocal}-${showRegenConfirm}-${!!localError}`}>
-						<div className="p-4 relative">
+					<div className="p-4 relative">
 							{/* Confirmation dialog overlay */}
 							{showRegenConfirm && (
 								<div className="absolute inset-0 bg-background/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center">
@@ -611,10 +589,15 @@ export function ConceptCard({
 								</div>
 							)}
 
-							{/* IN_QUIZ state */}
-							{node.status === "IN_QUIZ" &&
+							{/* IN_QUIZ state — keep the form until feedback is ready so
+							    the card does not collapse then expand like a transition. */}
+							{showQuizForm &&
 								(() => {
-									const visibleQuiz = getVisibleQuiz(node);
+									const visibleQuiz = getVisibleQuiz(
+										node.status === "IN_QUIZ"
+											? node
+											: { ...node, status: "IN_QUIZ" },
+									);
 									if (!visibleQuiz) return null;
 
 									// Type guard for QuizSetHidden (has total_quizzes)
@@ -664,6 +647,7 @@ export function ConceptCard({
 												/>
 											</div>
 											<fieldset
+												disabled={isSubmitting}
 												className="space-y-2"
 												role={isMultipleChoice ? "group" : "radiogroup"}
 												aria-describedby={`quiz-question-${node.id}`}
@@ -673,7 +657,7 @@ export function ConceptCard({
 													<label
 														key={option.option_id}
 														className={cn(
-															"flex items-center gap-3 p-3 rounded-md border cursor-pointer transition-colors",
+															"flex cursor-pointer items-center gap-3 rounded-md border p-3",
 															selectedOptions.has(option.option_id)
 																? "border-primary bg-primary/10"
 																: "border-muted hover:border-primary/50",
@@ -699,7 +683,7 @@ export function ConceptCard({
 																	setSelectedOptions(new Set([option.option_id]));
 																}
 															}}
-															className="w-4 h-4"
+															className="h-4 w-4 focus-visible:ring-2 focus-visible:ring-primary"
 														/>
 														<span className="font-mono text-sm text-muted-foreground">
 															{option.display_label}.
@@ -712,7 +696,7 @@ export function ConceptCard({
 												{isQuizSetHidden && currentQuizIndex > 0 ? (
 													<button
 														onClick={() => onPreviousQuiz?.(node.id)}
-														className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors text-sm font-medium"
+														className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted text-sm font-medium"
 													>
 														<ChevronLeft className="w-4 h-4" />
 														<span>Previous</span>
@@ -720,7 +704,7 @@ export function ConceptCard({
 												) : (
 													<button
 														disabled
-														className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground/30 cursor-not-allowed transition-colors text-sm font-medium"
+														className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground/30 cursor-not-allowed text-sm font-medium"
 													>
 														<ChevronLeft className="w-4 h-4" />
 														<span>Previous</span>
@@ -728,62 +712,56 @@ export function ConceptCard({
 												)}
 											<button
 												onClick={() => handleSubmitQuiz(currentQuizIndex)}
-												disabled={selectedOptions.size === 0}
-												className={cn(
-													"px-4 py-2 rounded-md transition-colors",
-													selectedOptions.size > 0
-														? "bg-primary text-primary-foreground hover:bg-primary/90"
-														: "bg-muted text-muted-foreground cursor-not-allowed",
-												)}
+												disabled={selectedOptions.size === 0 || isSubmitting}
+												className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
 											>
-													Submit Answer
-												</button>
+												{isSubmitting ? "Submitting..." : "Submit Answer"}
+											</button>
 											</div>
 										</div>
 									);
 								})()}
 
+							{showFeedback && feedbackResult && (
+								<QuizFeedback
+									quiz={node.quiz_set || node.quiz!}
+									result={feedbackResult}
+									attemptCount={attemptCount}
+									currentQuizIndex={
+										feedbackResult.quiz_index ??
+										node.quiz_set_hidden?.current_index ??
+										0
+									}
+									onRetry={handleRetry}
+									onContinue={
+										feedbackResult.is_mastered
+											? () => onContinueToNext?.(node.id)
+											: undefined
+									}
+									onNextQuiz={onNextQuiz}
+								/>
+							)}
 							{node.status === "SHOWING_FEEDBACK" &&
-								(node.quiz || node.quiz_set) && (
+								!showFeedback &&
+								!showQuizForm && (
 									<>
-										{feedbackResult && (
-											<QuizFeedback
-												quiz={node.quiz_set || node.quiz!}
-												result={feedbackResult}
-												attemptCount={attemptCount}
-												currentQuizIndex={
-													feedbackResult.quiz_index ??
-													node.quiz_set_hidden?.current_index ??
-													0
-												}
-												onRetry={handleRetry}
-												onContinue={
-													feedbackResult.is_mastered
-														? () => onContinueToNext?.(node.id)
-														: undefined
-												}
-												onNextQuiz={onNextQuiz}
-											/>
-										)}
-										{!feedbackResult && isFeedbackLoading && (
+										{isFeedbackLoading && (
 											<LoadingState message="Loading quiz feedback..." />
 										)}
-										{!feedbackResult && !isFeedbackLoading && feedbackError && (
+										{!isFeedbackLoading && feedbackError && (
 											<ErrorState
 												title="Unable to load feedback"
 												message="Please try again in a moment."
 												showHomeLink={false}
 											/>
 										)}
-										{!feedbackResult &&
-											!isFeedbackLoading &&
-											!feedbackError && (
-												<ErrorState
-													title="Feedback unavailable"
-													message="We couldn't load the latest quiz result."
-													showHomeLink={false}
-												/>
-											)}
+										{!isFeedbackLoading && !feedbackError && (
+											<ErrorState
+												title="Feedback unavailable"
+												message="We couldn't load the latest quiz result."
+												showHomeLink={false}
+											/>
+										)}
 									</>
 								)}
 
@@ -830,7 +808,7 @@ export function ConceptCard({
 										{canSkip ? (
 											<button
 												onClick={() => onSkipNode?.(node.id)}
-												className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors text-sm font-medium"
+												className="flex items-center gap-1.5 px-3 py-2 rounded-md text-muted-foreground hover:bg-muted text-sm font-medium"
 											>
 												<span>Next</span>
 												<ChevronLeft className="w-4 h-4 rotate-180" />
@@ -915,9 +893,6 @@ export function ConceptCard({
 							</>
 							)}
 						</div>
-					</ContentTransition>
-				</article>
-			</AnimatedCard>
-		</UnlockPulse>
+		</article>
 	);
 }

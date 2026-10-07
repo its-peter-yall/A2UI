@@ -23,21 +23,11 @@
  * ============================================================================
  */
 
-import type { ReactNode, ComponentPropsWithoutRef } from "react";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, test, expect, vi } from "vitest";
 import { ConceptCard } from "./ConceptCard";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ConceptNode, QuizCard, QuizSubmitResponse } from "@/types/learning";
-
-// Mock framer-motion to avoid animation issues in jsdom environment
-vi.mock("framer-motion", () => ({
-	motion: {
-		div: ({ children, ...props }: ComponentPropsWithoutRef<"div">) => <div {...props}>{children}</div>,
-		article: ({ children, ...props }: ComponentPropsWithoutRef<"article">) => <article {...props}>{children}</article>,
-	},
-	AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
-}));
 
 // Mock the streamRegenerateNode API
 vi.mock("@/lib/regenApi", () => ({
@@ -241,5 +231,59 @@ describe("ConceptCard normal feedback regression", () => {
 		expect(screen.getByText("Mastered!")).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Continue to Next Topic →" }));
 		expect(onContinue).toHaveBeenCalledWith(mockNode.id);
+	});
+
+	test("quiz options and submit match revision static styling without transitions", () => {
+		renderWithProviders(
+			<ConceptCard
+				node={{
+					...mockNode,
+					status: "IN_QUIZ",
+					quiz_hidden: {
+						question_text: "What is AI?",
+						difficulty: "easy",
+						question_type: "single_choice",
+						options: [
+							{ option_id: "a", display_label: "A", text: "Option A" },
+							{ option_id: "b", display_label: "B", text: "Option B" },
+						],
+					},
+				}}
+			/>,
+		);
+		const option = screen.getByText("Option A").closest("label");
+		expect(option?.className).not.toMatch(/transition/);
+		expect(option?.className).toContain("border-muted");
+		fireEvent.click(screen.getByRole("radio", { name: /Option A/ }));
+		expect(option?.className).toContain("border-primary");
+		expect(option?.className).toContain("bg-primary/10");
+		const submit = screen.getByRole("button", { name: "Submit Answer" });
+		expect(submit.className).not.toMatch(/transition/);
+		expect(submit).toHaveClass("disabled:opacity-50");
+	});
+
+	test("keeps the quiz form visible until feedback is ready", () => {
+		renderWithProviders(
+			<ConceptCard
+				node={{
+					...mockNode,
+					status: "SHOWING_FEEDBACK",
+					quiz: null,
+					quiz_set: null,
+					quiz_hidden: {
+						question_text: "What is AI?",
+						difficulty: "easy",
+						question_type: "single_choice",
+						options: [
+							{ option_id: "a", display_label: "A", text: "Option A" },
+							{ option_id: "b", display_label: "B", text: "Option B" },
+						],
+					},
+				}}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: "Submit Answer" })).toBeInTheDocument();
+		expect(screen.queryByText("Loading quiz feedback...")).not.toBeInTheDocument();
+		expect(screen.queryByText("Correct!")).not.toBeInTheDocument();
 	});
 });

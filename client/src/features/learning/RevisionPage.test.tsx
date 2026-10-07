@@ -366,6 +366,19 @@ it("renders Table of Contents button and Chat FAB button", async () => {
 	expect(screen.getByTestId("revision-chat-fab")).toBeInTheDocument();
 });
 
+it("does not offer concept chat during Practice Quizzes", async () => {
+	revisionData.mode = "quiz_only";
+	mountRevision();
+	await screen.findByText("What is an entity?");
+	expect(screen.queryByTestId("revision-chat-fab")).not.toBeInTheDocument();
+	expect(
+		screen.queryByRole("button", { name: "Open concept chat" }),
+	).not.toBeInTheDocument();
+	expect(
+		screen.queryByRole("dialog", { name: /Chat:/ }),
+	).not.toBeInTheDocument();
+});
+
 it.each<RevisionMode>(["full_review", "quiz_only"])(
 	"preserves selections when %s topic cards unmount",
 	async (mode) => {
@@ -707,24 +720,21 @@ it("uses the mobile overlay without a desktop separator", async () => {
 	).toBe(true);
 });
 
-it.each<RevisionMode>(["full_review", "quiz_only"])(
-	"restores chat opener focus after Escape closes %s concept chat",
-	async (mode) => {
-		revisionData.mode = mode;
-		mountRevision();
-		const fab = await screen.findByTestId("revision-chat-fab");
-		fab.focus();
-		fireEvent.click(fab);
-		const composer = await screen.findByRole("textbox", {
-			name: "Ask a question about this concept",
-		});
-		await waitFor(() => expect(composer).toHaveFocus());
-		fireEvent.keyDown(document, { key: "Escape" });
-		await waitFor(() =>
-			expect(screen.getByTestId("revision-chat-fab")).toHaveFocus(),
-		);
-	},
-);
+it("restores chat opener focus after Escape closes Full Review concept chat", async () => {
+	revisionData.mode = "full_review";
+	mountRevision();
+	const fab = await screen.findByTestId("revision-chat-fab");
+	fab.focus();
+	fireEvent.click(fab);
+	const composer = await screen.findByRole("textbox", {
+		name: "Ask a question about this concept",
+	});
+	await waitFor(() => expect(composer).toHaveFocus());
+	fireEvent.keyDown(document, { key: "Escape" });
+	await waitFor(() =>
+		expect(screen.getByTestId("revision-chat-fab")).toHaveFocus(),
+	);
+});
 
 it("keeps the chat opener mounted but unexposed while chat is open", async () => {
 	mountRevision();

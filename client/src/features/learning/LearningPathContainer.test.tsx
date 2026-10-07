@@ -24,7 +24,7 @@
 
 import type { ReactNode, ComponentPropsWithoutRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { LearningPathContainer } from './LearningPathContainer';
@@ -352,5 +352,69 @@ describe('LearningPathContainer progressive', () => {
 
     const fab = screen.getByRole('button', { name: 'Open concept chat' });
     expect(fab).toBeInTheDocument();
+    fireEvent.click(fab);
+    expect(
+      screen.queryByRole('button', { name: 'Open concept chat' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(screen.getByTestId('concept-card')).toHaveTextContent('Quiz Topic');
+    expect(
+      screen.queryByRole('button', { name: 'Open concept chat' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(screen.getByTestId('concept-card')).toHaveTextContent(
+      'Selectors Topic',
+    );
+    expect(
+      screen.getByRole('button', { name: 'Open concept chat' }),
+    ).toBeInTheDocument();
   });
+
+  it.each(['IN_QUIZ', 'SHOWING_FEEDBACK'] as const)(
+    'hides concept chat while the live topic is %s',
+    (status) => {
+      const session = {
+        id: 'session-1',
+        user_id: null,
+        query: 'CSS',
+        course_title: 'CSS Masterclass',
+        total_nodes: 1,
+        completed_nodes: 0,
+        last_active_node_id: null,
+        created_at: '2026-08-01T00:00:00Z',
+        updated_at: null,
+        generation: { ...generation, stage: 'COMPLETE' as const, can_cancel: false },
+        nodes: [
+          {
+            id: 'n1',
+            learning_session_id: 'session-1',
+            sequence_index: 0,
+            title: 'Quiz Topic',
+            content_markdown: 'Content 1',
+            status,
+            error_message: null,
+            retry_available: false,
+            module_status: 'READY',
+            quiz: null,
+            quiz_set: null,
+            quiz_hidden: null,
+            quiz_set_hidden: null,
+            created_at: '2026-08-01T00:00:00Z',
+            updated_at: null,
+          },
+        ],
+      } as LearningSessionWithNodes;
+
+      wrap(
+        <LearningPathContainer sessionId="session-1" session={session} />,
+      );
+
+      expect(screen.getByTestId('concept-card')).toHaveTextContent('Quiz Topic');
+      expect(
+        screen.queryByRole('button', { name: 'Open concept chat' }),
+      ).not.toBeInTheDocument();
+    },
+  );
 });

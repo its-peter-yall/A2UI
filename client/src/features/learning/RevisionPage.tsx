@@ -396,6 +396,10 @@ function RevisionPageBody({
 		revisionSession.mode === "full_review"
 			? "bg-blue-500/20 text-blue-600 dark:text-blue-400"
 			: "bg-green-500/20 text-green-600 dark:text-green-400";
+	// Practice Quizzes is a quiz session: chat stays closed and cannot be
+	// toggled (anti-cheat). Full Review still allows chat on explanations.
+	const isPracticeQuiz = revisionSession.mode === "quiz_only";
+	const effectiveIsChatOpen = chat.isOpen && !isPracticeQuiz;
 
 	// Calculate revision-specific progress
 	const { total: totalNodes, completed: completedNodes } =
@@ -528,14 +532,15 @@ function RevisionPageBody({
 			 */}
 			<main id="main-content" className="min-h-0 flex-1 overflow-hidden">
 				<ConceptChatLayout
-					isChatOpen={chat.isOpen}
+					isChatOpen={effectiveIsChatOpen}
 					chatWidthPercent={chat.chatWidthPercent}
 					onChatWidthChange={chat.setChatWidthPercent}
 					onCloseChat={chat.closeChat}
 					className="[&_[role=dialog]]:max-md:!w-full"
 					chatPanel={
+						isPracticeQuiz ? null : (
 						<ChatPanel
-							isOpen={chat.isOpen}
+							isOpen={effectiveIsChatOpen}
 							onClose={chat.closeChat}
 							sessionId={sessionId}
 							nodeId={chat.chatNodeId}
@@ -546,12 +551,13 @@ function RevisionPageBody({
 							prefillMessage={chat.prefillMessage}
 							onPrefillConsumed={chat.consumePrefill}
 						/>
+						)
 					}
 				>
 					<div
 						className={cn(
 							"mx-auto w-full flex flex-col gap-6",
-							chat.isOpen ? "max-w-5xl" : "max-w-6xl",
+							effectiveIsChatOpen ? "max-w-5xl" : "max-w-6xl",
 						)}
 					>
 					{/* Course title */}
@@ -654,28 +660,34 @@ function RevisionPageBody({
 										}
 										markReviewedError={reviewRequestStates[currentNode.id]?.error}
 										selectedHeadingIds={
-											chat.chatNodeId === currentNode.id
+											!isPracticeQuiz && chat.chatNodeId === currentNode.id
 												? chat.selectedHeadingIds
 												: []
 										}
-										onToggleHeadingChat={(headingId) =>
-											openChatCapturingOpener(() =>
-												chat.toggleHeadingChat(
-													headingId,
-													currentNode.id,
-													currentNode.title,
-												),
-											)
-										}
-										onAskQuestion={(question) =>
-											openChatCapturingOpener(() =>
-												chat.askQuestion(
-													question,
-													currentNode.id,
-													currentNode.title,
-												),
-											)
-										}
+										onToggleHeadingChat={
+										isPracticeQuiz
+											? undefined
+											: (headingId) =>
+													openChatCapturingOpener(() =>
+														chat.toggleHeadingChat(
+															headingId,
+															currentNode.id,
+															currentNode.title,
+														),
+													)
+									}
+									onAskQuestion={
+										isPracticeQuiz
+											? undefined
+											: (question) =>
+													openChatCapturingOpener(() =>
+														chat.askQuestion(
+															question,
+															currentNode.id,
+															currentNode.title,
+														),
+													)
+									}
 									/>
 								</motion.div>
 							)}
@@ -731,13 +743,14 @@ function RevisionPageBody({
 			)}
 
 			{/*
-			 * Chat FAB - bottom-right fixed. It stays mounted while chat is open
-			 * so the panel can restore focus to it on close; opacity-0 (never
-			 * hidden/invisible, which would blur it and defeat that capture)
-			 * plus pointer-events, tabindex, and aria-hidden keep it out of
-			 * pointer, keyboard, and assistive reach in that state.
+			 * Chat FAB - bottom-right fixed. Hidden entirely during Practice
+			 * Quizzes so chat cannot be toggled. In Full Review it stays mounted
+			 * while chat is open so the panel can restore focus to it on close;
+			 * opacity-0 (never hidden/invisible, which would blur it and defeat
+			 * that capture) plus pointer-events, tabindex, and aria-hidden keep
+			 * it out of pointer, keyboard, and assistive reach in that state.
 			 */}
-			{currentNode && (
+			{currentNode && !isPracticeQuiz && (
 				<button
 					onClick={() =>
 						openChatCapturingOpener(() =>
@@ -746,12 +759,12 @@ function RevisionPageBody({
 					}
 					className={cn(
 						"fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full bg-(--cyber-yellow) text-black shadow-lg hover:bg-(--cyber-yellow)/90 transition-colors flex items-center justify-center cursor-pointer",
-						chat.isOpen && "pointer-events-none opacity-0",
+						effectiveIsChatOpen && "pointer-events-none opacity-0",
 					)}
 					aria-label="Open concept chat"
 					data-testid="revision-chat-fab"
-					aria-hidden={chat.isOpen || undefined}
-					tabIndex={chat.isOpen ? -1 : undefined}
+					aria-hidden={effectiveIsChatOpen || undefined}
+					tabIndex={effectiveIsChatOpen ? -1 : undefined}
 				>
 					<MessageCircle className="h-6 w-6" />
 				</button>

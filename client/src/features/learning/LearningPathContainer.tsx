@@ -297,6 +297,7 @@ export function LearningPathContainer({
 		isAnyLoading,
 		isRegenerating,
 		isTransitioning,
+		isSubmitting,
 	} = useLearningMutations({
 		sessionId: activeSessionId ?? "",
 		onQuizResult: handleQuizResult,
@@ -924,6 +925,7 @@ export function LearningPathContainer({
 														onRegenerate={regenerate}
 														isRegenerating={isRegenerating}
 														isTransitioning={isTransitioning}
+														isSubmitting={isSubmitting}
 														canSkip={canGoNext}
 														onSkipNode={() => {
 															if (canGoNext) {
@@ -932,9 +934,15 @@ export function LearningPathContainer({
 														}}
 														onPrevious={goToPrev}
 														canPrevious={canGoPrev}
-														selectedHeadingIds={chatPanel.selectedHeadingIds}
-														onToggleHeadingChat={handleToggleHeadingChat}
-														onAskQuestion={handleAskQuestion}
+														selectedHeadingIds={
+															isQuizNode ? [] : chatPanel.selectedHeadingIds
+														}
+														onToggleHeadingChat={
+															isQuizNode ? undefined : handleToggleHeadingChat
+														}
+														onAskQuestion={
+															isQuizNode ? undefined : handleAskQuestion
+														}
 													/>
 												);
 											})()}
