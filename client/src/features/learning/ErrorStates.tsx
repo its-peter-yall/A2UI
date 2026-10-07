@@ -194,7 +194,18 @@ export function LoadingState({
       aria-live="polite"
       aria-busy="true"
     >
-      <div className="animate-spin text-4xl mb-4">...</div>
+      <div
+        className="mb-4 flex flex-row items-center justify-center gap-1.5"
+        aria-hidden="true"
+      >
+        {[0, 150, 300].map((delay) => (
+          <span
+            key={delay}
+            className="h-3 w-3 rounded-full bg-primary animate-bounce"
+            style={{ animationDelay: `${delay}ms`, animationDuration: '0.8s' }}
+          />
+        ))}
+      </div>
       <p className="text-muted-foreground">{message}</p>
     </div>
   );
