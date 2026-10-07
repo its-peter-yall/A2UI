@@ -451,7 +451,7 @@ function RevisionPageBody({
 			</a>
 			{/* Header */}
 			<header className="shrink-0 z-10 bg-background/95 backdrop-blur border-b">
-				<div className="max-w-4xl mx-auto px-4 py-3">
+				<div className="max-w-6xl mx-auto px-4 py-3">
 					<div className="flex items-center justify-between mb-3">
 						<button
 							onClick={() => navigate("/learn")}
@@ -548,7 +548,12 @@ function RevisionPageBody({
 						/>
 					}
 				>
-				<div className="flex flex-col gap-6 p-4 max-w-4xl mx-auto">
+					<div
+						className={cn(
+							"mx-auto w-full flex flex-col gap-6",
+							chat.isOpen ? "max-w-5xl" : "max-w-6xl",
+						)}
+					>
 					{/* Course title */}
 					<header className="text-center">
 						<h1 className="text-2xl font-bold">
